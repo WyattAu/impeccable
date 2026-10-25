@@ -386,7 +386,38 @@ pub fn resolve_length_px(value: Option<&str>, font_size_px: f64) -> Option<f64> 
     if value.ends_with('%') {
         return Some((num / 100.0) * font_size_px);
     }
+    // Absolute lengths (CSS Values 4): print stylesheets set sizes in
+    // pt/pc/in/cm/mm/Q, and the old fallback treated the number as
+    // font-size-relative, so `font-size: 15pt` against a 15px parent
+    // resolved to 225px (#1142).
+    if let Some(px) = absolute_length_to_px(num, value) {
+        return Some(px);
+    }
     Some(num * font_size_px)
+}
+
+/// Absolute CSS length units to px, per CSS Values 4: `1in = 96px`, and
+/// `1cm`, `1mm`, `1Q`, `1pt`, `1pc` derive from the inch. `None` when
+/// `value` carries none of the absolute suffixes — callers keep their
+/// own relative handling (`rem`/`em`/`%`/unitless) around this.
+#[must_use]
+pub fn absolute_length_to_px(num: f64, value: &str) -> Option<f64> {
+    let px_per_unit: f64 = if value.ends_with("pt") {
+        96.0 / 72.0
+    } else if value.ends_with("pc") {
+        16.0
+    } else if value.ends_with("in") {
+        96.0
+    } else if value.ends_with("cm") {
+        96.0 / 2.54
+    } else if value.ends_with("mm") {
+        96.0 / 25.4
+    } else if value.ends_with('Q') {
+        96.0 / 101.6
+    } else {
+        return None;
+    };
+    Some(num * px_per_unit)
 }
 
 /// Characters that fit on one line at a given measure: an average glyph runs
@@ -1458,5 +1489,45 @@ mod tests {
             resolve_var_refs("calc(1px + var(--missing, 2px))", &props, 0),
             "calc(1px + 2px)"
         );
+    }
+
+    /// #1142: absolute units resolve to px instead of falling through
+    /// to the font-size-relative fallback. The issue's repro was
+    /// `font-size: 15pt` against a 15px parent, which the old fallback
+    /// turned into 225px ("15" read as 15em of the parent).
+    #[test]
+    fn resolve_length_px_handles_absolute_units() {
+        let cases: &[(&str, f64)] = &[
+            ("20px", 20.0),
+            ("15pt", 20.0),        // 15 * 96/72
+            ("1pc", 16.0),         // 12pt
+            ("1in", 96.0),
+            ("2.54cm", 96.0),
+            ("25.4mm", 96.0),
+            ("101.6Q", 96.0),
+        ];
+        for (value, expected) in cases {
+            let got = resolve_length_px(Some(*value), 15.0);
+            assert!(got.is_some(), "{value} should resolve");
+            let got = got.unwrap();
+            assert!(
+                (got - expected).abs() < 1e-9,
+                "{value} -> {got}, expected {expected}"
+            );
+        }
+        // Unitless stays font-size-relative (line-height semantics).
+        let unitless = resolve_length_px(Some("1.35"), 20.0).unwrap();
+        assert!((unitless - 27.0).abs() < 1e-9);
+    }
+
+    /// The absolute helper alone: identity on px, conversions on the
+    /// six absolute suffixes, None on everything else.
+    #[test]
+    fn absolute_length_to_px_covers_the_absolute_set() {
+        assert_eq!(absolute_length_to_px(15.0, "15pt"), Some(20.0));
+        assert_eq!(absolute_length_to_px(1.0, "1in"), Some(96.0));
+        assert_eq!(absolute_length_to_px(15.0, "15rem"), None);
+        assert_eq!(absolute_length_to_px(15.0, "15em"), None);
+        assert_eq!(absolute_length_to_px(15.0, "15"), None);
     }
 }

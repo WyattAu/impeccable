@@ -82,6 +82,12 @@ pub fn resolve_font_size_px(el: &StaticElement<'_>) -> Option<f64> {
             px = num * px;
         } else if v.ends_with('%') {
             px = (num / 100.0) * px;
+        } else if let Some(abs) =
+            impeccable_core::checks::measures::absolute_length_to_px(num, v)
+        {
+            // Absolute lengths: `font-size: 15pt` is 20px, not 15
+            // (#1142 — the old fallback read the bare number as px).
+            px = abs;
         } else {
             px = num;
         }
