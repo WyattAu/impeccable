@@ -96,7 +96,11 @@ fn flagged(findings: &[Finding]) -> Vec<(String, String)> {
         .map(|f| {
             (
                 f.antipattern.clone(),
-                f.extras.get("selector").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                f.extras
+                    .get("selector")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
             )
         })
         .collect()
@@ -124,14 +128,23 @@ fn a_onetrust_banner_is_hidden_and_the_page_under_it_scored() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/onetrust.html");
 
-    let scan = engine.detect_url_scan(&url, &ScanOptions::default()).expect("scan");
+    let scan = engine
+        .detect_url_scan(&url, &ScanOptions::default())
+        .expect("scan");
     let hidden = flagged(&scan.findings);
     assert!(has(&hidden, "low-contrast", "#covered-copy"), "{hidden:#?}");
     assert!(has(&hidden, "low-contrast", "#covered-cta"), "{hidden:#?}");
-    assert!(!has(&hidden, "low-contrast", "#onetrust-policy-text"), "{hidden:#?}");
+    assert!(
+        !has(&hidden, "low-contrast", "#onetrust-policy-text"),
+        "{hidden:#?}"
+    );
     // Every finding names what was hidden, and the text output says so.
     for f in &scan.findings {
-        assert_eq!(f.extras.get("consentHidden"), Some(&serde_json::json!(["OneTrust"])), "{f:?}");
+        assert_eq!(
+            f.extras.get("consentHidden"),
+            Some(&serde_json::json!(["OneTrust"])),
+            "{f:?}"
+        );
     }
     assert_eq!(
         scan.notes,
@@ -146,8 +159,14 @@ fn a_onetrust_banner_is_hidden_and_the_page_under_it_scored() {
     let shown = flagged(&kept.findings);
     assert!(!has(&shown, "low-contrast", "#covered-copy"), "{shown:#?}");
     assert!(!has(&shown, "low-contrast", "#covered-cta"), "{shown:#?}");
-    assert!(has(&shown, "low-contrast", "#onetrust-policy-text"), "{shown:#?}");
-    assert!(kept.findings.iter().all(|f| f.extras.get("consentHidden").is_none()));
+    assert!(
+        has(&shown, "low-contrast", "#onetrust-policy-text"),
+        "{shown:#?}"
+    );
+    assert!(kept
+        .findings
+        .iter()
+        .all(|f| f.extras.get("consentHidden").is_none()));
     assert!(kept.notes.is_empty());
 }
 
@@ -157,24 +176,47 @@ fn a_late_cookiebot_modal_is_caught_and_its_scroll_lock_undone() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/cookiebot.html");
     let mut browser = engine.launch().expect("launch");
-    let (findings, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
-    let (kept, kept_evidence) =
-        detect_url_evidence(&mut browser, &url, &KEEP, "load", 100, &EvidenceRequest::default()).expect("scan");
+    let (findings, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
+    let (kept, kept_evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &KEEP,
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
 
     let hidden = flagged(&findings);
     assert!(has(&hidden, "low-contrast", "#covered-copy"), "{hidden:#?}");
     assert!(has(&hidden, "low-contrast", "#covered-cta"), "{hidden:#?}");
-    assert!(!has(&hidden, "low-contrast", "#CybotCookiebotDialogBodyContentText"), "{hidden:#?}");
+    assert!(
+        !has(
+            &hidden,
+            "low-contrast",
+            "#CybotCookiebotDialogBodyContentText"
+        ),
+        "{hidden:#?}"
+    );
     let consent = evidence.consent.as_ref().expect("consent report");
     assert_eq!(consent.hidden, vec!["Cookiebot"]);
     assert_eq!(
         consent.matched,
         vec![(
             "Cookiebot".to_string(),
-            vec!["#CybotCookiebotDialog".to_string(), "#CybotCookiebotDialogBodyUnderlay".to_string()]
+            vec![
+                "#CybotCookiebotDialog".to_string(),
+                "#CybotCookiebotDialogBodyUnderlay".to_string()
+            ]
         )]
     );
     assert_eq!(consent.unlocked, vec!["body style overflow"]);
@@ -182,12 +224,25 @@ fn a_late_cookiebot_modal_is_caught_and_its_scroll_lock_undone() {
     assert!(evidence.probe.as_ref().unwrap().consent.is_empty());
     // The capture every pass read has the dialog hidden, and the evidence
     // path leaves the findings untagged so they replay equal.
-    assert!(evidence.scan_snapshot.as_deref().unwrap().contains("impeccable-consent-hide"));
-    assert!(findings.iter().all(|f| f.extras.get("consentHidden").is_none()));
+    assert!(evidence
+        .scan_snapshot
+        .as_deref()
+        .unwrap()
+        .contains("impeccable-consent-hide"));
+    assert!(findings
+        .iter()
+        .all(|f| f.extras.get("consentHidden").is_none()));
 
     let shown = flagged(&kept);
     assert!(!has(&shown, "low-contrast", "#covered-copy"), "{shown:#?}");
-    assert!(has(&shown, "low-contrast", "#CybotCookiebotDialogBodyContentText"), "{shown:#?}");
+    assert!(
+        has(
+            &shown,
+            "low-contrast",
+            "#CybotCookiebotDialogBodyContentText"
+        ),
+        "{shown:#?}"
+    );
     assert!(kept_evidence.consent.is_none());
 }
 
@@ -196,24 +251,53 @@ fn a_cookie_notice_the_site_wrote_itself_is_hidden() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/site-notice.html");
-    let scan = engine.detect_url_scan(&url, &ScanOptions::default()).expect("scan");
+    let scan = engine
+        .detect_url_scan(&url, &ScanOptions::default())
+        .expect("scan");
     let shown = flagged(&scan.findings);
     assert!(has(&shown, "low-contrast", "#covered-copy"), "{shown:#?}");
     assert!(!has(&shown, "low-contrast", "#notice-text"), "{shown:#?}");
     for f in &scan.findings {
-        assert_eq!(f.extras.get("consentHidden"), Some(&serde_json::json!(["cookie notice"])), "{f:?}");
+        assert_eq!(
+            f.extras.get("consentHidden"),
+            Some(&serde_json::json!(["cookie notice"])),
+            "{f:?}"
+        );
     }
     let mut browser = engine.launch().expect("launch");
-    let (_, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
-    let (kept, _) = detect_url_evidence(&mut browser, &url, &KEEP, "load", 100, &EvidenceRequest::default()).expect("scan");
+    let (_, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
+    let (kept, _) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &KEEP,
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
     let consent = evidence.consent.as_ref().expect("consent report");
     assert_eq!(consent.hidden, vec!["cookie notice"]);
-    assert_eq!(consent.matched, vec![("cookie notice".to_string(), vec!["div#cookieBanner".to_string()])]);
+    assert_eq!(
+        consent.matched,
+        vec![(
+            "cookie notice".to_string(),
+            vec!["div#cookieBanner".to_string()]
+        )]
+    );
     // Kept (--no-consent-hiding), the bar stays and its own text is scored.
-    assert!(has(&flagged(&kept), "low-contrast", "#notice-text"), "{kept:#?}");
+    assert!(
+        has(&flagged(&kept), "low-contrast", "#notice-text"),
+        "{kept:#?}"
+    );
 }
 
 /// The same notice with its sentence in a `display: contents` span, which
@@ -224,11 +308,20 @@ fn a_site_notice_whose_text_has_no_box_of_its_own_is_hidden() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/site-notice-contents.html");
     let mut browser = engine.launch().expect("launch");
-    let (findings, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
+    let (findings, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
-    assert!(has(&flagged(&findings), "low-contrast", "#covered-copy"), "{findings:#?}");
+    assert!(
+        has(&flagged(&findings), "low-contrast", "#covered-copy"),
+        "{findings:#?}"
+    );
     let consent = evidence.consent.as_ref().expect("consent report");
     assert_eq!(consent.hidden, vec!["cookie notice"]);
 }
@@ -246,10 +339,17 @@ fn dialogs_that_are_not_cookie_notices_stay() {
         ("site-policy-link.html", "#modal-text"),
     ] {
         let url = format!("http://127.0.0.1:{port}/{page}");
-        let scan = engine.detect_url_scan(&url, &ScanOptions::default()).expect("scan");
+        let scan = engine
+            .detect_url_scan(&url, &ScanOptions::default())
+            .expect("scan");
         let shown = flagged(&scan.findings);
         assert!(has(&shown, "low-contrast", own), "{page}: {shown:#?}");
-        assert!(scan.findings.iter().all(|f| f.extras.get("consentHidden").is_none()), "{page}");
+        assert!(
+            scan.findings
+                .iter()
+                .all(|f| f.extras.get("consentHidden").is_none()),
+            "{page}"
+        );
         assert!(scan.notes.is_empty(), "{page}: {:?}", scan.notes);
     }
 }
@@ -260,18 +360,30 @@ fn a_cookie_lock_its_empty_layer_and_the_blur_go() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/site-lock-blur.html");
     let mut browser = engine.launch().expect("launch");
-    let (findings, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
+    let (findings, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
     let shown = flagged(&findings);
     assert!(has(&shown, "low-contrast", "#covered-copy"), "{shown:#?}");
     assert!(!has(&shown, "low-contrast", "#notice-text"), "{shown:#?}");
     let consent = evidence.consent.as_ref().expect("consent report");
-    assert_eq!(consent.matched, vec![("cookie notice".to_string(), vec!["div#block".to_string()])]);
+    assert_eq!(
+        consent.matched,
+        vec![("cookie notice".to_string(), vec!["div#block".to_string()])]
+    );
     assert_eq!(consent.unlocked, vec!["filter div#page"]);
     let snap = evidence.scan_snapshot.as_deref().unwrap();
-    assert!(snap.contains("lock div#block"), "the empty lock layer is marked hidden");
+    assert!(
+        snap.contains("lock div#block"),
+        "the empty lock layer is marked hidden"
+    );
 }
 
 #[test]
@@ -279,12 +391,21 @@ fn a_tarteaucitron_banner_is_hidden() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/tarteaucitron.html");
-    let scan = engine.detect_url_scan(&url, &ScanOptions::default()).expect("scan");
+    let scan = engine
+        .detect_url_scan(&url, &ScanOptions::default())
+        .expect("scan");
     let shown = flagged(&scan.findings);
     assert!(has(&shown, "low-contrast", "#covered-copy"), "{shown:#?}");
-    assert!(!has(&shown, "low-contrast", "#tarteaucitronDisclaimerAlert"), "{shown:#?}");
+    assert!(
+        !has(&shown, "low-contrast", "#tarteaucitronDisclaimerAlert"),
+        "{shown:#?}"
+    );
     for f in &scan.findings {
-        assert_eq!(f.extras.get("consentHidden"), Some(&serde_json::json!(["Tarteaucitron"])), "{f:?}");
+        assert_eq!(
+            f.extras.get("consentHidden"),
+            Some(&serde_json::json!(["Tarteaucitron"])),
+            "{f:?}"
+        );
     }
 }
 
@@ -293,17 +414,35 @@ fn a_page_that_is_only_a_consent_wall_is_refused() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/wall.html");
-    let err = engine.detect_url(&url, &ScanOptions::default()).expect_err("a consent wall must not scan");
-    assert!(err.message.starts_with("the page is a consent wall, not the site (consent manager OneTrust, "), "{}", err.message);
+    let err = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect_err("a consent wall must not scan");
+    assert!(
+        err.message
+            .starts_with("the page is a consent wall, not the site (consent manager OneTrust, "),
+        "{}",
+        err.message
+    );
     // With the banners kept, the gate is off and the dialog is what is read.
-    engine.detect_url(&url, &KEEP).expect("a kept consent wall scans");
+    engine
+        .detect_url(&url, &KEEP)
+        .expect("a kept consent wall scans");
     let mut browser = engine.launch().expect("launch");
-    let (findings, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("evidence scan of a consent wall is Ok");
+    let (findings, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("evidence scan of a consent wall is Ok");
     browser.close();
     assert!(findings.is_empty());
-    assert_eq!(evidence.validity.as_ref().unwrap().to_value()["status"], "consent-wall");
+    assert_eq!(
+        evidence.validity.as_ref().unwrap().to_value()["status"],
+        "consent-wall"
+    );
     assert_eq!(evidence.probe.as_ref().unwrap().consent, vec!["OneTrust"]);
     assert!(evidence.consent.is_none());
 }
@@ -313,13 +452,23 @@ fn a_short_page_under_a_banner_is_scanned_not_refused() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/short-page.html");
-    let scan = engine.detect_url_scan(&url, &ScanOptions::default()).expect("a sign-in page is a page");
+    let scan = engine
+        .detect_url_scan(&url, &ScanOptions::default())
+        .expect("a sign-in page is a page");
     let found = flagged(&scan.findings);
     assert!(has(&found, "low-contrast", "#hint"), "{found:#?}");
-    assert!(!has(&found, "low-contrast", "#onetrust-policy-text"), "{found:#?}");
-    let kept = engine.detect_url_scan(&url, &KEEP).expect("kept, it scans too");
+    assert!(
+        !has(&found, "low-contrast", "#onetrust-policy-text"),
+        "{found:#?}"
+    );
+    let kept = engine
+        .detect_url_scan(&url, &KEEP)
+        .expect("kept, it scans too");
     let found = flagged(&kept.findings);
-    assert!(has(&found, "low-contrast", "#onetrust-policy-text"), "{found:#?}");
+    assert!(
+        has(&found, "low-contrast", "#onetrust-policy-text"),
+        "{found:#?}"
+    );
 }
 
 #[test]
@@ -328,17 +477,33 @@ fn an_app_shells_own_body_lock_stays() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/app-shell.html");
     let mut browser = engine.launch().expect("launch");
-    let (_, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
+    let (_, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
     let consent = evidence.consent.as_ref().expect("consent report");
     assert_eq!(consent.hidden, vec!["OneTrust"]);
     // The backdrop was showing, so only the app-shell check kept the lock.
-    assert!(consent.matched[0].1.iter().any(|s| s == ".onetrust-pc-dark-filter"), "{:?}", consent.matched);
+    assert!(
+        consent.matched[0]
+            .1
+            .iter()
+            .any(|s| s == ".onetrust-pc-dark-filter"),
+        "{:?}",
+        consent.matched
+    );
     assert!(consent.unlocked.is_empty(), "{:?}", consent.unlocked);
     let snapshot = evidence.scan_snapshot.as_deref().unwrap();
-    assert!(snapshot.contains("overflow: hidden"), "the body keeps its own lock");
+    assert!(
+        snapshot.contains("overflow: hidden"),
+        "the body keeps its own lock"
+    );
 }
 
 #[test]
@@ -346,15 +511,24 @@ fn a_consentmanager_box_in_a_shadow_root_is_hidden() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/consentmanager.html");
-    let scan = engine.detect_url_scan(&url, &ScanOptions::default()).expect("scan");
+    let scan = engine
+        .detect_url_scan(&url, &ScanOptions::default())
+        .expect("scan");
     let found = flagged(&scan.findings);
     assert!(has(&found, "low-contrast", "#covered-copy"), "{found:#?}");
     assert!(has(&found, "low-contrast", "#covered-cta"), "{found:#?}");
     for f in &scan.findings {
-        assert_eq!(f.extras.get("consentHidden"), Some(&serde_json::json!(["consentmanager"])), "{f:?}");
+        assert_eq!(
+            f.extras.get("consentHidden"),
+            Some(&serde_json::json!(["consentmanager"])),
+            "{f:?}"
+        );
     }
     let kept = engine.detect_url_scan(&url, &KEEP).expect("scan");
-    assert!(kept.findings.iter().all(|f| f.extras.get("consentHidden").is_none()));
+    assert!(kept
+        .findings
+        .iter()
+        .all(|f| f.extras.get("consentHidden").is_none()));
     assert!(kept.notes.is_empty());
 }
 
@@ -364,27 +538,46 @@ fn borlabs_leaves_no_scroll_lock_and_no_aria_hidden_behind() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/borlabs.html");
     let mut browser = engine.launch().expect("launch");
-    let (_, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
+    let (_, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
     let consent = evidence.consent.as_ref().expect("consent report");
     assert_eq!(consent.hidden, vec!["Borlabs Cookie"]);
     assert_eq!(
         consent.matched[0].1,
-        vec!["#BorlabsCookieBox", "#BorlabsCookieWidget", "#BorlabsDialogBackdrop"],
+        vec![
+            "#BorlabsCookieBox",
+            "#BorlabsCookieWidget",
+            "#BorlabsDialogBackdrop"
+        ],
         "{:?}",
         consent.matched
     );
     assert_eq!(
         consent.unlocked,
-        vec!["aria-hidden [data-borlabs-cookie-aria-hidden]", "body style overflow"]
+        vec![
+            "aria-hidden [data-borlabs-cookie-aria-hidden]",
+            "body style overflow"
+        ]
     );
     let snapshot = evidence.scan_snapshot.as_deref().unwrap();
     // The wrapper Borlabs marked is back in the page; the site's own
     // aria-hidden icon keeps its attribute.
-    assert!(!snapshot.contains(r#"["aria-hidden","true"],["data-borlabs-cookie-aria-hidden""#), "wrapper unhidden");
-    assert!(snapshot.contains(r#"["id","site-icon"],["aria-hidden","true"]"#), "site icon keeps aria-hidden");
+    assert!(
+        !snapshot.contains(r#"["aria-hidden","true"],["data-borlabs-cookie-aria-hidden""#),
+        "wrapper unhidden"
+    );
+    assert!(
+        snapshot.contains(r#"["id","site-icon"],["aria-hidden","true"]"#),
+        "site icon keeps aria-hidden"
+    );
 }
 
 #[test]
@@ -392,15 +585,31 @@ fn a_wall_that_arrives_after_load_is_refused() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/late-wall.html");
-    let err = engine.detect_url(&url, &ScanOptions::default()).expect_err("a late consent wall must not scan");
-    assert!(err.message.starts_with("the page is a consent wall, not the site (consent manager OneTrust, "), "{}", err.message);
+    let err = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect_err("a late consent wall must not scan");
+    assert!(
+        err.message
+            .starts_with("the page is a consent wall, not the site (consent manager OneTrust, "),
+        "{}",
+        err.message
+    );
     let mut browser = engine.launch().expect("launch");
-    let (findings, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("evidence scan of a consent wall is Ok");
+    let (findings, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("evidence scan of a consent wall is Ok");
     browser.close();
     assert!(findings.is_empty());
-    assert_eq!(evidence.validity.as_ref().unwrap().to_value()["status"], "consent-wall");
+    assert_eq!(
+        evidence.validity.as_ref().unwrap().to_value()["status"],
+        "consent-wall"
+    );
 }
 
 #[test]
@@ -408,8 +617,16 @@ fn a_wall_rendered_in_a_shadow_root_is_refused() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/shadow-wall.html");
-    let err = engine.detect_url(&url, &ScanOptions::default()).expect_err("a shadow-root consent wall must not scan");
-    assert!(err.message.starts_with("the page is a consent wall, not the site (consent manager Usercentrics, "), "{}", err.message);
+    let err = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect_err("a shadow-root consent wall must not scan");
+    assert!(
+        err.message.starts_with(
+            "the page is a consent wall, not the site (consent manager Usercentrics, "
+        ),
+        "{}",
+        err.message
+    );
 }
 
 #[test]
@@ -420,7 +637,13 @@ fn a_wall_under_a_contents_wrapper_in_a_shadow_root_is_refused() {
     let err = engine
         .detect_url(&url, &ScanOptions::default())
         .expect_err("a consent wall under a display: contents wrapper must not scan");
-    assert!(err.message.starts_with("the page is a consent wall, not the site (consent manager Usercentrics, "), "{}", err.message);
+    assert!(
+        err.message.starts_with(
+            "the page is a consent wall, not the site (consent manager Usercentrics, "
+        ),
+        "{}",
+        err.message
+    );
 }
 
 #[test]
@@ -429,9 +652,15 @@ fn a_lock_the_sites_own_modal_holds_stays() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/site-modal.html");
     let mut browser = engine.launch().expect("launch");
-    let (_, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
+    let (_, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
     let consent = evidence.consent.as_ref().expect("consent report");
     assert_eq!(consent.hidden, vec!["Cookiebot"]);
@@ -443,8 +672,16 @@ fn a_wall_that_fills_an_empty_root_after_load_is_refused() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/late-stub-wall.html");
-    let err = engine.detect_url(&url, &ScanOptions::default()).expect_err("a late consent wall must not scan");
-    assert!(err.message.starts_with("the page is a consent wall, not the site (consent manager Usercentrics, "), "{}", err.message);
+    let err = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect_err("a late consent wall must not scan");
+    assert!(
+        err.message.starts_with(
+            "the page is a consent wall, not the site (consent manager Usercentrics, "
+        ),
+        "{}",
+        err.message
+    );
 }
 
 #[test]
@@ -452,8 +689,16 @@ fn a_wall_on_a_root_the_first_pass_hid_inline_is_refused() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/late-inline-wall.html");
-    let err = engine.detect_url(&url, &ScanOptions::default()).expect_err("a late consent wall must not scan");
-    assert!(err.message.starts_with("the page is a consent wall, not the site (consent manager Usercentrics, "), "{}", err.message);
+    let err = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect_err("a late consent wall must not scan");
+    assert!(
+        err.message.starts_with(
+            "the page is a consent wall, not the site (consent manager Usercentrics, "
+        ),
+        "{}",
+        err.message
+    );
 }
 
 #[test]
@@ -461,8 +706,15 @@ fn a_wall_drawn_in_a_frame_is_refused() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/frame-wall.html");
-    let err = engine.detect_url(&url, &ScanOptions::default()).expect_err("a framed consent wall must not scan");
-    assert!(err.message.starts_with("the page is a consent wall, not the site (consent manager Sourcepoint, "), "{}", err.message);
+    let err = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect_err("a framed consent wall must not scan");
+    assert!(
+        err.message
+            .starts_with("the page is a consent wall, not the site (consent manager Sourcepoint, "),
+        "{}",
+        err.message
+    );
 }
 
 #[test]
@@ -470,9 +722,15 @@ fn a_short_page_under_a_shadow_root_banner_is_scanned() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/shadow-short-page.html");
-    let scan = engine.detect_url_scan(&url, &ScanOptions::default()).expect("a short page is a page");
+    let scan = engine
+        .detect_url_scan(&url, &ScanOptions::default())
+        .expect("a short page is a page");
     for f in &scan.findings {
-        assert_eq!(f.extras.get("consentHidden"), Some(&serde_json::json!(["Usercentrics"])), "{f:?}");
+        assert_eq!(
+            f.extras.get("consentHidden"),
+            Some(&serde_json::json!(["Usercentrics"])),
+            "{f:?}"
+        );
     }
 }
 
@@ -481,7 +739,9 @@ fn a_short_page_under_a_banner_outside_body_is_scanned() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/html-root-banner.html");
-    engine.detect_url_scan(&url, &ScanOptions::default()).expect("a short page is a page");
+    engine
+        .detect_url_scan(&url, &ScanOptions::default())
+        .expect("a short page is a page");
 }
 
 #[test]
@@ -489,7 +749,9 @@ fn a_late_banner_that_closed_itself_is_not_a_wall() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/late-closed-banner.html");
-    engine.detect_url_scan(&url, &ScanOptions::default()).expect("a closed banner leaves the page");
+    engine
+        .detect_url_scan(&url, &ScanOptions::default())
+        .expect("a closed banner leaves the page");
 }
 
 #[test]
@@ -498,11 +760,20 @@ fn a_late_banner_on_a_root_hidden_inline_is_reported() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/late-inline-banner.html");
     let mut browser = engine.launch().expect("launch");
-    let (_, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
+    let (_, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
-    assert_eq!(evidence.consent.as_ref().expect("consent report").hidden, vec!["Usercentrics"]);
+    assert_eq!(
+        evidence.consent.as_ref().expect("consent report").hidden,
+        vec!["Usercentrics"]
+    );
 }
 
 #[test]
@@ -510,7 +781,9 @@ fn a_root_matched_by_two_selectors_is_counted_once() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/quantcast-short-page.html");
-    engine.detect_url_scan(&url, &ScanOptions::default()).expect("a short page is a page");
+    engine
+        .detect_url_scan(&url, &ScanOptions::default())
+        .expect("a short page is a page");
 }
 
 #[test]
@@ -528,8 +801,15 @@ fn a_wall_under_a_visibility_hidden_root_is_refused() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/hidden-host-wall.html");
-    let err = engine.detect_url(&url, &ScanOptions::default()).expect_err("a visible dialog under a hidden root is a wall");
-    assert!(err.message.starts_with("the page is a consent wall, not the site (consent manager OneTrust, "), "{}", err.message);
+    let err = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect_err("a visible dialog under a hidden root is a wall");
+    assert!(
+        err.message
+            .starts_with("the page is a consent wall, not the site (consent manager OneTrust, "),
+        "{}",
+        err.message
+    );
 }
 
 #[test]
@@ -547,8 +827,15 @@ fn a_frame_in_the_managers_shadow_root_is_a_wall() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/shadow-frame-wall.html");
-    let err = engine.detect_url(&url, &ScanOptions::default()).expect_err("a framed consent wall must not scan");
-    assert!(err.message.starts_with("the page is a consent wall, not the site (consent manager Sourcepoint, "), "{}", err.message);
+    let err = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect_err("a framed consent wall must not scan");
+    assert!(
+        err.message
+            .starts_with("the page is a consent wall, not the site (consent manager Sourcepoint, "),
+        "{}",
+        err.message
+    );
 }
 
 #[test]
@@ -577,12 +864,26 @@ fn closed_dialogs_parked_offscreen_or_clipped_are_not_showing() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/parked-banner-page.html");
     let mut browser = engine.launch().expect("launch");
-    let (_, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("a page whose consent dialogs are parked away is not a wall");
+    let (_, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("a page whose consent dialogs are parked away is not a wall");
     browser.close();
-    assert_eq!(evidence.validity.as_ref().unwrap().to_value()["status"], "ok");
-    assert!(evidence.consent.as_ref().expect("consent report").hidden.is_empty());
+    assert_eq!(
+        evidence.validity.as_ref().unwrap().to_value()["status"],
+        "ok"
+    );
+    assert!(evidence
+        .consent
+        .as_ref()
+        .expect("consent report")
+        .hidden
+        .is_empty());
 }
 
 #[test]
@@ -590,9 +891,13 @@ fn a_banner_the_scroll_probe_brings_in_is_hidden() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/after-scroll-probe-banner.html");
-    let scan = engine.detect_url_scan(&url, &ScanOptions::default()).expect("scan");
+    let scan = engine
+        .detect_url_scan(&url, &ScanOptions::default())
+        .expect("scan");
     assert!(
-        scan.notes.iter().any(|n| n.starts_with("Hid the OneTrust consent banner")),
+        scan.notes
+            .iter()
+            .any(|n| n.starts_with("Hid the OneTrust consent banner")),
         "{:?}",
         scan.notes
     );
@@ -604,11 +909,20 @@ fn a_fixed_banner_a_transformed_ancestor_holds_is_showing() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/held-fixed-banner.html");
     let mut browser = engine.launch().expect("launch");
-    let (_, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
+    let (_, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
-    assert_eq!(evidence.consent.as_ref().expect("consent report").hidden, vec!["OneTrust"]);
+    assert_eq!(
+        evidence.consent.as_ref().expect("consent report").hidden,
+        vec!["OneTrust"]
+    );
 }
 
 /// Tealium's prompt (telekom.de) and Transcend's banner in a shadow root on a
@@ -619,20 +933,42 @@ fn tealium_and_transcend_banners_are_hidden() {
     let port = serve();
     for (page, name) in [("tealium.html", "Tealium"), ("transcend.html", "Transcend")] {
         let url = format!("http://127.0.0.1:{port}/{page}");
-        let scan = engine.detect_url_scan(&url, &ScanOptions::default()).expect("scan");
+        let scan = engine
+            .detect_url_scan(&url, &ScanOptions::default())
+            .expect("scan");
         let found = flagged(&scan.findings);
-        assert!(has(&found, "low-contrast", "#covered-copy"), "{page}: {found:#?}");
-        assert!(has(&found, "low-contrast", "#covered-cta"), "{page}: {found:#?}");
+        assert!(
+            has(&found, "low-contrast", "#covered-copy"),
+            "{page}: {found:#?}"
+        );
+        assert!(
+            has(&found, "low-contrast", "#covered-cta"),
+            "{page}: {found:#?}"
+        );
         for f in &scan.findings {
-            assert_eq!(f.extras.get("consentHidden"), Some(&serde_json::json!([name])), "{page}: {f:?}");
+            assert_eq!(
+                f.extras.get("consentHidden"),
+                Some(&serde_json::json!([name])),
+                "{page}: {f:?}"
+            );
         }
-        assert!(!has(&found, "low-contrast", "#utiqMessage"), "{page}: {found:#?}");
+        assert!(
+            !has(&found, "low-contrast", "#utiqMessage"),
+            "{page}: {found:#?}"
+        );
         let kept = engine.detect_url_scan(&url, &KEEP).expect("scan");
-        assert!(kept.findings.iter().all(|f| f.extras.get("consentHidden").is_none()));
+        assert!(kept
+            .findings
+            .iter()
+            .all(|f| f.extras.get("consentHidden").is_none()));
         assert!(kept.notes.is_empty());
         if page == "tealium.html" {
             // Kept, the prompt's own faint text is scored as the page's.
-            assert!(has(&flagged(&kept.findings), "low-contrast", "#utiqMessage"), "{:#?}", kept.findings);
+            assert!(
+                has(&flagged(&kept.findings), "low-contrast", "#utiqMessage"),
+                "{:#?}",
+                kept.findings
+            );
         }
     }
 }
@@ -643,11 +979,28 @@ fn tealium_and_transcend_banners_are_hidden() {
 fn page_parts_that_look_like_a_notice_stay() {
     let Some(engine) = engine() else { return };
     let port = serve();
-    for page in ["stay-announce.html", "stay-header.html", "stay-cart.html", "stay-gdpr-modal.html", "stay-hidden-policy.html"] {
+    for page in [
+        "stay-announce.html",
+        "stay-header.html",
+        "stay-cart.html",
+        "stay-gdpr-modal.html",
+        "stay-hidden-policy.html",
+    ] {
         let url = format!("http://127.0.0.1:{port}/{page}");
-        let scan = engine.detect_url_scan(&url, &ScanOptions::default()).expect("scan");
-        assert!(has(&flagged(&scan.findings), "low-contrast", "#own"), "{page}: {:#?}", flagged(&scan.findings));
-        assert!(scan.findings.iter().all(|f| f.extras.get("consentHidden").is_none()), "{page}");
+        let scan = engine
+            .detect_url_scan(&url, &ScanOptions::default())
+            .expect("scan");
+        assert!(
+            has(&flagged(&scan.findings), "low-contrast", "#own"),
+            "{page}: {:#?}",
+            flagged(&scan.findings)
+        );
+        assert!(
+            scan.findings
+                .iter()
+                .all(|f| f.extras.get("consentHidden").is_none()),
+            "{page}"
+        );
     }
 }
 
@@ -656,14 +1009,31 @@ fn a_notice_inside_a_header_or_a_stack_goes_alone() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let mut browser = engine.launch().expect("launch");
-    for (page, notice) in [("header-strip.html", "div.cookie-strip"), ("bottom-stack.html", "div.cookies")] {
+    for (page, notice) in [
+        ("header-strip.html", "div.cookie-strip"),
+        ("bottom-stack.html", "div.cookies"),
+    ] {
         let url = format!("http://127.0.0.1:{port}/{page}");
-        let (findings, evidence) =
-            detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-                .expect("scan");
-        assert!(has(&flagged(&findings), "low-contrast", "#own"), "{page}: {:#?}", flagged(&findings));
+        let (findings, evidence) = detect_url_evidence(
+            &mut browser,
+            &url,
+            &ScanOptions::default(),
+            "load",
+            100,
+            &EvidenceRequest::default(),
+        )
+        .expect("scan");
+        assert!(
+            has(&flagged(&findings), "low-contrast", "#own"),
+            "{page}: {:#?}",
+            flagged(&findings)
+        );
         let consent = evidence.consent.as_ref().expect("consent report");
-        assert_eq!(consent.matched, vec![("cookie notice".to_string(), vec![notice.to_string()])], "{page}");
+        assert_eq!(
+            consent.matched,
+            vec![("cookie notice".to_string(), vec![notice.to_string()])],
+            "{page}"
+        );
     }
     browser.close();
 }
@@ -682,17 +1052,45 @@ fn backgrounds_and_blurs_beside_a_cookie_bar_stay() {
         "stay-blur-paywall.html",
     ] {
         let url = format!("http://127.0.0.1:{port}/{page}");
-        let (findings, evidence) =
-            detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-                .expect("scan");
+        let (findings, evidence) = detect_url_evidence(
+            &mut browser,
+            &url,
+            &ScanOptions::default(),
+            "load",
+            100,
+            &EvidenceRequest::default(),
+        )
+        .expect("scan");
         let consent = evidence.consent.as_ref().expect("consent report");
-        assert_eq!(consent.matched, vec![("cookie notice".to_string(), vec!["div.cookie-bar".to_string()])], "{page}");
-        assert!(consent.unlocked.is_empty(), "{page}: {:?}", consent.unlocked);
-        assert!(!evidence.scan_snapshot.as_deref().unwrap().contains("lock div.cookie-bar"), "{page}");
+        assert_eq!(
+            consent.matched,
+            vec![(
+                "cookie notice".to_string(),
+                vec!["div.cookie-bar".to_string()]
+            )],
+            "{page}"
+        );
+        assert!(
+            consent.unlocked.is_empty(),
+            "{page}: {:?}",
+            consent.unlocked
+        );
+        assert!(
+            !evidence
+                .scan_snapshot
+                .as_deref()
+                .unwrap()
+                .contains("lock div.cookie-bar"),
+            "{page}"
+        );
         // The light title on the dark image is not read against white (the
         // review's probe: hiding the background made it 1.1:1).
         if page == "stay-bg-image.html" {
-            assert!(!has(&flagged(&findings), "low-contrast", "#night-title"), "{page}: {:#?}", flagged(&findings));
+            assert!(
+                !has(&flagged(&findings), "low-contrast", "#night-title"),
+                "{page}: {:#?}",
+                flagged(&findings)
+            );
         }
     }
     browser.close();

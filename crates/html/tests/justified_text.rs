@@ -12,10 +12,14 @@ fn page(style: &str, body: &str) -> String {
 }
 
 fn justified_hits(html: &str) -> usize {
-    detect_html_source(html, Path::new("/tmp/justified.html"), &DetectHtmlOptions::default())
-        .iter()
-        .filter(|f| f.antipattern == "justified-text")
-        .count()
+    detect_html_source(
+        html,
+        Path::new("/tmp/justified.html"),
+        &DetectHtmlOptions::default(),
+    )
+    .iter()
+    .filter(|f| f.antipattern == "justified-text")
+    .count()
 }
 
 fn repo_root() -> std::path::PathBuf {
@@ -119,7 +123,11 @@ fn undeclared_measure_passes() {
 #[test]
 fn fixture_flag_and_pass_cases() {
     let fixture = repo_root().join("tests/fixtures/antipatterns/justified-text.html");
-    assert!(fixture.is_file(), "missing fixture at {}", fixture.display());
+    assert!(
+        fixture.is_file(),
+        "missing fixture at {}",
+        fixture.display()
+    );
     let html = std::fs::read_to_string(&fixture).unwrap();
     let findings = detect_html_source(&html, &fixture, &DetectHtmlOptions::default());
     let hits = findings

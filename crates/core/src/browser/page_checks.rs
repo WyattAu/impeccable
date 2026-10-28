@@ -7,8 +7,8 @@
 
 #![allow(unused_imports)]
 use super::dom::{
-    ancestors_inclusive, class_attr, closest_or_none, direct_text, has_direct_text_longer_than, pf0,
-    style_px, tag_lower, Dom, ElId, ElStyle, Rect,
+    ancestors_inclusive, class_attr, closest_or_none, direct_text, has_direct_text_longer_than,
+    pf0, style_px, tag_lower, Dom, ElId, ElStyle, Rect,
 };
 use super::element_checks::{
     ai_palette_blur_px, class_selector, effective_opacity_dom, is_rendered_for_browser_rule,
@@ -25,11 +25,12 @@ use crate::checks::measures::{
 };
 use crate::checks::rules::{
     check_flat_type_hierarchy_samples, flat_type_hierarchy_severity, is_card_like_from_props,
-    parse_font_weight, type_hierarchy_role, RuleHit,
-    TypeSample, TYPE_HIERARCHY_SELECTOR,
+    parse_font_weight, type_hierarchy_role, RuleHit, TypeSample, TYPE_HIERARCHY_SELECTOR,
 };
 use crate::color::{composite_color_over, parse_any_color, Rgba};
-use crate::constants::{is_brand_font_on_own_domain, overused_font_name, CSS_GENERIC_FONTS, OVERUSED_FONTS, SAFE_TAGS};
+use crate::constants::{
+    is_brand_font_on_own_domain, overused_font_name, CSS_GENERIC_FONTS, OVERUSED_FONTS, SAFE_TAGS,
+};
 use crate::js::{self, math_max, math_min, math_round, number_to_string, parse_float, to_fixed};
 use crate::js_ext_a::num_truthy;
 use crate::js_ext_b::{slice_utf16_prefix, utf16_len};
@@ -80,7 +81,10 @@ re!(
     )
 );
 re!(MARQUEE_ANIM_RE, r"marquee|ticker|scroll");
-re!(GRADIENT_URL_RE, format!("({}|{})\\(", js::ci("gradient"), js::ci("url")));
+re!(
+    GRADIENT_URL_RE,
+    format!("({}|{})\\(", js::ci("gradient"), js::ci("url"))
+);
 re!(MULTI_COL_RE, r"(^|inline-)(grid|flex)$");
 
 /// JS `s.replace(/\s+/g, ' ')`.
@@ -121,7 +125,10 @@ fn sets_next_to_none_of_the_text(font: &str, chars: &[(String, f64)], total: f64
     if !(total > 0.0) {
         return false;
     }
-    let own = chars.iter().find(|(k, _)| k == font).map_or(0.0, |(_, c)| *c);
+    let own = chars
+        .iter()
+        .find(|(k, _)| k == font)
+        .map_or(0.0, |(_, c)| *c);
     own / total < OVERUSED_FONT_MIN_CHAR_SHARE
 }
 
@@ -171,7 +178,11 @@ fn latin_face_on_a_cjk_page(font: &str, tally: &LetterTally) -> bool {
     if !(tally.letters > 0.0) || tally.cjk * 2.0 <= tally.letters {
         return false;
     }
-    let latin = tally.latin_by_face.iter().find(|(k, _)| k == font).map_or(0.0, |(_, c)| *c);
+    let latin = tally
+        .latin_by_face
+        .iter()
+        .find(|(k, _)| k == font)
+        .map_or(0.0, |(_, c)| *c);
     latin / tally.letters < OVERUSED_FONT_MIN_CHAR_SHARE
 }
 
@@ -402,11 +413,15 @@ fn own_type_chars(dom: &dyn Dom, el: ElId) -> usize {
     fn walk(dom: &dyn Dom, el: ElId, n: &mut usize) {
         for child in dom.child_nodes(el) {
             match child {
-                super::dom::DomChild::Text(text) => *n += text.chars().filter(|c| !c.is_whitespace()).count(),
+                super::dom::DomChild::Text(text) => {
+                    *n += text.chars().filter(|c| !c.is_whitespace()).count()
+                }
                 super::dom::DomChild::Element(c) => {
                     let tag = tag_lower(dom, c);
                     let sampled = TYPE_HIERARCHY_SELECTOR.split(',').any(|t| t == tag);
-                    if !sampled && !matches!(tag.as_str(), "script" | "style" | "template" | "noscript") {
+                    if !sampled
+                        && !matches!(tag.as_str(), "script" | "style" | "template" | "noscript")
+                    {
                         walk(dom, c, n);
                     }
                 }
@@ -458,7 +473,10 @@ fn shows_border_or_shadow(dom: &dyn Dom, el: ElId) -> bool {
         l.alpha >= crate::checks::measures::FAINT_PAINT_ALPHA
             && (l.x != 0.0 || l.y != 0.0 || l.blur > 0.0 || l.spread != 0.0)
     });
-    casts_shadow || ["Top", "Right", "Bottom", "Left"].iter().any(|side| border_side_shows(dom, el, side, None))
+    casts_shadow
+        || ["Top", "Right", "Bottom", "Left"]
+            .iter()
+            .any(|side| border_side_shows(dom, el, side, None))
 }
 
 /// The surface under `el` its borders are judged against: the painted
@@ -648,21 +666,28 @@ fn is_single_line_label_box(dom: &dyn Dom, el: ElId, rect: &Rect) -> bool {
     // one line is a label too, up to three lines tall.
     if dom.children(el).is_empty()
         && rect.height <= line_height * 3.0
-        && dom.text_line_rects(el).is_some_and(|lines| lines.len() == 1)
+        && dom
+            .text_line_rects(el)
+            .is_some_and(|lines| lines.len() == 1)
     {
         return true;
     }
-    let chrome = ["paddingTop", "paddingBottom", "borderTopWidth", "borderBottomWidth"]
-        .iter()
-        .map(|p| {
-            let v = parse_float(&dom.style(el, p));
-            if v.is_finite() {
-                v
-            } else {
-                0.0
-            }
-        })
-        .sum::<f64>();
+    let chrome = [
+        "paddingTop",
+        "paddingBottom",
+        "borderTopWidth",
+        "borderBottomWidth",
+    ]
+    .iter()
+    .map(|p| {
+        let v = parse_float(&dom.style(el, p));
+        if v.is_finite() {
+            v
+        } else {
+            0.0
+        }
+    })
+    .sum::<f64>();
     rect.height - chrome <= line_height * 1.5
 }
 
@@ -700,7 +725,8 @@ fn is_media_frame(dom: &dyn Dom, el: ElId, rect: &Rect) -> bool {
 /// input and one big button carry, is still a card.
 fn is_field_box(dom: &dyn Dom, el: ElId) -> bool {
     let tag_of = |c: ElId| tag_lower(dom, c);
-    let input_type = |c: ElId| js::to_lower_case(js::trim(&dom.attr(c, "type").unwrap_or_default()));
+    let input_type =
+        |c: ElId| js::to_lower_case(js::trim(&dom.attr(c, "type").unwrap_or_default()));
     let is_text_field = |c: ElId| match tag_of(c).as_str() {
         "textarea" | "select" => true,
         "input" => !matches!(
@@ -714,7 +740,10 @@ fn is_field_box(dom: &dyn Dom, el: ElId) -> bool {
         tag_of(c) == "button"
             || dom.attr(c, "role").is_some_and(|r| r == "button")
             || (tag_of(c) == "input"
-                && matches!(input_type(c).as_str(), "submit" | "button" | "image" | "reset"))
+                && matches!(
+                    input_type(c).as_str(),
+                    "submit" | "button" | "image" | "reset"
+                ))
     };
     // Copy written straight into the box is the box's own content.
     if !js::trim(&direct_text(dom, el)).is_empty() {
@@ -723,7 +752,11 @@ fn is_field_box(dom: &dyn Dom, el: ElId) -> bool {
     // An input button shows its `value` (an image input its `alt`), not
     // child text; a row holds the labels of the inputs inside it too.
     let input_label = |c: ElId| {
-        let attr = if input_type(c) == "image" { "alt" } else { "value" };
+        let attr = if input_type(c) == "image" {
+            "alt"
+        } else {
+            "value"
+        };
         dom.attr(c, attr).unwrap_or_default()
     };
     let label_text = |c: ElId| {
@@ -837,9 +870,15 @@ fn clips_between(dom: &dyn Dom, inner: ElId, outer: ElId) -> bool {
     let a = dom.rect(inner);
     let mut cur = dom.parent(inner);
     while let Some(c) = cur {
-        let clips = ["overflow", "overflowX", "overflowY"]
-            .iter()
-            .any(|k| matches!(dom.style(c, k).split_ascii_whitespace().next().unwrap_or(""), "hidden" | "clip" | "auto" | "scroll"));
+        let clips = ["overflow", "overflowX", "overflowY"].iter().any(|k| {
+            matches!(
+                dom.style(c, k)
+                    .split_ascii_whitespace()
+                    .next()
+                    .unwrap_or(""),
+                "hidden" | "clip" | "auto" | "scroll"
+            )
+        });
         // Spanning one axis and short of the other: the box's own wrapper,
         // clipped at the box's size, is not a column it is a row of.
         let r = dom.rect(c);
@@ -865,7 +904,10 @@ const CONTROL_STRIP_MAX_HEIGHT_PX: f64 = 64.0;
 /// track that scrolls sideways. A row of links is one control, however it is
 /// drawn.
 fn is_control_strip(dom: &dyn Dom, el: ElId) -> bool {
-    if dom.parent(el).is_some_and(|p| super::text_geometry::scrolls_x(dom, p)) {
+    if dom
+        .parent(el)
+        .is_some_and(|p| super::text_geometry::scrolls_x(dom, p))
+    {
         return true;
     }
     let kids = dom.children(el);
@@ -876,9 +918,12 @@ fn is_control_strip(dom: &dyn Dom, el: ElId) -> bool {
     // than a control runs is a card that happens to be a link.
     let is_control = |c: ElId| {
         (matches!(tag_lower(dom, c).as_str(), "a" | "button")
-            || dom
-                .attr(c, "role")
-                .is_some_and(|r| matches!(js::to_lower_case(js::trim(&r)).as_str(), "link" | "button" | "tab")))
+            || dom.attr(c, "role").is_some_and(|r| {
+                matches!(
+                    js::to_lower_case(js::trim(&r)).as_str(),
+                    "link" | "button" | "tab"
+                )
+            }))
             && dom.rect(c).height <= CONTROL_STRIP_MAX_HEIGHT_PX
             && !is_card_like_dom(dom, c)
     };
@@ -886,14 +931,18 @@ fn is_control_strip(dom: &dyn Dom, el: ElId) -> bool {
         return false;
     }
     let rects: Vec<Rect> = kids.iter().map(|&c| dom.rect(c)).collect();
-    if rects.iter().any(|r| !r.all_finite() || r.width <= 0.0 || r.height <= 0.0) {
+    if rects
+        .iter()
+        .any(|r| !r.all_finite() || r.width <= 0.0 || r.height <= 0.0)
+    {
         return false;
     }
     // One row: every control shares a horizontal band with the first.
     let first = rects[0];
-    rects
-        .iter()
-        .all(|r| js::math_min(r.bottom, first.bottom) - js::math_max(r.top, first.top) > js::math_min(r.height, first.height) * 0.5)
+    rects.iter().all(|r| {
+        js::math_min(r.bottom, first.bottom) - js::math_max(r.top, first.top)
+            > js::math_min(r.height, first.height) * 0.5
+    })
 }
 
 /// Share of a box's area an embedded figure must cover to be its main child.
@@ -1009,7 +1058,8 @@ fn is_output_block(dom: &dyn Dom, el: ElId, outer: ElId) -> bool {
     if nodes.len() > OUTPUT_MAX_NODES {
         return false;
     }
-    let index: std::collections::HashMap<ElId, usize> = nodes.iter().enumerate().map(|(i, &n)| (n, i)).collect();
+    let index: std::collections::HashMap<ElId, usize> =
+        nodes.iter().enumerate().map(|(i, &n)| (n, i)).collect();
     // Per node: its subtree's text, the monospace share of it, and the part
     // reached through inline boxes alone (one run of text).
     let mut text = vec![0usize; nodes.len()];
@@ -1035,7 +1085,10 @@ fn is_output_block(dom: &dyn Dom, el: ElId, outer: ElId) -> bool {
         };
         text[parent] += text[i];
         mono[parent] += mono[i];
-        if matches!(dom.style(nodes[i], "display").as_str(), "inline" | "contents") {
+        if matches!(
+            dom.style(nodes[i], "display").as_str(),
+            "inline" | "contents"
+        ) {
             run[parent] += run[i];
         }
     }
@@ -1066,12 +1119,19 @@ fn is_output_block(dom: &dyn Dom, el: ElId, outer: ElId) -> bool {
             // The rows stand one under another: chips laid side by side in
             // a flex row (paseo.sh's `create_agent #412` tool-call line)
             // are one line, not a stack.
-            let rows: Vec<usize> = dom.children(node).iter().filter_map(|c| index.get(c).copied()).collect();
+            let rows: Vec<usize> = dom
+                .children(node)
+                .iter()
+                .filter_map(|c| index.get(c).copied())
+                .collect();
             let stacked = rows.windows(2).all(|pair| {
                 let (a, b) = (dom.rect(nodes[pair[0]]), dom.rect(nodes[pair[1]]));
                 a.height > 0.0 && b.height > 0.0 && b.top >= a.bottom - 1.0
             });
-            let code_rows = rows.iter().filter(|&&r| row_reads_as_code(&dom.text_content(nodes[r]))).count();
+            let code_rows = rows
+                .iter()
+                .filter(|&&r| row_reads_as_code(&dom.text_content(nodes[r])))
+                .count();
             rows.len() >= 2
                 && stacked
                 && text[i] == rows.iter().map(|&r| text[r]).sum::<usize>()
@@ -1096,8 +1156,9 @@ fn row_reads_as_code(text: &str) -> bool {
         || CALL_RE.is_match(t)
 }
 
-static CALL_RE: once_cell::sync::Lazy<regex::Regex> =
-    once_cell::sync::Lazy::new(|| regex::Regex::new(r"[A-Za-z_$][A-Za-z0-9_$]*\([^()]*\)").expect("CALL_RE"));
+static CALL_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+    regex::Regex::new(r"[A-Za-z_$][A-Za-z0-9_$]*\([^()]*\)").expect("CALL_RE")
+});
 
 /// A media player that is the box's main child. The box holds a visible
 /// `<audio>` or `<video>` (drawn with its own controls, or covering 40% of
@@ -1121,7 +1182,8 @@ fn is_media_player(dom: &dyn Dom, el: ElId, rect: &Rect) -> bool {
             }
             let w = (rect.right.min(r.right) - rect.left.max(r.left)).max(0.0);
             let h = (rect.bottom.min(r.bottom) - rect.top.max(r.top)).max(0.0);
-            dom.attr(m, "controls").is_some() || (area > 0.0 && w * h >= area * FIGURE_MIN_AREA_SHARE)
+            dom.attr(m, "controls").is_some()
+                || (area > 0.0 && w * h >= area * FIGURE_MIN_AREA_SHARE)
         });
     let controls = controls_in(dom, el);
     let custom = controls
@@ -1150,7 +1212,11 @@ fn occlusion_victim_without_ink(dom: &dyn Dom, el: ElId) -> bool {
         return true;
     }
     let fill = dom.style(el, "webkitTextFillColor");
-    let fill = if js::trim(&fill).is_empty() { dom.style(el, "color") } else { fill };
+    let fill = if js::trim(&fill).is_empty() {
+        dom.style(el, "color")
+    } else {
+        fill
+    };
     let clear = parse_any_color(Some(&fill)).is_some_and(|c| c.alpha_or_one() <= 0.0);
     if !clear {
         return false;
@@ -1305,7 +1371,10 @@ pub fn check_layout(dom: &dyn Dom) -> Vec<ElFinding> {
             if super::decorative_text::box_in_mockup_dom(dom, el) {
                 finding.severity = Some(crate::checks::rules::ADVISORY_SEVERITY.to_string());
             }
-            findings.push(ElFinding { el: Some(el), finding });
+            findings.push(ElFinding {
+                el: Some(el),
+                finding,
+            });
         }
     }
     findings
@@ -1377,9 +1446,12 @@ fn rhythm_image_band(dom: &dyn Dom, el: ElId) -> bool {
     if image.is_empty() || image == "none" {
         return false;
     }
-    if [dom.style(el, "backgroundClip"), dom.style(el, "webkitBackgroundClip")]
-        .iter()
-        .any(|clip| clip.contains("text"))
+    if [
+        dom.style(el, "backgroundClip"),
+        dom.style(el, "webkitBackgroundClip"),
+    ]
+    .iter()
+    .any(|clip| clip.contains("text"))
     {
         return false;
     }
@@ -1390,7 +1462,11 @@ fn rhythm_image_band(dom: &dyn Dom, el: ElId) -> bool {
         if img == "none" {
             return false;
         }
-        let size = sizes.get(i).or(sizes.last()).map(|s| js::trim(s).to_string()).unwrap_or_default();
+        let size = sizes
+            .get(i)
+            .or(sizes.last())
+            .map(|s| js::trim(s).to_string())
+            .unwrap_or_default();
         if size == "cover" {
             return true;
         }
@@ -1400,7 +1476,9 @@ fn rhythm_image_band(dom: &dyn Dom, el: ElId) -> bool {
         }
         // The shorthand spells each layer's tiling; the image's own
         // parentheses are dropped so a `url()` holding "repeat" cannot match.
-        let Some(layer) = layers.get(i) else { return false };
+        let Some(layer) = layers.get(i) else {
+            return false;
+        };
         let mut words = Vec::new();
         let mut depth = 0i32;
         let mut word = String::new();
@@ -1423,12 +1501,18 @@ fn rhythm_image_band(dom: &dyn Dom, el: ElId) -> bool {
         let tiling: Vec<&str> = words
             .iter()
             .map(String::as_str)
-            .filter(|w| matches!(*w, "repeat" | "repeat-x" | "repeat-y" | "no-repeat" | "space" | "round"))
+            .filter(|w| {
+                matches!(
+                    *w,
+                    "repeat" | "repeat-x" | "repeat-y" | "no-repeat" | "space" | "round"
+                )
+            })
             .collect();
         match tiling.as_slice() {
             [one] => matches!(*one, "repeat" | "space" | "round"),
             [x, y] => {
-                matches!(*x, "repeat" | "space" | "round") && matches!(*y, "repeat" | "space" | "round")
+                matches!(*x, "repeat" | "space" | "round")
+                    && matches!(*y, "repeat" | "space" | "round")
             }
             _ => false,
         }
@@ -1552,7 +1636,8 @@ const RHYTHM_SPACER_MAX_DEPTH: usize = 4;
 
 /// Form controls draw what they hold (a value, a placeholder) without DOM
 /// text, so an empty one is content, not space.
-const RHYTHM_CONTROL_TAGS: &[&str] = &["input", "textarea", "select", "button", "meter", "progress"];
+const RHYTHM_CONTROL_TAGS: &[&str] =
+    &["input", "textarea", "select", "button", "meter", "progress"];
 
 /// An empty box that only holds space open: no text, no picture, nothing
 /// painted, and nothing laid out inside it but boxes that are spacers too.
@@ -1560,7 +1645,8 @@ const RHYTHM_CONTROL_TAGS: &[&str] = &["input", "textarea", "select", "button", 
 /// `wp-block-spacer` in a bare `div`; the wrapper holds space open exactly as
 /// the spacer does.
 fn rhythm_is_spacer(dom: &dyn Dom, el: ElId) -> bool {
-    js::trim(&dom.text_content(el)).is_empty() && rhythm_is_empty_box(dom, el, RHYTHM_SPACER_MAX_DEPTH)
+    js::trim(&dom.text_content(el)).is_empty()
+        && rhythm_is_empty_box(dom, el, RHYTHM_SPACER_MAX_DEPTH)
 }
 
 fn rhythm_is_empty_box(dom: &dyn Dom, el: ElId, depth: usize) -> bool {
@@ -1581,7 +1667,11 @@ fn rhythm_is_empty_box(dom: &dyn Dom, el: ElId, depth: usize) -> bool {
         return false;
     }
     let children = rhythm_rendered_children(dom, el);
-    children.is_empty() || (depth > 0 && children.into_iter().all(|k| rhythm_is_empty_box(dom, k, depth - 1)))
+    children.is_empty()
+        || (depth > 0
+            && children
+                .into_iter()
+                .all(|k| rhythm_is_empty_box(dom, k, depth - 1)))
 }
 
 /// A shadow host whose shadow tree lays out content: a box there with words,
@@ -1618,22 +1708,25 @@ const RHYTHM_UNRENDERED_TAGS: [&str; 4] = ["style", "script", "noscript", "templ
 /// A page landmark other than the main content: the footer, a navigation
 /// block, a sidebar, a banner. A heading introduces none of them.
 fn rhythm_is_side_landmark(dom: &dyn Dom, el: ElId) -> bool {
-    matches!(tag_lower(dom, el).as_str(), "footer" | "nav" | "aside" | "header")
-        || dom.attr(el, "role").is_some_and(|role| {
-            role.split_ascii_whitespace().any(|token| {
-                matches!(
-                    js::to_lower_case(token).as_str(),
-                    "contentinfo" | "navigation" | "complementary" | "banner"
-                )
-            })
+    matches!(
+        tag_lower(dom, el).as_str(),
+        "footer" | "nav" | "aside" | "header"
+    ) || dom.attr(el, "role").is_some_and(|role| {
+        role.split_ascii_whitespace().any(|token| {
+            matches!(
+                js::to_lower_case(token).as_str(),
+                "contentinfo" | "navigation" | "complementary" | "banner"
+            )
         })
+    })
 }
 
 /// The page's main content landmark.
 fn rhythm_is_main_landmark(dom: &dyn Dom, el: ElId) -> bool {
     tag_lower(dom, el) == "main"
         || dom.attr(el, "role").is_some_and(|role| {
-            role.split_ascii_whitespace().any(|token| js::to_lower_case(token) == "main")
+            role.split_ascii_whitespace()
+                .any(|token| js::to_lower_case(token) == "main")
         })
 }
 
@@ -1698,7 +1791,9 @@ fn rhythm_subtree(dom: &dyn Dom, el: ElId, limit: usize) -> Vec<ElId> {
 }
 
 fn rhythm_has_words(dom: &dyn Dom, el: ElId) -> bool {
-    dom.direct_text_nodes(el).iter().any(|t| !js::trim(t).is_empty())
+    dom.direct_text_nodes(el)
+        .iter()
+        .any(|t| !js::trim(t).is_empty())
 }
 
 /// The size of the text a block sets: that of the first element in it that
@@ -1813,7 +1908,9 @@ fn rhythm_is_italic(dom: &dyn Dom, el: ElId) -> bool {
 /// the block above laid out before it in the same parent stays a block of its
 /// own, and the gap is measured to it, as before.
 fn rhythm_set_apart(dom: &dyn Dom, line: ElId, heading: ElId, words: ElId) -> bool {
-    let Some(container) = dom.parent(line) else { return false };
+    let Some(container) = dom.parent(line) else {
+        return false;
+    };
     if utf16_len(js::trim(&collapse_ws(&dom.text_content(line)))) > RHYTHM_SET_APART_MAX_CHARS {
         return false;
     }
@@ -1823,14 +1920,17 @@ fn rhythm_set_apart(dom: &dyn Dom, line: ElId, heading: ElId, words: ElId) -> bo
         .unwrap_or(size * 1.2);
     let one_line = dom
         .direct_text_rect(words)
-        .map_or(false, |t| t.height > 0.0 && t.height < math_max(pitch, size * 1.2) * 1.5);
+        .is_some_and(|t| t.height > 0.0 && t.height < math_max(pitch, size * 1.2) * 1.5);
     if !one_line {
         return false;
     }
     if rhythm_colours_differ(dom, words, container) && rhythm_colours_differ(dom, words, heading) {
         return true;
     }
-    if rhythm_is_italic(dom, words) && !rhythm_is_italic(dom, container) && !rhythm_is_italic(dom, heading) {
+    if rhythm_is_italic(dom, words)
+        && !rhythm_is_italic(dom, container)
+        && !rhythm_is_italic(dom, heading)
+    {
         return true;
     }
     let weight = parse_font_weight(&dom.style(words, "fontWeight"));
@@ -1882,7 +1982,9 @@ fn rhythm_draws_top_edge(dom: &dyn Dom, el: ElId) -> bool {
 /// `el` paints a background colour that differs from the nearest painted
 /// background behind it (white when none is).
 fn rhythm_band_differs_from_backdrop(dom: &dyn Dom, el: ElId) -> bool {
-    let Some(band) = rhythm_painted_background(dom, el) else { return false };
+    let Some(band) = rhythm_painted_background(dom, el) else {
+        return false;
+    };
     // With no fill above it, the band sits on the canvas: white, or the
     // browser's dark canvas on a page that asks for a dark scheme only.
     let mut backdrop = rhythm_canvas(dom);
@@ -1949,7 +2051,7 @@ fn rhythm_shape_of(dom: &dyn Dom, el: ElId) -> String {
 /// How much two outlines share: the Dice coefficient of their tag multisets.
 fn rhythm_shape_similarity(a: &str, b: &str) -> f64 {
     let tokens = |s: &str| -> Vec<String> {
-        s.split(|c: char| c == '(' || c == ')' || c == ' ')
+        s.split(['(', ')', ' '])
             .filter(|t| !t.is_empty())
             .map(String::from)
             .collect()
@@ -1988,7 +2090,9 @@ fn rhythm_heading_path(dom: &dyn Dom, row: ElId, h: ElId) -> Vec<(String, String
 /// path (the same tags at the same indices), or under the same chain of tags
 /// and classes.
 fn rhythm_holds_heading_alike(dom: &dyn Dom, s: ElId, path: &[(String, String, usize)]) -> bool {
-    let Some((heading_tag, _, _)) = path.first() else { return false };
+    let Some((heading_tag, _, _)) = path.first() else {
+        return false;
+    };
     let mut cur = Some(s);
     for (tag, _, idx) in path.iter().rev() {
         cur = cur
@@ -2079,7 +2183,9 @@ const RHYTHM_PROSE_MIN_WIDTH_SHARE: f64 = 0.5;
 fn rhythm_closing_text(dom: &dyn Dom, block: ElId) -> Option<ElId> {
     let mut cur = block;
     for _ in 0..12 {
-        if RHYTHM_MEDIA_TAGS.contains(&tag_lower(dom, cur).as_str()) || rhythm_draws_bottom_edge(dom, cur) {
+        if RHYTHM_MEDIA_TAGS.contains(&tag_lower(dom, cur).as_str())
+            || rhythm_draws_bottom_edge(dom, cur)
+        {
             return None;
         }
         if rhythm_has_words(dom, cur) {
@@ -2113,8 +2219,13 @@ fn rhythm_closing_text(dom: &dyn Dom, block: ElId) -> Option<ElId> {
 /// cannot say where the lines are (snapshots recorded before line rects)
 /// stands down, and the heading is judged by the crowded test alone.
 fn rhythm_ends_in_prose(dom: &dyn Dom, block: ElId, heading: ElId, text_size: f64) -> bool {
-    let Some(text_el) = rhythm_closing_text(dom, block) else { return false };
-    if matches!(tag_lower(dom, text_el).as_str(), "h1" | "h2" | "h3" | "h4" | "h5" | "h6") {
+    let Some(text_el) = rhythm_closing_text(dom, block) else {
+        return false;
+    };
+    if matches!(
+        tag_lower(dom, text_el).as_str(),
+        "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
+    ) {
         return false;
     }
     let size = rhythm_font_size(dom, text_el);
@@ -2127,8 +2238,14 @@ fn rhythm_ends_in_prose(dom: &dyn Dom, block: ElId, heading: ElId, text_size: f6
     if dom.rect(text_el).width < dom.rect(heading).width * RHYTHM_PROSE_MIN_WIDTH_SHARE {
         return false;
     }
-    let Some(lines) = dom.text_line_rects(text_el) else { return false };
-    lines.iter().filter(|r| r.width > 0.0 && r.height > 0.0).count() >= RHYTHM_PROSE_MIN_LINES
+    let Some(lines) = dom.text_line_rects(text_el) else {
+        return false;
+    };
+    lines
+        .iter()
+        .filter(|r| r.width > 0.0 && r.height > 0.0)
+        .count()
+        >= RHYTHM_PROSE_MIN_LINES
 }
 
 /// JS: checks.mjs#checkHeadingRhythmDOM()
@@ -2165,7 +2282,9 @@ fn heading_runs_in(dom: &dyn Dom, h: ElId) -> bool {
     if dom.style(h, "display") != "inline" {
         return false;
     }
-    let Some(parent) = dom.parent(h) else { return false };
+    let Some(parent) = dom.parent(h) else {
+        return false;
+    };
     let chars = |t: &str| collapse_ws(js::trim(t)).chars().count();
     let mut after = dom
         .child_nodes(parent)
@@ -2285,7 +2404,10 @@ pub fn check_heading_rhythm_dom(dom: &dyn Dom) -> Vec<ElFinding> {
                 break;
             }
             // A heading above is a title of its own, never this heading's label.
-            if matches!(tag_lower(dom, sib).as_str(), "h1" | "h2" | "h3" | "h4" | "h5" | "h6") {
+            if matches!(
+                tag_lower(dom, sib).as_str(),
+                "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
+            ) {
                 break;
             }
             if text_len > 80 {
@@ -2330,7 +2452,7 @@ pub fn check_heading_rhythm_dom(dom: &dyn Dom) -> Vec<ElFinding> {
                 if let Some(b) = rhythm_flow_box(dom, s, rect, true, &pick) {
                     if !rhythm_is_spacer(dom, b) {
                         let bottom = rhythm_content_bottom(dom, b);
-                        if nearest.map_or(true, |(nb, _)| bottom > nb) {
+                        if nearest.is_none_or(|(nb, _)| bottom > nb) {
                             nearest = Some((bottom, b));
                         }
                     }
@@ -2382,7 +2504,7 @@ pub fn check_heading_rhythm_dom(dom: &dyn Dom) -> Vec<ElFinding> {
                 if let Some(b) = rhythm_flow_box(dom, s, rect, false, &pick) {
                     if !rhythm_is_spacer(dom, b) {
                         let t = dom.rect(b).top;
-                        if nearest.map_or(true, |(nt, _)| t < nt) {
+                        if nearest.is_none_or(|(nt, _)| t < nt) {
                             nearest = Some((t, b));
                         }
                     }
@@ -2472,7 +2594,9 @@ pub fn check_heading_rhythm_dom(dom: &dyn Dom) -> Vec<ElFinding> {
         if has_own_top_boundary(h) {
             continue;
         }
-        let Some((below_top, below_el)) = edge_below(h, &rect) else { continue };
+        let Some((below_top, below_el)) = edge_below(h, &rect) else {
+            continue;
+        };
         // The body text a label is set against: the page's own text size, or
         // the text the heading introduces when that is set larger.
         let text_size = math_max(
@@ -2480,7 +2604,9 @@ pub fn check_heading_rhythm_dom(dom: &dyn Dom) -> Vec<ElFinding> {
             rhythm_text_size(dom, below_el),
         );
         let (top_el, top) = cluster_top(h, &rect, text_size, below_top - rect.bottom);
-        let Some((above_bottom, above_el)) = edge_above(h, top_el, top, &rect) else { continue };
+        let Some((above_bottom, above_el)) = edge_above(h, top_el, top, &rect) else {
+            continue;
+        };
         if inside_small_card(h) {
             continue;
         }
@@ -2575,7 +2701,10 @@ fn covering_ground(dom: &dyn Dom, body: ElId) -> Option<crate::color::Rgba> {
     let mut stack: Vec<(ElId, usize)> = vec![(body, 0)];
     while let Some((el, depth)) = stack.pop() {
         for child in dom.children(el) {
-            if !matches!(dom.style(child, "position").as_str(), "static" | "relative" | "sticky" | "") {
+            if !matches!(
+                dom.style(child, "position").as_str(),
+                "static" | "relative" | "sticky" | ""
+            ) {
                 continue;
             }
             if !painted_at_capture(dom, child) {
@@ -2587,7 +2716,10 @@ fn covering_ground(dom: &dyn Dom, body: ElId) -> Option<crate::color::Rgba> {
             // section shifted aside leaves the body showing beside it.
             let r = dom.rect(child);
             let over_body = r.right.min(body_rect.right) - r.left.max(body_rect.left);
-            if !r.all_finite() || r.height <= 0.0 || over_body < GROUND_COVER_MIN_SHARE * body_rect.width {
+            if !r.all_finite()
+                || r.height <= 0.0
+                || over_body < GROUND_COVER_MIN_SHARE * body_rect.width
+            {
                 continue;
             }
             let image = dom.style(child, "backgroundImage");
@@ -2595,10 +2727,16 @@ fn covering_ground(dom: &dyn Dom, body: ElId) -> Option<crate::color::Rgba> {
             // A band faded below full opacity lets the body show through.
             let opaque = effective_opacity_dom(dom, child) >= 0.95;
             match fill {
-                Some(f) if opaque && f.alpha_or_one() >= 0.95 && (image.is_empty() || image == "none") => {
+                Some(f)
+                    if opaque
+                        && f.alpha_or_one() >= 0.95
+                        && (image.is_empty() || image == "none") =>
+                {
                     bands.push((r.top + sy, r.bottom + sy, f));
                 }
-                _ if depth + 1 < GROUND_BAND_MAX_DEPTH && fill.map_or(true, |f| f.alpha_or_one() <= 0.0) => {
+                _ if depth + 1 < GROUND_BAND_MAX_DEPTH
+                    && fill.is_none_or(|f| f.alpha_or_one() <= 0.0) =>
+                {
                     stack.push((child, depth + 1));
                 }
                 _ => {}
@@ -2626,16 +2764,24 @@ fn covering_ground(dom: &dyn Dom, body: ElId) -> Option<crate::color::Rgba> {
     let mut by_fill: Vec<(crate::color::Rgba, f64)> = Vec::new();
     for (t, b, f) in bands {
         let h = (b.min(page_bottom) - t.max(start)).max(0.0);
-        match by_fill.iter_mut().find(|(c, _)| c.r == f.r && c.g == f.g && c.b == f.b) {
+        match by_fill
+            .iter_mut()
+            .find(|(c, _)| c.r == f.r && c.g == f.g && c.b == f.b)
+        {
             Some(entry) => entry.1 += h,
             None => by_fill.push((f, h)),
         }
     }
-    by_fill.into_iter().fold(None, |best: Option<(crate::color::Rgba, f64)>, (c, h)| match best {
-        Some((_, bh)) if bh >= h => best,
-        _ => Some((c, h)),
-    })
-    .map(|(c, _)| c)
+    by_fill
+        .into_iter()
+        .fold(
+            None,
+            |best: Option<(crate::color::Rgba, f64)>, (c, h)| match best {
+                Some((_, bh)) if bh >= h => best,
+                _ => Some((c, h)),
+            },
+        )
+        .map(|(c, _)| c)
 }
 
 /// Whether a painted in-flow box as wide as the body, up to
@@ -2649,7 +2795,10 @@ fn cream_band_shows(dom: &dyn Dom, body: ElId) -> bool {
     let mut stack: Vec<(ElId, usize)> = vec![(body, 0)];
     while let Some((el, depth)) = stack.pop() {
         for child in dom.children(el) {
-            if !matches!(dom.style(child, "position").as_str(), "static" | "relative" | "sticky" | "") {
+            if !matches!(
+                dom.style(child, "position").as_str(),
+                "static" | "relative" | "sticky" | ""
+            ) {
                 continue;
             }
             let r = dom.rect(child);
@@ -2696,11 +2845,13 @@ fn finite_or_zero(v: f64) -> f64 {
 /// covered-body test ([`covering_ground`], [`cream_band_shows`]).
 pub fn check_cream_palette(dom: &dyn Dom) -> Vec<RuleHit> {
     let mut findings = Vec::new();
-    let Some(body) = dom.body() else { return findings };
+    let Some(body) = dom.body() else {
+        return findings;
+    };
     let html = dom.document_element();
 
     let mut bg = super::background::read_own_background_color(dom, body);
-    if bg.is_none() || bg.map_or(false, |c| c.a == Some(0.0)) {
+    if bg.is_none() || bg.is_some_and(|c| c.a == Some(0.0)) {
         if let Some(h) = html {
             bg = super::background::read_own_background_color(dom, h);
         }
@@ -2718,7 +2869,8 @@ pub fn check_cream_palette(dom: &dyn Dom) -> Vec<RuleHit> {
         // A cream band laid over the covering ground (visiby.net's pricing
         // page: a white root with a cream ticker and trust strip) still
         // shows the cream.
-        if covering_ground(dom, body).is_some_and(|ground| !is_cream_color(Some(&ground)) && !near_cream(&ground))
+        if covering_ground(dom, body)
+            .is_some_and(|ground| !is_cream_color(Some(&ground)) && !near_cream(&ground))
             && !cream_band_shows(dom, body)
         {
             return findings;
@@ -2769,8 +2921,17 @@ enum HiddenState {
 /// Class words that name a slider or carousel: the box's own class, or a
 /// class of its library (`swiper`, `slick`, `splide`, `glide`, `flickity`,
 /// Slider Revolution's `rev_slider`).
-const SLIDER_CLASS_WORDS: &[&str] =
-    &["slider", "carousel", "swiper", "slick", "splide", "glide", "flickity", "slideshow", "revslider"];
+const SLIDER_CLASS_WORDS: &[&str] = &[
+    "slider",
+    "carousel",
+    "swiper",
+    "slick",
+    "splide",
+    "glide",
+    "flickity",
+    "slideshow",
+    "revslider",
+];
 
 /// The boxes that show a slide's picture, where a slide shows no text.
 const SLIDER_MEDIA_TAGS: &[&str] = &["img", "picture", "video", "canvas", "svg"];
@@ -2787,11 +2948,18 @@ const SLIDE_CLASS_WORDS: &[&str] = &["slide", "item", "cell", "card", "pane", "c
 /// ([`SLIDER_CLASS_WORDS`]) and not one of its slides
 /// ([`SLIDE_CLASS_WORDS`]).
 fn slider_class(dom: &dyn Dom, el: ElId) -> bool {
-    dom.attr(el, "class").unwrap_or_default().split_whitespace().any(|token| {
-        let words = class_words(token);
-        words.iter().any(|w| SLIDER_CLASS_WORDS.contains(&w.as_str()))
-            && !words.iter().any(|w| SLIDE_CLASS_WORDS.contains(&w.as_str()))
-    })
+    dom.attr(el, "class")
+        .unwrap_or_default()
+        .split_whitespace()
+        .any(|token| {
+            let words = class_words(token);
+            words
+                .iter()
+                .any(|w| SLIDER_CLASS_WORDS.contains(&w.as_str()))
+                && !words
+                    .iter()
+                    .any(|w| SLIDE_CLASS_WORDS.contains(&w.as_str()))
+        })
 }
 
 /// Whether `el`'s own text paints within `upto`: it is not
@@ -2837,8 +3005,15 @@ fn shows_within(dom: &dyn Dom, el: ElId, upto: ElId, aria_hides: bool) -> bool {
 /// so its other slides are not this (they count as before). One that shows
 /// nothing at all is the capture's state (a script that had not run, a
 /// preloader still up), not something to measure the page by.
-fn unstarted_slider(dom: &dyn Dom, el: ElId, verdicts: &mut std::collections::HashMap<ElId, bool>) -> bool {
-    let Some(slider) = ancestors_inclusive(dom, el).into_iter().take(SLIDER_MAX_DEPTH + 1).find(|a| slider_class(dom, *a))
+fn unstarted_slider(
+    dom: &dyn Dom,
+    el: ElId,
+    verdicts: &mut std::collections::HashMap<ElId, bool>,
+) -> bool {
+    let Some(slider) = ancestors_inclusive(dom, el)
+        .into_iter()
+        .take(SLIDER_MAX_DEPTH + 1)
+        .find(|a| slider_class(dom, *a))
     else {
         return false;
     };
@@ -2857,15 +3032,23 @@ fn unstarted_slider(dom: &dyn Dom, el: ElId, verdicts: &mut std::collections::Ha
             e != slider
                 && r.width >= 1.0
                 && r.height >= 1.0
-                && (!(slider_width.is_finite() && slider_width > 0.0) || r.width >= 0.5 * slider_width)
+                && (!(slider_width.is_finite() && slider_width > 0.0)
+                    || r.width >= 0.5 * slider_width)
                 && (SLIDER_MEDIA_TAGS.contains(&tag_lower(dom, e).as_str())
                     || js::to_lower_case(&dom.style(e, "backgroundImage")).contains("url("))
         };
-        (dom.direct_text_nodes(e).iter().any(|t| !js::trim(&collapse_ws(t)).is_empty()) && text_shows_within(dom, e, slider))
+        (dom.direct_text_nodes(e)
+            .iter()
+            .any(|t| !js::trim(&collapse_ws(t)).is_empty())
+            && text_shows_within(dom, e, slider))
             || (pictured() && picture_shows_within(dom, e, slider))
     };
-    let started =
-        shows(slider) || dom.query_all(Some(slider), "*").unwrap_or_default().into_iter().any(shows);
+    let started = shows(slider)
+        || dom
+            .query_all(Some(slider), "*")
+            .unwrap_or_default()
+            .into_iter()
+            .any(shows);
     verdicts.insert(slider, !started);
     !started
 }
@@ -2891,10 +3074,10 @@ fn class_words(token: &str) -> Vec<String> {
     let mut word = String::new();
     let mut prev_lower = false;
     for c in token.chars() {
-        if !c.is_ascii_alphanumeric() || (c.is_ascii_uppercase() && prev_lower) {
-            if !word.is_empty() {
-                words.push(std::mem::take(&mut word));
-            }
+        if (!c.is_ascii_alphanumeric() || (c.is_ascii_uppercase() && prev_lower))
+            && !word.is_empty()
+        {
+            words.push(std::mem::take(&mut word));
         }
         if c.is_ascii_alphanumeric() {
             word.push(c.to_ascii_lowercase());
@@ -2916,9 +3099,19 @@ fn closed_container_class(token: &str) -> bool {
     let words = class_words(token);
     let has = |w: &str| words.iter().any(|x| x == w);
     let pair = |a: &str, b: &str| words.windows(2).any(|p| p[0] == a && p[1] == b);
-    if ["offcanvas", "drawer", "megamenu", "submenu", "dropdown", "flyout", "modal", "tabpanel", "tabpane"]
-        .iter()
-        .any(|w| has(w))
+    if [
+        "offcanvas",
+        "drawer",
+        "megamenu",
+        "submenu",
+        "dropdown",
+        "flyout",
+        "modal",
+        "tabpanel",
+        "tabpane",
+    ]
+    .iter()
+    .any(|w| has(w))
         || pair("off", "canvas")
         || pair("mega", "menu")
         || pair("sub", "menu")
@@ -2935,13 +3128,25 @@ fn closed_container_class(token: &str) -> bool {
 /// `aria-selected="true"`.
 fn tab_panel_marked_open(dom: &dyn Dom, el: ElId) -> bool {
     let says_true = |e: ElId, name: &str| {
-        dom.attr(e, name).map(|v| js::to_lower_case(js::trim(&v))).as_deref() == Some("true")
+        dom.attr(e, name)
+            .map(|v| js::to_lower_case(js::trim(&v)))
+            .as_deref()
+            == Some("true")
     };
-    if let Some(id) = dom.attr(el, "id").map(|id| js::trim(&id).to_string()).filter(|id| !id.is_empty()) {
-        let opens = dom.query_all(None, "[aria-controls]").unwrap_or_default().into_iter().any(|t| {
-            dom.attr(t, "aria-controls").is_some_and(|ids| ids.split_whitespace().any(|i| i == id))
-                && (says_true(t, "aria-selected") || says_true(t, "aria-expanded"))
-        });
+    if let Some(id) = dom
+        .attr(el, "id")
+        .map(|id| js::trim(&id).to_string())
+        .filter(|id| !id.is_empty())
+    {
+        let opens = dom
+            .query_all(None, "[aria-controls]")
+            .unwrap_or_default()
+            .into_iter()
+            .any(|t| {
+                dom.attr(t, "aria-controls")
+                    .is_some_and(|ids| ids.split_whitespace().any(|i| i == id))
+                    && (says_true(t, "aria-selected") || says_true(t, "aria-expanded"))
+            });
         if opens {
             return true;
         }
@@ -2950,10 +3155,15 @@ fn tab_panel_marked_open(dom: &dyn Dom, el: ElId) -> bool {
     if labels.trim().is_empty() {
         return false;
     }
-    dom.query_all(None, "[aria-selected]").unwrap_or_default().into_iter().any(|t| {
-        says_true(t, "aria-selected")
-            && dom.attr(t, "id").is_some_and(|tid| labels.split_whitespace().any(|l| l == tid))
-    })
+    dom.query_all(None, "[aria-selected]")
+        .unwrap_or_default()
+        .into_iter()
+        .any(|t| {
+            says_true(t, "aria-selected")
+                && dom
+                    .attr(t, "id")
+                    .is_some_and(|tid| labels.split_whitespace().any(|l| l == tid))
+        })
 }
 
 /// The ids whose controlling triggers all say closed: every element whose
@@ -2963,8 +3173,13 @@ fn closed_controlled_ids(dom: &dyn Dom) -> std::collections::HashSet<String> {
     let mut closed = std::collections::HashSet::new();
     let mut open = std::collections::HashSet::new();
     for trigger in dom.query_all(None, "[aria-controls]").unwrap_or_default() {
-        let Some(ids) = dom.attr(trigger, "aria-controls") else { continue };
-        let state = |name: &str| dom.attr(trigger, name).map(|v| js::to_lower_case(js::trim(&v)));
+        let Some(ids) = dom.attr(trigger, "aria-controls") else {
+            continue;
+        };
+        let state = |name: &str| {
+            dom.attr(trigger, name)
+                .map(|v| js::to_lower_case(js::trim(&v)))
+        };
         let (expanded, selected) = (state("aria-expanded"), state("aria-selected"));
         let is = |v: &Option<String>, want: &str| v.as_deref() == Some(want);
         let says_open = is(&expanded, "true") || is(&selected, "true");
@@ -3010,15 +3225,27 @@ fn closed_controlled_ids(dom: &dyn Dom) -> std::collections::HashSet<String> {
 /// the panel a visitor was meant to see. The other tests still apply.
 ///
 /// A box none of these describe is base behaviour: its text counts as hidden.
-fn closed_container(dom: &dyn Dom, el: ElId, closed_ids: &std::collections::HashSet<String>) -> bool {
-    let role = |e: ElId| dom.attr(e, "role").map(|r| js::to_lower_case(js::trim(&r))).unwrap_or_default();
+fn closed_container(
+    dom: &dyn Dom,
+    el: ElId,
+    closed_ids: &std::collections::HashSet<String>,
+) -> bool {
+    let role = |e: ElId| {
+        dom.attr(e, "role")
+            .map(|r| js::to_lower_case(js::trim(&r)))
+            .unwrap_or_default()
+    };
     let own_role = role(el);
     let class = dom.attr(el, "class").unwrap_or_default();
     // A tab panel its own tab marks selected is the panel a visitor is meant
     // to see: hidden, its reveal failed, and it is content like any other,
     // whether the role or a class (`tab-pane`) names it a panel.
     let tab_like = own_role == "tabpanel"
-        || class.split_whitespace().any(|t| class_words(t).iter().any(|w| matches!(w.as_str(), "tab" | "tabs" | "tabpanel" | "tabpane")));
+        || class.split_whitespace().any(|t| {
+            class_words(t)
+                .iter()
+                .any(|w| matches!(w.as_str(), "tab" | "tabs" | "tabpanel" | "tabpane"))
+        });
     // Only the panel's own role and class exemptions yield to that: an
     // inert or collapsed wrapper around it still closes it.
     let selected = tab_like && tab_panel_marked_open(dom, el);
@@ -3029,7 +3256,10 @@ fn closed_container(dom: &dyn Dom, el: ElId, closed_ids: &std::collections::Hash
         return true;
     }
     let collapsed = |e: ElId| {
-        dom.attr(e, "aria-expanded").map(|v| js::to_lower_case(js::trim(&v))).as_deref() == Some("false")
+        dom.attr(e, "aria-expanded")
+            .map(|v| js::to_lower_case(js::trim(&v)))
+            .as_deref()
+            == Some("false")
     };
     if let Some(before) = dom.previous_element_sibling(el) {
         // The wrapped trigger is the accordion heading's: a heading, or a
@@ -3041,14 +3271,18 @@ fn closed_container(dom: &dyn Dom, el: ElId, closed_ids: &std::collections::Hash
                 || role(before) == "heading"
                 || dom.children(before).len() == 1
         };
-        if collapsed(before) || (dom.first_element_child(before).is_some_and(collapsed) && wraps_trigger()) {
+        if collapsed(before)
+            || (dom.first_element_child(before).is_some_and(collapsed) && wraps_trigger())
+        {
             return true;
         }
     }
     if js::to_lower_case(&dom.style(el, "position")) == "fixed" {
         let rect = dom.rect(el);
         let viewport_width = dom.inner_width();
-        if rect.width > 0.0 && (rect.right <= 0.0 || (viewport_width > 0.0 && rect.left >= viewport_width)) {
+        if rect.width > 0.0
+            && (rect.right <= 0.0 || (viewport_width > 0.0 && rect.left >= viewport_width))
+        {
             return true;
         }
         // A layer fixed over the whole viewport and held at `visibility:
@@ -3101,11 +3335,18 @@ fn closed_container(dom: &dyn Dom, el: ElId, closed_ids: &std::collections::Hash
 fn holds_the_page(dom: &dyn Dom, el: ElId) -> bool {
     if tag_lower(dom, el) == "main"
         || tag_lower(dom, el) == "h1"
-        || dom.attr(el, "role").is_some_and(|r| js::trim(&r).eq_ignore_ascii_case("main"))
+        || dom
+            .attr(el, "role")
+            .is_some_and(|r| js::trim(&r).eq_ignore_ascii_case("main"))
     {
         return true;
     }
-    if dom.query_one(Some(el), "main, [role=\"main\"], h1").ok().flatten().is_some() {
+    if dom
+        .query_one(Some(el), "main, [role=\"main\"], h1")
+        .ok()
+        .flatten()
+        .is_some()
+    {
         return true;
     }
     let Some(body) = dom.body() else { return true };
@@ -3127,7 +3368,10 @@ fn slid_off_drawer(dom: &dyn Dom, el: ElId) -> bool {
         return false;
     }
     let transform = js::trim(&dom.style(el, "transform")).replace(' ', "");
-    if transform.is_empty() || transform == "none" || super::element_checks::is_identity_matrix(&transform) {
+    if transform.is_empty()
+        || transform == "none"
+        || super::element_checks::is_identity_matrix(&transform)
+    {
         return false;
     }
     if !super::painted::declares_transition_of(dom, el, "transform") {
@@ -3194,7 +3438,8 @@ pub fn measure_hidden_text_dom(dom: &dyn Dom) -> HiddenTextMeasure {
     let root = dom.document_element();
     let mut cache: std::collections::HashMap<ElId, HiddenState> = std::collections::HashMap::new();
     // Read once, and only when the page has an invisible box to classify.
-    let closed_ids: std::cell::OnceCell<std::collections::HashSet<String>> = std::cell::OnceCell::new();
+    let closed_ids: std::cell::OnceCell<std::collections::HashSet<String>> =
+        std::cell::OnceCell::new();
     // The page's CSS, read once and only for a box an animation holds at 0.
     let style_text: std::cell::OnceCell<String> = std::cell::OnceCell::new();
     // Per slider box: whether it never started.
@@ -3218,7 +3463,9 @@ pub fn measure_hidden_text_dom(dom: &dyn Dom) -> HiddenTextMeasure {
         sliders: &mut std::collections::HashMap<ElId, bool>,
         el: Option<ElId>,
     ) -> HiddenState {
-        let Some(el) = el else { return HiddenState::Visible };
+        let Some(el) = el else {
+            return HiddenState::Visible;
+        };
         if Some(el) == root {
             return HiddenState::Visible;
         }
@@ -3229,7 +3476,15 @@ pub fn measure_hidden_text_dom(dom: &dyn Dom) -> HiddenTextMeasure {
         let state = if HIDDEN_TEXT_EXCLUDE_TAGS.contains(&tag.as_str()) {
             HiddenState::Excluded
         } else {
-            let parent_state = state_of(dom, root, cache, closed_ids, style_text, sliders, dom.parent(el));
+            let parent_state = state_of(
+                dom,
+                root,
+                cache,
+                closed_ids,
+                style_text,
+                sliders,
+                dom.parent(el),
+            );
             if parent_state == HiddenState::Excluded {
                 HiddenState::Excluded
             } else {
@@ -3251,7 +3506,11 @@ pub fn measure_hidden_text_dom(dom: &dyn Dom) -> HiddenTextMeasure {
                     // The box where the invisible subtree starts decides for
                     // everything under it.
                     let by_visibility = HIDDEN_VIS_RE.is_match(&dom.style(el, "visibility"));
-                    if closed_container(dom, el, closed_ids.get_or_init(|| closed_controlled_ids(dom))) {
+                    if closed_container(
+                        dom,
+                        el,
+                        closed_ids.get_or_init(|| closed_controlled_ids(dom)),
+                    ) {
                         HiddenState::Excluded
                     } else if super::painted::parked_outside_clip(dom, el) {
                         // A box parked outside the ancestor that clips it
@@ -3259,7 +3518,9 @@ pub fn measure_hidden_text_dom(dom: &dyn Dom) -> HiddenTextMeasure {
                         // not content a reveal failed to show.
                         HiddenState::Excluded
                     } else if !by_visibility
-                        && dom.running_animation_properties(el).is_some_and(|p| !p.is_empty())
+                        && dom
+                            .running_animation_properties(el)
+                            .is_some_and(|p| !p.is_empty())
                         && super::painted::opacity_held_by_scroll_timeline(
                             dom,
                             el,
@@ -3306,13 +3567,22 @@ pub fn measure_hidden_text_dom(dom: &dyn Dom) -> HiddenTextMeasure {
         if len == 0 {
             continue;
         }
-        let state = state_of(dom, root, &mut cache, &closed_ids, &style_text, &mut sliders, Some(el));
+        let state = state_of(
+            dom,
+            root,
+            &mut cache,
+            &closed_ids,
+            &style_text,
+            &mut sliders,
+            Some(el),
+        );
         match state {
             HiddenState::Excluded => continue,
             HiddenState::Unstarted => {
                 unstarted_slider_chars += len as f64;
                 if unstarted_slider_samples.len() < 3 {
-                    let text = slice_utf16_prefix(js::trim(&collapse_ws(&dom.text_content(el))), 40);
+                    let text =
+                        slice_utf16_prefix(js::trim(&collapse_ws(&dom.text_content(el))), 40);
                     if !text.is_empty() {
                         unstarted_slider_samples.push(text);
                     }
@@ -3451,15 +3721,18 @@ fn scroller_page_insets(dom: &dyn Dom, scroller: ElId, rect: &Rect) -> (f64, f64
     }
     // A fill, a background image or a visible shadow draws the box's edge.
     let paints_surface = |el: ElId| {
-        parse_any_color(Some(&dom.style(el, "backgroundColor"))).is_some_and(|c| c.alpha_or_one() > 0.0)
+        parse_any_color(Some(&dom.style(el, "backgroundColor")))
+            .is_some_and(|c| c.alpha_or_one() > 0.0)
             || {
                 let image = dom.style(el, "backgroundImage");
                 !image.is_empty() && image != "none"
             }
-            || crate::checks::measures::parse_shadow_layers(&dom.style(el, "boxShadow")).iter().any(|l| {
-                l.alpha >= crate::checks::measures::FAINT_PAINT_ALPHA
-                    && (l.x != 0.0 || l.y != 0.0 || l.blur > 0.0 || l.spread != 0.0)
-            })
+            || crate::checks::measures::parse_shadow_layers(&dom.style(el, "boxShadow"))
+                .iter()
+                .any(|l| {
+                    l.alpha >= crate::checks::measures::FAINT_PAINT_ALPHA
+                        && (l.x != 0.0 || l.y != 0.0 || l.blur > 0.0 || l.spread != 0.0)
+                })
     };
     if paints_surface(scroller) {
         return (0.0, 0.0);
@@ -3477,7 +3750,11 @@ fn scroller_page_insets(dom: &dyn Dom, scroller: ElId, rect: &Rect) -> (f64, f64
                 return false;
             }
             let r = dom.rect(a);
-            let at_edge = if side == "Left" { (r.left - rect.left).abs() <= 2.0 } else { (r.right - rect.right).abs() <= 2.0 };
+            let at_edge = if side == "Left" {
+                (r.left - rect.left).abs() <= 2.0
+            } else {
+                (r.right - rect.right).abs() <= 2.0
+            };
             if at_edge && (border(a, side) || paints_surface(a)) {
                 return true;
             }
@@ -3485,8 +3762,16 @@ fn scroller_page_insets(dom: &dyn Dom, scroller: ElId, rect: &Rect) -> (f64, f64
         }
         false
     };
-    let left = if border(scroller, "Left") || panel_edge("Left") { 0.0 } else { rect.left.max(0.0) };
-    let right = if border(scroller, "Right") || panel_edge("Right") { 0.0 } else { (vw - rect.right).max(0.0) };
+    let left = if border(scroller, "Left") || panel_edge("Left") {
+        0.0
+    } else {
+        rect.left.max(0.0)
+    };
+    let right = if border(scroller, "Right") || panel_edge("Right") {
+        0.0
+    } else {
+        (vw - rect.right).max(0.0)
+    };
     (left, right)
 }
 
@@ -3578,7 +3863,7 @@ pub fn check_edge_flush_cards_dom(dom: &dyn Dom) -> Vec<ElFinding> {
                 continue;
             }
             let bg = parse_any_color(Some(&dom.style(card, "backgroundColor")));
-            let has_bg = bg.map_or(false, |c| c.alpha_or_one() > 0.5);
+            let has_bg = bg.is_some_and(|c| c.alpha_or_one() > 0.5);
             let border_sides = ["Top", "Right", "Bottom", "Left"]
                 .iter()
                 .filter(|s| style_px(dom, card, &format!("border{s}Width")) > 0.0)
@@ -3649,7 +3934,11 @@ pub fn is_layered_element(dom: &dyn Dom, el: ElId) -> bool {
             break;
         }
         let pos = dom.style(c, "position");
-        let pos = if pos.is_empty() { "static".to_string() } else { pos };
+        let pos = if pos.is_empty() {
+            "static".to_string()
+        } else {
+            pos
+        };
         if pos == "absolute" || pos == "fixed" || pos == "sticky" {
             return true;
         }
@@ -3901,7 +4190,10 @@ fn border_box_covers_point(dom: &dyn Dom, el: ElId, victim: ElId, x: f64, y: f64
     if paints_opaque_fill(dom, el)
         || paints("backgroundImage")
         || paints("backdropFilter")
-        || matches!(tag_lower(dom, el).as_str(), "input" | "textarea" | "select" | "button")
+        || matches!(
+            tag_lower(dom, el).as_str(),
+            "input" | "textarea" | "select" | "button"
+        )
     {
         return true;
     }
@@ -3921,7 +4213,8 @@ fn border_box_covers_point(dom: &dyn Dom, el: ElId, victim: ElId, x: f64, y: f64
         return false;
     }
     let r = dom.rect(el);
-    let side = |name: &str| js::math_max(style_px(dom, el, &format!("border{name}Width")), 0.0) + 1.0;
+    let side =
+        |name: &str| js::math_max(style_px(dom, el, &format!("border{name}Width")), 0.0) + 1.0;
     x <= r.left + side("Left")
         || x >= r.right - side("Right")
         || y <= r.top + side("Top")
@@ -3931,13 +4224,24 @@ fn border_box_covers_point(dom: &dyn Dom, el: ElId, victim: ElId, x: f64, y: f64
 /// Whether a computed `transform` only translates: `matrix(1, 0, 0, 1, x, y)`,
 /// or the 3D form `matrix3d` carries for `translate3d` and `translateZ`.
 fn is_translation_matrix(transform: &str) -> bool {
-    let parse = |inner: &str| -> Vec<f64> { inner.split(',').map(|t| parse_float(js::trim(t))).collect() };
+    let parse =
+        |inner: &str| -> Vec<f64> { inner.split(',').map(|t| parse_float(js::trim(t))).collect() };
     let near = |v: f64, to: f64| (v - to).abs() < 1e-6;
-    if let Some(inner) = transform.strip_prefix("matrix(").and_then(|t| t.strip_suffix(')')) {
+    if let Some(inner) = transform
+        .strip_prefix("matrix(")
+        .and_then(|t| t.strip_suffix(')'))
+    {
         let v = parse(inner);
-        return v.len() == 6 && near(v[0], 1.0) && near(v[1], 0.0) && near(v[2], 0.0) && near(v[3], 1.0);
+        return v.len() == 6
+            && near(v[0], 1.0)
+            && near(v[1], 0.0)
+            && near(v[2], 0.0)
+            && near(v[3], 1.0);
     }
-    if let Some(inner) = transform.strip_prefix("matrix3d(").and_then(|t| t.strip_suffix(')')) {
+    if let Some(inner) = transform
+        .strip_prefix("matrix3d(")
+        .and_then(|t| t.strip_suffix(')'))
+    {
         let v = parse(inner);
         // Column-major: the 3x3 block is the identity, nothing is
         // perspective, and only the last column's translation is free.
@@ -3967,41 +4271,49 @@ const FLOW_EM_OVERLAP_MAX: f64 = 0.15;
 /// font size or line-height the capture did not record keeps the answer.
 fn laid_out_apart(dom: &dyn Dom, a: ElId, b: ElId) -> bool {
     let a_chain: Vec<ElId> = ancestors_inclusive(dom, a);
-    let Some(common) = ancestors_inclusive(dom, b).into_iter().find(|n| a_chain.contains(n)) else {
+    let Some(common) = ancestors_inclusive(dom, b)
+        .into_iter()
+        .find(|n| a_chain.contains(n))
+    else {
         return false;
     };
     if common == a || common == b {
         return false;
     }
     let in_flow = |el: ElId| {
-        ancestors_inclusive(dom, el).into_iter().take_while(|n| *n != common).all(|n| {
-            let position = dom.style(n, "position");
-            let offset_free = ["top", "right", "bottom", "left"].iter().all(|k| {
-                // An offset the capture did not record may move the box.
-                let v = dom.style(n, k);
-                v == "auto" || parse_float(&v) == 0.0
-            });
-            let placed = match position.as_str() {
-                "" | "static" => true,
-                "relative" => offset_free,
-                _ => false,
-            };
-            let transform = dom.style(n, "transform");
-            let float = dom.style(n, "cssFloat");
-            placed
-                && (transform.is_empty() || transform == "none")
-                && (float.is_empty() || float == "none")
-                && ["marginTop", "marginRight", "marginBottom", "marginLeft"]
-                    .iter()
-                    .all(|k| !(parse_float(&dom.style(n, k)) < 0.0))
-        })
+        ancestors_inclusive(dom, el)
+            .into_iter()
+            .take_while(|n| *n != common)
+            .all(|n| {
+                let position = dom.style(n, "position");
+                let offset_free = ["top", "right", "bottom", "left"].iter().all(|k| {
+                    // An offset the capture did not record may move the box.
+                    let v = dom.style(n, k);
+                    v == "auto" || parse_float(&v) == 0.0
+                });
+                let placed = match position.as_str() {
+                    "" | "static" => true,
+                    "relative" => offset_free,
+                    _ => false,
+                };
+                let transform = dom.style(n, "transform");
+                let float = dom.style(n, "cssFloat");
+                placed
+                    && (transform.is_empty() || transform == "none")
+                    && (float.is_empty() || float == "none")
+                    && ["marginTop", "marginRight", "marginBottom", "marginLeft"]
+                        .iter()
+                        .all(|k| !(parse_float(&dom.style(n, k)) < 0.0))
+            })
     };
     if !in_flow(a) || !in_flow(b) {
         return false;
     }
     // (line band, em band, font size) of an element's own text.
     let bands = |el: ElId| -> Option<(f64, f64, f64, f64, f64)> {
-        let t = dom.direct_text_rect(el).filter(|r| r.all_finite() && r.height > 0.0)?;
+        let t = dom
+            .direct_text_rect(el)
+            .filter(|r| r.all_finite() && r.height > 0.0)?;
         let font_size = parse_float(&dom.style(el, "fontSize"));
         if !(font_size.is_finite() && font_size > 0.0) {
             return None;
@@ -4014,7 +4326,13 @@ fn laid_out_apart(dom: &dyn Dom, a: ElId, b: ElId) -> bool {
         let content = t.height - (lines - 1.0) * pitch;
         let line_inset = (content - pitch) / 2.0;
         let em_inset = (content - font_size) / 2.0;
-        Some((t.top + line_inset, t.bottom - line_inset, t.top + em_inset, t.bottom - em_inset, font_size))
+        Some((
+            t.top + line_inset,
+            t.bottom - line_inset,
+            t.top + em_inset,
+            t.bottom - em_inset,
+            font_size,
+        ))
     };
     let (Some(x), Some(y)) = (bands(a), bands(b)) else {
         return false;
@@ -4116,7 +4434,10 @@ fn glyph_ink_band(dom: &dyn Dom, el: ElId, rect: &Rect) -> Option<Rect> {
         None if rect.height < font_size * 2.0 => (rect.height, rect.height),
         None => return None,
     };
-    let top_inset = math_max(0.0, first_height * INK_ASCENT_SHARE_MIN - font_size * INK_ASCENDER_EM);
+    let top_inset = math_max(
+        0.0,
+        first_height * INK_ASCENT_SHARE_MIN - font_size * INK_ASCENDER_EM,
+    );
     let bottom_inset = math_max(
         0.0,
         last_height * (1.0 - INK_ASCENT_SHARE_MAX) - font_size * INK_DESCENDER_EM,
@@ -4125,7 +4446,12 @@ fn glyph_ink_band(dom: &dyn Dom, el: ElId, rect: &Rect) -> Option<Rect> {
     if height.is_nan() || height <= 0.0 {
         return None;
     }
-    Some(Rect::from_xywh(rect.left, rect.top + top_inset, rect.width, height))
+    Some(Rect::from_xywh(
+        rect.left,
+        rect.top + top_inset,
+        rect.width,
+        height,
+    ))
 }
 
 /// Whether `top`, a hit-test answer over `victim`, is a scroller's paging
@@ -4143,7 +4469,9 @@ fn is_scroller_arrow(dom: &dyn Dom, top: ElId, victim: ElId) -> bool {
         let tag = tag_lower(dom, c);
         if tag == "button"
             || tag == "a"
-            || dom.attr(c, "role").is_some_and(|r| js::to_lower_case(js::trim(&r)) == "button")
+            || dom
+                .attr(c, "role")
+                .is_some_and(|r| js::to_lower_case(js::trim(&r)) == "button")
         {
             control = Some(c);
             break;
@@ -4158,7 +4486,11 @@ fn is_scroller_arrow(dom: &dyn Dom, top: ElId, victim: ElId) -> bool {
     let scrolls_x = |n: ElId| {
         let x = dom.style(n, "overflowX");
         let x = if x.is_empty() {
-            dom.style(n, "overflow").split_whitespace().next().unwrap_or("").to_string()
+            dom.style(n, "overflow")
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .to_string()
         } else {
             x
         };
@@ -4178,7 +4510,8 @@ fn is_scroller_arrow(dom: &dyn Dom, top: ElId, victim: ElId) -> bool {
             if !(sr.height > 0.0 && cr.width > 0.0) || !overflows || cr.width > 0.25 * sr.width {
                 return false;
             }
-            let spans = cr.top <= sr.top + 0.1 * sr.height && cr.bottom >= sr.bottom - 0.1 * sr.height;
+            let spans =
+                cr.top <= sr.top + 0.1 * sr.height && cr.bottom >= sr.bottom - 0.1 * sr.height;
             let at_end = (cr.right - sr.right).abs() <= 2.0
                 || (cr.left - sr.left).abs() <= 2.0
                 || (cr.right >= sr.right - 2.0 && cr.left < sr.right)
@@ -4207,7 +4540,11 @@ pub(crate) fn drawn_tilted(dom: &dyn Dom, el: ElId) -> bool {
                 return true;
             }
         }
-        if dom.style(c, "rotate").split_whitespace().any(|t| t != "none" && t != "0deg") {
+        if dom
+            .style(c, "rotate")
+            .split_whitespace()
+            .any(|t| t != "none" && t != "0deg")
+        {
             return true;
         }
         cur = dom.parent(c);
@@ -4233,8 +4570,14 @@ fn covering_layer(dom: &dyn Dom, occ: ElId, victim: ElId, victim_rect: &Rect) ->
         }
         if paints_opaque_fill(dom, c) {
             let r = dom.rect(c);
-            let ix = math_max(0.0, math_min(r.right, victim_rect.right) - math_max(r.left, victim_rect.left));
-            let iy = math_max(0.0, math_min(r.bottom, victim_rect.bottom) - math_max(r.top, victim_rect.top));
+            let ix = math_max(
+                0.0,
+                math_min(r.right, victim_rect.right) - math_max(r.left, victim_rect.left),
+            );
+            let iy = math_max(
+                0.0,
+                math_min(r.bottom, victim_rect.bottom) - math_max(r.top, victim_rect.top),
+            );
             if ix * iy >= 0.5 * area {
                 return Some(c);
             }
@@ -4261,8 +4604,10 @@ fn buried_under_answer(dom: &dyn Dom, stack: &[ElId], victim: ElId) -> bool {
         return false;
     };
     stack[..at].iter().skip(1).any(|&layer| {
-        matches!(tag_lower(dom, layer).as_str(), "img" | "video" | "canvas" | "picture")
-            || (dom.contains(layer, victim) && paints_opaque_fill(dom, layer))
+        matches!(
+            tag_lower(dom, layer).as_str(),
+            "img" | "video" | "canvas" | "picture"
+        ) || (dom.contains(layer, victim) && paints_opaque_fill(dom, layer))
     })
 }
 
@@ -4290,7 +4635,8 @@ fn curtain_layer(dom: &dyn Dom, el: ElId) -> Option<ElId> {
             let z = js::trim(&dom.style(c, "zIndex")).to_string();
             let n = parse_float(&z);
             let numeric = !z.is_empty() && z.bytes().all(|b| b.is_ascii_digit() || b == b'-');
-            let bottom_anchored = dom.style(c, "top") == "auto" && dom.style(c, "bottom").ends_with("px");
+            let bottom_anchored =
+                dom.style(c, "top") == "auto" && dom.style(c, "bottom").ends_with("px");
             return (numeric && n.is_finite() && n <= 0.0 && bottom_anchored).then_some(c);
         }
         cur = dom.parent(c);
@@ -4332,13 +4678,15 @@ fn buried_under_the_page(dom: &dyn Dom, stack: &[ElId], victim: ElId, layer: ElI
 /// Whether `el`'s background reaches the edge of its box: clipped to the
 /// border box, or to the padding box of a box whose borders are all 0.
 fn fill_paints_its_border_box(dom: &dyn Dom, el: ElId) -> bool {
-    ["backgroundClip", "webkitBackgroundClip"].iter().all(|prop| match dom.style(el, prop).as_str() {
-        "" | "border-box" => true,
-        "padding-box" => ["Top", "Right", "Bottom", "Left"]
-            .iter()
-            .all(|s| parse_float(&dom.style(el, &format!("border{s}Width"))) == 0.0),
-        _ => false,
-    })
+    ["backgroundClip", "webkitBackgroundClip"]
+        .iter()
+        .all(|prop| match dom.style(el, prop).as_str() {
+            "" | "border-box" => true,
+            "padding-box" => ["Top", "Right", "Bottom", "Left"]
+                .iter()
+                .all(|s| parse_float(&dom.style(el, &format!("border{s}Width"))) == 0.0),
+            _ => false,
+        })
 }
 
 /// Whether `el` and every box above it composite as plain paint: no
@@ -4366,7 +4714,13 @@ fn composited_plainly(dom: &dyn Dom, el: ElId) -> bool {
 /// words) has no text under it to cover, and the share is taken over
 /// the points on the lines. Under a rotation or skew a line's rect is
 /// the bounds of a tilted line, not the line, so the grid stands.
-fn occlusion_points_on_lines(dom: &dyn Dom, el: ElId, rect: &Rect, vw: f64, vh: f64) -> Vec<(f64, f64)> {
+fn occlusion_points_on_lines(
+    dom: &dyn Dom,
+    el: ElId,
+    rect: &Rect,
+    vw: f64,
+    vh: f64,
+) -> Vec<(f64, f64)> {
     let points = occlusion_probe_points(rect, vw, vh);
     let lines = if drawn_tilted(dom, el) {
         None
@@ -4378,8 +4732,11 @@ fn occlusion_points_on_lines(dom: &dyn Dom, el: ElId, rect: &Rect, vw: f64, vh: 
             .map(|l| {
                 l.into_iter()
                     .filter(|r| {
-                        own.as_ref().map_or(true, |o| {
-                            r.top < o.bottom && r.bottom > o.top && r.left < o.right && r.right > o.left
+                        own.as_ref().is_none_or(|o| {
+                            r.top < o.bottom
+                                && r.bottom > o.top
+                                && r.left < o.right
+                                && r.right > o.left
                         })
                     })
                     .collect::<Vec<_>>()
@@ -4389,10 +4746,18 @@ fn occlusion_points_on_lines(dom: &dyn Dom, el: ElId, rect: &Rect, vw: f64, vh: 
     // A grid none of whose points lands on a line (one centred line in a
     // tall box, between two grid rows) says nothing either way; the
     // whole grid stands.
-    .filter(|l| points.iter().any(|&(x, y)| l.iter().any(|r| rect_holds_point(r, x, y))));
+    .filter(|l| {
+        points
+            .iter()
+            .any(|&(x, y)| l.iter().any(|r| rect_holds_point(r, x, y)))
+    });
     points
         .into_iter()
-        .filter(|&(x, y)| !lines.as_ref().is_some_and(|l| !l.iter().any(|r| rect_holds_point(r, x, y))))
+        .filter(|&(x, y)| {
+            !lines
+                .as_ref()
+                .is_some_and(|l| !l.iter().any(|r| rect_holds_point(r, x, y)))
+        })
         .collect()
 }
 
@@ -4420,7 +4785,13 @@ const OVERPRINT_GLYPH_PROPS: &[&str] = &[
 /// put: two runs that wrap are an overprint only where these are recorded
 /// and equal too. `text-indent` moves the first line alone, which the
 /// origin test already compares.
-const OVERPRINT_WRAP_PROPS: &[&str] = &["lineHeight", "textAlign", "whiteSpace", "wordBreak", "hyphens"];
+const OVERPRINT_WRAP_PROPS: &[&str] = &[
+    "lineHeight",
+    "textAlign",
+    "whiteSpace",
+    "wordBreak",
+    "hyphens",
+];
 
 /// How many of its lines a text rect may run to and still hold one: a
 /// second line takes it to two.
@@ -4436,7 +4807,11 @@ fn one_line_px(dom: &dyn Dom, el: ElId) -> Option<f64> {
         return None;
     }
     let line = parse_float(&dom.style(el, "lineHeight"));
-    let line = if line.is_finite() && line > 0.0 { line } else { 0.0 };
+    let line = if line.is_finite() && line > 0.0 {
+        line
+    } else {
+        0.0
+    };
     Some(line.max(font * 1.2))
 }
 
@@ -4566,7 +4941,11 @@ pub fn check_text_occlusion_dom(dom: &dyn Dom) -> Vec<ElFinding> {
                 break;
             }
             let pos = dom.style(c, "position");
-            let pos = if pos.is_empty() { "static".to_string() } else { pos };
+            let pos = if pos.is_empty() {
+                "static".to_string()
+            } else {
+                pos
+            };
             if pos == "fixed" || pos == "sticky" {
                 return true;
             }
@@ -4579,7 +4958,8 @@ pub fn check_text_occlusion_dom(dom: &dyn Dom) -> Vec<ElFinding> {
     // overhangs all ask the shared painted-at-capture predicate, once per
     // element. It only removes: every element it keeps also passed
     // `is_painted_for_occlusion`.
-    let painted_cache: std::cell::RefCell<std::collections::HashMap<ElId, bool>> = Default::default();
+    let painted_cache: std::cell::RefCell<std::collections::HashMap<ElId, bool>> =
+        Default::default();
     let painted = |el: ElId| -> bool {
         if let Some(&v) = painted_cache.borrow().get(&el) {
             return v;
@@ -4691,7 +5071,9 @@ pub fn check_text_occlusion_dom(dom: &dyn Dom) -> Vec<ElFinding> {
         let curtain = curtain_layer(dom, el).filter(|&layer| {
             *curtains.entry(layer).or_insert_with(|| {
                 let mut asked = 0usize;
-                let in_layer = |t: &&TextEl| (t.el == layer || dom.contains(layer, t.el)) && !sr_only(t.el, &t.rect);
+                let in_layer = |t: &&TextEl| {
+                    (t.el == layer || dom.contains(layer, t.el)) && !sr_only(t.el, &t.rect)
+                };
                 for t in text_els.iter().filter(in_layer) {
                     for (x, y) in occlusion_points_on_lines(dom, t.el, &t.rect, vw, vh) {
                         asked += 1;
@@ -4699,7 +5081,12 @@ pub fn check_text_occlusion_dom(dom: &dyn Dom) -> Vec<ElFinding> {
                             Some(a)
                                 if a != layer
                                     && !dom.contains(layer, a)
-                                    && buried_under_the_page(dom, &dom.elements_from_point(x, y), t.el, layer) => {}
+                                    && buried_under_the_page(
+                                        dom,
+                                        &dom.elements_from_point(x, y),
+                                        t.el,
+                                        layer,
+                                    ) => {}
                             _ => return false,
                         }
                     }
@@ -4719,11 +5106,17 @@ pub fn check_text_occlusion_dom(dom: &dyn Dom) -> Vec<ElFinding> {
         let mut occluder_kind = "";
         for (x, y) in occlusion_points_on_lines(dom, el, rect, vw, vh) {
             total += 1;
-            let Some(top) = dom.element_from_point(x, y) else { continue };
+            let Some(top) = dom.element_from_point(x, y) else {
+                continue;
+            };
             if top == el || dom.contains(el, top) || dom.contains(top, el) {
                 continue;
             }
-            if is_floated(top) || is_marqueeish(top) || is_pinned_overlay(top) || is_scroller_arrow(dom, top, el) {
+            if is_floated(top)
+                || is_marqueeish(top)
+                || is_pinned_overlay(top)
+                || is_scroller_arrow(dom, top, el)
+            {
                 continue;
             }
             if effective_opacity_dom(dom, top) <= 0.02 || ignores_pointer_events(dom, top) {
@@ -4752,9 +5145,13 @@ pub fn check_text_occlusion_dom(dom: &dyn Dom) -> Vec<ElFinding> {
             // text covers the point only where its glyphs could: a stretched
             // link's transparent `::after` answers for the whole card while
             // its title sits elsewhere.
-            let top_glyphs = dom
-                .direct_text_rect(top)
-                .map(|r| if r.all_finite() { glyph_ink_band(dom, top, &r).unwrap_or(r) } else { r });
+            let top_glyphs = dom.direct_text_rect(top).map(|r| {
+                if r.all_finite() {
+                    glyph_ink_band(dom, top, &r).unwrap_or(r)
+                } else {
+                    r
+                }
+            });
             // The same words set again in the same face at the same origin
             // (schlittermann.de's logo, `a.logo` laid exactly over the first
             // word of `span.logo2`) draw the glyphs the victim draws: an
@@ -4794,7 +5191,11 @@ pub fn check_text_occlusion_dom(dom: &dyn Dom) -> Vec<ElFinding> {
                     occluder_el = Some(top);
                     // A box counts through its fill or through its borders;
                     // one with no opaque fill is named for what it draws.
-                    occluder_kind = if paints_opaque_fill(dom, top) { "box" } else { "border" };
+                    occluder_kind = if paints_opaque_fill(dom, top) {
+                        "box"
+                    } else {
+                        "border"
+                    };
                 }
             } else if top_has_text && !laid_out_apart(dom, top, el) {
                 occluded += 1;
@@ -4802,7 +5203,10 @@ pub fn check_text_occlusion_dom(dom: &dyn Dom) -> Vec<ElFinding> {
                     occluder_el = Some(top);
                     // Everything inside an SVG counts as drawing over the
                     // text; only its text elements are text.
-                    occluder_kind = if top_in_svg && !top_own_text && !SVG_TEXT_TAGS.contains(&top_tag.as_str()) {
+                    occluder_kind = if top_in_svg
+                        && !top_own_text
+                        && !SVG_TEXT_TAGS.contains(&top_tag.as_str())
+                    {
                         "graphic"
                     } else {
                         "text"
@@ -4929,8 +5333,14 @@ pub fn check_text_occlusion_dom(dom: &dyn Dom) -> Vec<ElFinding> {
             if card.el == el || dom.contains(el, card.el) || dom.contains(card.el, el) {
                 continue;
             }
-            let ix = math_max(0.0, math_min(rect.right, card.rect.right) - math_max(rect.left, card.rect.left));
-            let iy = math_max(0.0, math_min(rect.bottom, card.rect.bottom) - math_max(rect.top, card.rect.top));
+            let ix = math_max(
+                0.0,
+                math_min(rect.right, card.rect.right) - math_max(rect.left, card.rect.left),
+            );
+            let iy = math_max(
+                0.0,
+                math_min(rect.bottom, card.rect.bottom) - math_max(rect.top, card.rect.top),
+            );
             if ix < 8.0 || iy < 0.5 * line_height {
                 continue;
             }
@@ -4972,7 +5382,9 @@ pub fn check_text_occlusion_dom(dom: &dyn Dom) -> Vec<ElFinding> {
         if !painted(el) {
             continue;
         }
-        let Some(bg) = parse_any_color(Some(&dom.style(el, "backgroundColor"))) else { continue };
+        let Some(bg) = parse_any_color(Some(&dom.style(el, "backgroundColor"))) else {
+            continue;
+        };
         if bg.alpha_or_one() <= 0.6 {
             continue;
         }
@@ -5016,8 +5428,14 @@ pub fn check_text_occlusion_dom(dom: &dyn Dom) -> Vec<ElFinding> {
                 continue;
             }
             let o_rect = dom.rect(other);
-            let ix = math_max(0.0, math_min(rect.right, o_rect.right) - math_max(rect.left, o_rect.left));
-            let iy = math_max(0.0, math_min(rect.bottom, o_rect.bottom) - math_max(rect.top, o_rect.top));
+            let ix = math_max(
+                0.0,
+                math_min(rect.right, o_rect.right) - math_max(rect.left, o_rect.left),
+            );
+            let iy = math_max(
+                0.0,
+                math_min(rect.bottom, o_rect.bottom) - math_max(rect.top, o_rect.top),
+            );
             if ix > 4.0 && iy > 4.0 && !js::trim(&dom.text_content(other)).is_empty() {
                 overlaps = Some(other);
                 break;
@@ -5036,7 +5454,11 @@ pub fn check_text_occlusion_dom(dom: &dyn Dom) -> Vec<ElFinding> {
             .text_line_rects(el)
             .map(|mut l| {
                 l.retain(|r| r.all_finite());
-                l.sort_by(|a, b| a.top.partial_cmp(&b.top).unwrap_or(std::cmp::Ordering::Equal));
+                l.sort_by(|a, b| {
+                    a.top
+                        .partial_cmp(&b.top)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
                 let mut rows = 0usize;
                 let mut row_middle = f64::NEG_INFINITY;
                 for r in &l {
@@ -5097,12 +5519,18 @@ fn column_visible_bottom(dom: &dyn Dom, d: ElId, dr: &Rect, row: ElId) -> f64 {
         let y = {
             let v = dom.style(p, "overflowY");
             if v.is_empty() {
-                dom.style(p, "overflow").split_whitespace().last().unwrap_or("").to_string()
+                dom.style(p, "overflow")
+                    .split_whitespace()
+                    .last()
+                    .unwrap_or("")
+                    .to_string()
             } else {
                 v
             }
         };
-        if matches!(y.as_str(), "hidden" | "clip" | "auto" | "scroll") && dom.style(p, "display") != "inline" {
+        if matches!(y.as_str(), "hidden" | "clip" | "auto" | "scroll")
+            && dom.style(p, "display") != "inline"
+        {
             bottom = math_min(bottom, dom.rect(p).bottom);
         }
         if p == row {
@@ -5147,7 +5575,12 @@ const LINK_RAIL_MEAN_CHARS: f64 = 40.0;
 /// without a `nav` or a role (fanniemae.com's "About Us" side menu) is short
 /// by design, like the navigation rails the fold test already leaves out.
 fn is_link_list_rail(dom: &dyn Dom, column: ElId) -> bool {
-    let chars = |n: ElId| dom.text_content(n).split_whitespace().map(utf16_len).sum::<usize>() as f64;
+    let chars = |n: ElId| {
+        dom.text_content(n)
+            .split_whitespace()
+            .map(utf16_len)
+            .sum::<usize>() as f64
+    };
     let total = chars(column);
     if !(total > 0.0) {
         return false;
@@ -5161,13 +5594,16 @@ fn is_link_list_rail(dom: &dyn Dom, column: ElId) -> bool {
         .collect();
     // A link a reader cannot see (a closed mega-menu) is no menu entry, and
     // its text is not the column's.
-    let (shown, hidden): (Vec<ElId>, Vec<ElId>) = outer.into_iter().partition(|&a| painted_at_capture(dom, a));
+    let (shown, hidden): (Vec<ElId>, Vec<ElId>) =
+        outer.into_iter().partition(|&a| painted_at_capture(dom, a));
     if shown.len() < 3 {
         return false;
     }
     let total = total - hidden.iter().map(|&a| chars(a)).sum::<f64>();
     let link_chars: f64 = shown.iter().map(|&a| chars(a)).sum();
-    total > 0.0 && link_chars >= 0.9 * total && link_chars / shown.len() as f64 <= LINK_RAIL_MEAN_CHARS
+    total > 0.0
+        && link_chars >= 0.9 * total
+        && link_chars / shown.len() as f64 <= LINK_RAIL_MEAN_CHARS
 }
 
 /// Whether a column only wraps a navigation rail: through boxes that each
@@ -5187,7 +5623,8 @@ fn is_wrapped_rail(dom: &dyn Dom, column: ElId) -> bool {
         cur = kids[0];
         if tag_lower(dom, cur) == "nav"
             || dom.attr(cur, "role").is_some_and(|r| {
-                r.split_ascii_whitespace().any(|t| js::to_lower_case(t) == "navigation")
+                r.split_ascii_whitespace()
+                    .any(|t| js::to_lower_case(t) == "navigation")
             })
         {
             return true;
@@ -5296,7 +5733,8 @@ pub fn check_first_viewport_column_overflow_dom(dom: &dyn Dom) -> Vec<ElFinding>
                 }
                 let dr = dom.rect(d);
                 if dr.width > 0.0 && dr.height > 0.0 {
-                    content_bottom = math_max(content_bottom, column_visible_bottom(dom, d, &dr, el));
+                    content_bottom =
+                        math_max(content_bottom, column_visible_bottom(dom, d, &dr, el));
                 }
             }
             // A column with nothing painted in its own flow (a collapsed
@@ -5331,7 +5769,11 @@ pub fn check_first_viewport_column_overflow_dom(dom: &dyn Dom) -> Vec<ElFinding>
             .iter()
             .filter(|c| !(tall.left < c.right - 1.0 && c.left < tall.right - 1.0))
             .filter(|c| (tall.top - c.top).abs() <= 0.25 * vh)
-            .min_by(|a, b| a.content_h.partial_cmp(&b.content_h).unwrap_or(std::cmp::Ordering::Equal))
+            .min_by(|a, b| {
+                a.content_h
+                    .partial_cmp(&b.content_h)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
         else {
             continue;
         };
@@ -5368,9 +5810,23 @@ mod tests {
     fn mark_body_descendants(d: &mut FakeDom) {
         let body = d.body.unwrap();
         // a real body paints
-        d.set_styles(body, &[("display", "block"), ("opacity", "1"), ("visibility", "visible")]);
+        d.set_styles(
+            body,
+            &[
+                ("display", "block"),
+                ("opacity", "1"),
+                ("visibility", "visible"),
+            ],
+        );
         let html = d.document_element.unwrap();
-        d.set_styles(html, &[("display", "block"), ("opacity", "1"), ("visibility", "visible")]);
+        d.set_styles(
+            html,
+            &[
+                ("display", "block"),
+                ("opacity", "1"),
+                ("visibility", "visible"),
+            ],
+        );
         let n = d.els.len() as ElId;
         for id in 1..n {
             if id != body && d.contains(body, id) {
@@ -5425,7 +5881,10 @@ mod tests {
     }
 
     fn font_finding(d: &FakeDom) -> Option<String> {
-        check_typography(d).into_iter().find(|f| f.type_ == "overused-font").map(|f| f.detail)
+        check_typography(d)
+            .into_iter()
+            .find(|f| f.type_ == "overused-font")
+            .map(|f| f.detail)
     }
 
     /// incredible.one: the `geist` package registers its face as
@@ -5437,13 +5896,34 @@ mod tests {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         for _ in 0..10 {
-            typeset(&mut d, body, "p", "Copy set in the package face", "GeistSans, \"GeistSans Fallback\"");
-            typeset(&mut d, body, "span", "Mockup copy", "\"Geist Sans\", sans-serif");
+            typeset(
+                &mut d,
+                body,
+                "p",
+                "Copy set in the package face",
+                "GeistSans, \"GeistSans Fallback\"",
+            );
+            typeset(
+                &mut d,
+                body,
+                "span",
+                "Mockup copy",
+                "\"Geist Sans\", sans-serif",
+            );
         }
         for _ in 0..4 {
-            typeset(&mut d, body, "p", "Body copy in another face", "Georgia, serif");
+            typeset(
+                &mut d,
+                body,
+                "p",
+                "Body copy in another face",
+                "Georgia, serif",
+            );
         }
-        assert_eq!(font_finding(&d).as_deref(), Some("Primary font: geist sans (83% of text)"));
+        assert_eq!(
+            font_finding(&d).as_deref(),
+            Some("Primary font: geist sans (83% of text)")
+        );
 
         // A face whose name only starts like a listed one is not that face.
         let mut d = FakeDom::new();
@@ -5473,7 +5953,10 @@ mod tests {
         // 40 of 1,040 characters: 3.8%.
         assert_eq!(font_finding(&build("Go")), None);
         // 100 of 1,100: 9.1%, and the snippet is the element share.
-        assert_eq!(font_finding(&build("Label")).as_deref(), Some("Primary font: inter (80% of text)"));
+        assert_eq!(
+            font_finding(&build("Label")).as_deref(),
+            Some("Primary font: inter (80% of text)")
+        );
     }
 
     /// weathernews.jp: Arial heads a Japanese page's stack, and the CJK
@@ -5495,9 +5978,18 @@ mod tests {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         for _ in 0..25 {
-            typeset(&mut d, body, "p", "Weather forecasts and alerts for today", "Arial, \"Hiragino Sans\", sans-serif");
+            typeset(
+                &mut d,
+                body,
+                "p",
+                "Weather forecasts and alerts for today",
+                "Arial, \"Hiragino Sans\", sans-serif",
+            );
         }
-        assert_eq!(font_finding(&d).as_deref(), Some("Primary font: arial (100% of text)"));
+        assert_eq!(
+            font_finding(&d).as_deref(),
+            Some("Primary font: arial (100% of text)")
+        );
     }
 
     /// Only text with a box is weighed: the long copy in a closed drawer does
@@ -5537,7 +6029,10 @@ mod tests {
         for _ in 0..25 {
             typeset(&mut d, hidden, "p", "hidden", "Inter, sans-serif");
         }
-        assert_eq!(font_finding(&d).as_deref(), Some("Primary font: inter (100% of text)"));
+        assert_eq!(
+            font_finding(&d).as_deref(),
+            Some("Primary font: inter (100% of text)")
+        );
     }
 
     /// observations-1006 row 15, hardyn.com.br: size swatches of one or two
@@ -5637,11 +6132,36 @@ mod tests {
             }
             let h1 = d.add(Some(body), "h1");
             d.add_text(h1, "KingKong Technology");
-            d.set_styles(h1, &[("fontSize", "16px"), ("position", "absolute"), ("clipPath", "inset(50%)")]);
-            d.set_rect(h1, -1.0, 60.0, if hide { 1.0 } else { 400.0 }, if hide { 1.0 } else { 20.0 });
+            d.set_styles(
+                h1,
+                &[
+                    ("fontSize", "16px"),
+                    ("position", "absolute"),
+                    ("clipPath", "inset(50%)"),
+                ],
+            );
+            d.set_rect(
+                h1,
+                -1.0,
+                60.0,
+                if hide { 1.0 } else { 400.0 },
+                if hide { 1.0 } else { 20.0 },
+            );
             let seo = d.add(Some(body), "div");
-            d.set_styles(seo, &[("position", "absolute"), ("clip", "rect(0px, 0px, 0px, 0px)")]);
-            d.set_rect(seo, 0.0, 61.0, if hide { 1.0 } else { 400.0 }, if hide { 1.0 } else { 200.0 });
+            d.set_styles(
+                seo,
+                &[
+                    ("position", "absolute"),
+                    ("clip", "rect(0px, 0px, 0px, 0px)"),
+                ],
+            );
+            d.set_rect(
+                seo,
+                0.0,
+                61.0,
+                if hide { 1.0 } else { 400.0 },
+                if hide { 1.0 } else { 200.0 },
+            );
             for _ in 0..3 {
                 let h2 = d.add(Some(seo), "h2");
                 d.add_text(h2, "Encoders");
@@ -5692,7 +6212,10 @@ mod tests {
         }
         assert_eq!(nested(None, None, "visible"), 1);
         // BEM element names and underscores separate words too.
-        assert_eq!(nested(Some("esds-mega-nav__dropdown-level2"), None, "visible"), 0);
+        assert_eq!(
+            nested(Some("esds-mega-nav__dropdown-level2"), None, "visible"),
+            0
+        );
         assert_eq!(nested(Some("site_menu"), None, "visible"), 0);
         // What matched before still matches, and a longer word still is not
         // the word.
@@ -5784,7 +6307,14 @@ mod tests {
             d.set_rect(outer, 0.0, 0.0, 1280.0, 832.0);
             d.add_text(outer, "Outer text longer than ten");
             let column = d.add(Some(outer), "div");
-            d.set_styles(column, &[("overflow", "hidden auto"), ("overflowX", "hidden"), ("overflowY", "auto")]);
+            d.set_styles(
+                column,
+                &[
+                    ("overflow", "hidden auto"),
+                    ("overflowX", "hidden"),
+                    ("overflowY", "auto"),
+                ],
+            );
             d.set_rect(column, 960.0, 0.0, 320.0, 832.0);
             let tab = d.add(Some(column), "div");
             card_styles(&mut d, tab, "rgb(243, 244, 246)");
@@ -5804,13 +6334,24 @@ mod tests {
         d.set_rect(outer, 0.0, 0.0, 600.0, 400.0);
         d.add_text(outer, "Outer text longer than ten");
         let wrap = d.add(Some(outer), "div");
-        d.set_styles(wrap, &[("overflow", "hidden"), ("overflowX", "hidden"), ("overflowY", "hidden")]);
+        d.set_styles(
+            wrap,
+            &[
+                ("overflow", "hidden"),
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+            ],
+        );
         d.set_rect(wrap, 0.0, 300.0, 240.0, 100.0);
         let caption = d.add(Some(wrap), "div");
         card_styles(&mut d, caption, "rgb(243, 244, 246)");
         d.set_rect(caption, 0.0, 300.0, 240.0, 100.0);
         d.add_text(caption, "A caption set in a card");
-        assert_eq!(check_layout(&d).len(), 1, "a wrapper the caption's own size");
+        assert_eq!(
+            check_layout(&d).len(),
+            1,
+            "a wrapper the caption's own size"
+        );
     }
 
     #[test]
@@ -5860,12 +6401,24 @@ mod tests {
         };
         let advisory = Some(crate::checks::rules::ADVISORY_SEVERITY.to_string());
         assert_eq!(build(&|_, _, _| {}), None, "outside any mockup");
-        assert_eq!(build(&|d, wrap, _| { d.set_attr(wrap, "role", "img"); }), advisory);
+        assert_eq!(
+            build(&|d, wrap, _| {
+                d.set_attr(wrap, "role", "img");
+            }),
+            advisory
+        );
         // A class is not read: an `illustration` names a feature tile's
         // picture as often as a mockup (r4-p17 keeps those failing).
-        assert_eq!(build(&|d, wrap, _| { d.set_attr(wrap, "class", "mockup-window"); }), None);
         assert_eq!(
-            build(&|d, _, outer| { d.set_style(outer, "transform", "perspective(900px) rotateX(8deg)"); }),
+            build(&|d, wrap, _| {
+                d.set_attr(wrap, "class", "mockup-window");
+            }),
+            None
+        );
+        assert_eq!(
+            build(&|d, _, outer| {
+                d.set_style(outer, "transform", "perspective(900px) rotateX(8deg)");
+            }),
             advisory,
             "a device frame tilted in 3D"
         );
@@ -5885,23 +6438,64 @@ mod tests {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         let sec = d.add(Some(body), "section");
-        d.set_styles(sec, &[("display", "block"), ("visibility", "visible"), ("opacity", "1"), ("position", "static"), ("backgroundColor", "rgba(0, 0, 0, 0)"), ("borderTopWidth", "0px"), ("boxShadow", "none")]);
+        d.set_styles(
+            sec,
+            &[
+                ("display", "block"),
+                ("visibility", "visible"),
+                ("opacity", "1"),
+                ("position", "static"),
+                ("backgroundColor", "rgba(0, 0, 0, 0)"),
+                ("borderTopWidth", "0px"),
+                ("boxShadow", "none"),
+            ],
+        );
         d.set_rect(sec, 0.0, 0.0, 800.0, 1000.0);
         let mut y = 0.0;
         for i in 0..2 {
             let p0 = d.add(Some(sec), "p");
-            d.add_text(p0, "Intro paragraph text that runs well past forty characters");
-            d.set_styles(p0, &[("display", "block"), ("visibility", "visible"), ("opacity", "1"), ("position", "static"), ("fontSize", "20px")]);
+            d.add_text(
+                p0,
+                "Intro paragraph text that runs well past forty characters",
+            );
+            d.set_styles(
+                p0,
+                &[
+                    ("display", "block"),
+                    ("visibility", "visible"),
+                    ("opacity", "1"),
+                    ("position", "static"),
+                    ("fontSize", "20px"),
+                ],
+            );
             d.set_rect(p0, 0.0, y, 800.0, 20.0);
             y += 20.0 + 8.0; // 8px above the heading
             let h = d.add(Some(sec), "h2");
             d.add_text(h, &format!("Heading number {i}"));
-            d.set_styles(h, &[("display", "block"), ("visibility", "visible"), ("opacity", "1"), ("position", "static"), ("fontSize", "24px")]);
+            d.set_styles(
+                h,
+                &[
+                    ("display", "block"),
+                    ("visibility", "visible"),
+                    ("opacity", "1"),
+                    ("position", "static"),
+                    ("fontSize", "24px"),
+                ],
+            );
             d.set_rect(h, 0.0, y, 800.0, 30.0);
             y += 30.0 + 40.0; // 40px below
             let p1 = d.add(Some(sec), "p");
             d.add_text(p1, "Body paragraph");
-            d.set_styles(p1, &[("display", "block"), ("visibility", "visible"), ("opacity", "1"), ("position", "static"), ("fontSize", "16px")]);
+            d.set_styles(
+                p1,
+                &[
+                    ("display", "block"),
+                    ("visibility", "visible"),
+                    ("opacity", "1"),
+                    ("position", "static"),
+                    ("fontSize", "16px"),
+                ],
+            );
             d.set_rect(p1, 0.0, y, 800.0, 20.0);
             y += 60.0;
         }
@@ -5928,17 +6522,35 @@ mod tests {
             d.set_rect(sec, 0.0, 0.0, 800.0, 1000.0);
             let mut y = 0.0;
             for i in 0..2 {
-                let p0 = flow(&mut d, sec, "p", (0.0, y, 800.0, 20.0), "Intro paragraph text that runs well past forty characters");
+                let p0 = flow(
+                    &mut d,
+                    sec,
+                    "p",
+                    (0.0, y, 800.0, 20.0),
+                    "Intro paragraph text that runs well past forty characters",
+                );
                 d.set_style(p0, "fontSize", "20px");
                 y += 28.0;
                 let row = flow(&mut d, sec, "div", (0.0, y, 800.0, 30.0), "");
-                let h = flow(&mut d, row, "h2", (0.0, y, 300.0, 30.0), &format!("Heading number {i}"));
+                let h = flow(
+                    &mut d,
+                    row,
+                    "h2",
+                    (0.0, y, 300.0, 30.0),
+                    &format!("Heading number {i}"),
+                );
                 if kind != "block" {
                     d.set_style(h, "display", "inline");
                 }
                 match kind {
                     "run-in" => {
-                        let lead = flow(&mut d, row, "p", (300.0, y, 500.0, 30.0), "Invoices now show tax lines for every region.");
+                        let lead = flow(
+                            &mut d,
+                            row,
+                            "p",
+                            (300.0, y, 500.0, 30.0),
+                            "Invoices now show tax lines for every region.",
+                        );
                         d.set_style(lead, "display", "inline");
                     }
                     "badge" => {
@@ -5954,7 +6566,11 @@ mod tests {
             check_heading_rhythm_dom(&d).len()
         };
         assert_eq!(build("block"), 2);
-        assert_eq!(build("badge"), 2, "a heading beside a badge sits alone on its line");
+        assert_eq!(
+            build("badge"),
+            2,
+            "a heading beside a badge sits alone on its line"
+        );
         assert_eq!(build("run-in"), 0);
     }
 
@@ -5969,7 +6585,13 @@ mod tests {
         ("boxShadow", "none"),
     ];
 
-    fn flow(d: &mut FakeDom, parent: ElId, tag: &str, rect: (f64, f64, f64, f64), text: &str) -> ElId {
+    fn flow(
+        d: &mut FakeDom,
+        parent: ElId,
+        tag: &str,
+        rect: (f64, f64, f64, f64),
+        text: &str,
+    ) -> ElId {
         let el = d.add(Some(parent), tag);
         d.set_styles(el, FLOW);
         d.set_style(el, "fontSize", if tag == "h2" { "24px" } else { "16px" });
@@ -5997,11 +6619,29 @@ mod tests {
             let mut y = 0.0;
             for i in 0..2 {
                 let sec = flow(&mut d, body, "section", (0.0, y, 800.0, 500.0), "");
-                flow(&mut d, sec, "p", (0.0, y, 800.0, 20.0), "The end of the section above, a long sentence of prose.");
+                flow(
+                    &mut d,
+                    sec,
+                    "p",
+                    (0.0, y, 800.0, 20.0),
+                    "The end of the section above, a long sentence of prose.",
+                );
                 let group = flow(&mut d, sec, "div", (0.0, y + 160.0, 800.0, 300.0), "");
                 let h_top = label(&mut d, group, y + 160.0);
-                flow(&mut d, group, "h2", (0.0, h_top, 800.0, 30.0), &format!("Heading number {i}"));
-                flow(&mut d, group, "p", (0.0, h_top + 30.0 + below, 800.0, 20.0), "Body paragraph");
+                flow(
+                    &mut d,
+                    group,
+                    "h2",
+                    (0.0, h_top, 800.0, 30.0),
+                    &format!("Heading number {i}"),
+                );
+                flow(
+                    &mut d,
+                    group,
+                    "p",
+                    (0.0, h_top + 30.0 + below, 800.0, 20.0),
+                    "Body paragraph",
+                );
                 y += 500.0;
             }
             check_heading_rhythm_dom(&d).len()
@@ -6009,22 +6649,49 @@ mod tests {
         let subtitle = |gap: f64, lines: usize| {
             move |d: &mut FakeDom, group: ElId, top: f64| -> f64 {
                 let h = 24.0 * lines as f64;
-                let s = flow(d, group, "span", (0.0, top, 300.0, h), "Pick a plan in one click");
+                let s = flow(
+                    d,
+                    group,
+                    "span",
+                    (0.0, top, 300.0, h),
+                    "Pick a plan in one click",
+                );
                 d.set_style(s, "fontSize", "20px");
-                let rows: Vec<(f64, f64, f64, f64)> =
-                    (0..lines).map(|n| (0.0, top + 24.0 * n as f64, 300.0, 24.0)).collect();
+                let rows: Vec<(f64, f64, f64, f64)> = (0..lines)
+                    .map(|n| (0.0, top + 24.0 * n as f64, 300.0, 24.0))
+                    .collect();
                 d.set_text_lines(s, &rows);
                 top + h + gap
             }
         };
         assert_eq!(page(&subtitle(0.0, 2), 40.0), 2, "a two-line subtitle");
-        assert_eq!(page(&subtitle(3.0, 1), 40.0), 2, "a one-line subtitle 3px off");
-        assert_eq!(page(&subtitle(0.0, 1), 40.0), 0, "a one-line subtitle touching the h2");
+        assert_eq!(
+            page(&subtitle(3.0, 1), 40.0),
+            2,
+            "a one-line subtitle 3px off"
+        );
+        assert_eq!(
+            page(&subtitle(0.0, 1), 40.0),
+            0,
+            "a one-line subtitle touching the h2"
+        );
         // Review of round 12: the same line after a paragraph of its own
         // group is the tail of that block, not a subtitle.
         let tail = |d: &mut FakeDom, group: ElId, top: f64| -> f64 {
-            flow(d, group, "p", (0.0, top, 800.0, 48.0), "A paragraph of prose that runs across two full lines of the column.");
-            let s = flow(d, group, "p", (0.0, top + 112.0, 300.0, 24.0), "Read the full report on our site.");
+            flow(
+                d,
+                group,
+                "p",
+                (0.0, top, 800.0, 48.0),
+                "A paragraph of prose that runs across two full lines of the column.",
+            );
+            let s = flow(
+                d,
+                group,
+                "p",
+                (0.0, top + 112.0, 300.0, 24.0),
+                "Read the full report on our site.",
+            );
             d.set_text_lines(s, &[(0.0, top + 112.0, 300.0, 24.0)]);
             top + 136.0
         };
@@ -6033,18 +6700,44 @@ mod tests {
             move |d: &mut FakeDom, group: ElId, top: f64| -> f64 {
                 let mut top = top;
                 if after_a_line {
-                    flow(d, group, "p", (0.0, top, 300.0, 20.0), "A line of the group's own");
+                    flow(
+                        d,
+                        group,
+                        "p",
+                        (0.0, top, 300.0, 20.0),
+                        "A line of the group's own",
+                    );
                     top += 40.0;
                 }
-                let e = flow(d, group, "p", (0.0, top, 300.0, 16.0), "01 / Language and tools");
+                let e = flow(
+                    d,
+                    group,
+                    "p",
+                    (0.0, top, 300.0, 16.0),
+                    "01 / Language and tools",
+                );
                 d.set_styles(e, &[("fontSize", "12px"), ("textTransform", "uppercase")]);
                 top + 16.0 + 60.0
             }
         };
-        assert_eq!(page(&eyebrow(false), 100.0), 0, "an eyebrow that opens its group");
-        assert_eq!(page(&eyebrow(true), 100.0), 2, "an eyebrow after a line of its group");
+        assert_eq!(
+            page(&eyebrow(false), 100.0),
+            0,
+            "an eyebrow that opens its group"
+        );
+        assert_eq!(
+            page(&eyebrow(true), 100.0),
+            2,
+            "an eyebrow after a line of its group"
+        );
         let far = |d: &mut FakeDom, group: ElId, top: f64| -> f64 {
-            let e = flow(d, group, "p", (0.0, top, 300.0, 16.0), "01 / Language and tools");
+            let e = flow(
+                d,
+                group,
+                "p",
+                (0.0, top, 300.0, 16.0),
+                "01 / Language and tools",
+            );
             d.set_styles(e, &[("fontSize", "12px"), ("textTransform", "uppercase")]);
             top + 16.0 + 90.0
         };
@@ -6062,20 +6755,46 @@ mod tests {
             let page = flow(&mut d, body, "div", (0.0, 0.0, 800.0, 1000.0), "");
             let mut y = 0.0;
             for i in 0..2 {
-                flow(&mut d, page, "p", (0.0, y, 800.0, 20.0), "The paragraph that closes the section above this heading");
+                flow(
+                    &mut d,
+                    page,
+                    "p",
+                    (0.0, y, 800.0, 20.0),
+                    "The paragraph that closes the section above this heading",
+                );
                 y += 20.0;
                 // 40px of spacer, then the heading, then 24px to its content.
-                let holder = if wrapped { flow(&mut d, page, "div", (0.0, y, 800.0, 40.0), "") } else { page };
+                let holder = if wrapped {
+                    flow(&mut d, page, "div", (0.0, y, 800.0, 40.0), "")
+                } else {
+                    page
+                };
                 flow(&mut d, holder, "div", (0.0, y, 800.0, 40.0), "");
                 y += 40.0;
                 let section = flow(&mut d, page, "section", (0.0, y, 800.0, 200.0), "");
-                flow(&mut d, section, "h2", (0.0, y, 800.0, 30.0), &format!("Section title {i}"));
-                flow(&mut d, section, "p", (0.0, y + 54.0, 800.0, 100.0), "What the heading introduces");
+                flow(
+                    &mut d,
+                    section,
+                    "h2",
+                    (0.0, y, 800.0, 30.0),
+                    &format!("Section title {i}"),
+                );
+                flow(
+                    &mut d,
+                    section,
+                    "p",
+                    (0.0, y + 54.0, 800.0, 100.0),
+                    "What the heading introduces",
+                );
                 y += 200.0;
             }
             check_heading_rhythm_dom(&d).len()
         };
-        assert_eq!(build(false), 0, "a bare spacer is space: 40px above, 24px below");
+        assert_eq!(
+            build(false),
+            0,
+            "a bare spacer is space: 40px above, 24px below"
+        );
         assert_eq!(build(true), 0, "so is a wrapper that holds only the spacer");
         // Wrappers nest, and a picture anywhere inside makes a block.
         let mut d = FakeDom::new();
@@ -6114,29 +6833,79 @@ mod tests {
         let build = |below_tag: &str, inside_main: bool| {
             let mut d = FakeDom::new();
             let (_h, body) = d.with_page();
-            let main = flow(&mut d, body, if inside_main { "main" } else { "div" }, (0.0, 0.0, 800.0, 420.0), "");
+            let main = flow(
+                &mut d,
+                body,
+                if inside_main { "main" } else { "div" },
+                (0.0, 0.0, 800.0, 420.0),
+                "",
+            );
             let mut y = 0.0;
             // Two headings 8px under the paragraph above and 40px over their
             // own content.
             for i in 0..2 {
-                flow(&mut d, main, "p", (0.0, y, 800.0, 20.0), "The paragraph that closes the block above this heading");
-                flow(&mut d, main, "h2", (0.0, y + 28.0, 800.0, 30.0), &format!("Section title {i}"));
-                flow(&mut d, main, "p", (0.0, y + 98.0, 800.0, 20.0), "What the heading introduces, at some length");
+                flow(
+                    &mut d,
+                    main,
+                    "p",
+                    (0.0, y, 800.0, 20.0),
+                    "The paragraph that closes the block above this heading",
+                );
+                flow(
+                    &mut d,
+                    main,
+                    "h2",
+                    (0.0, y + 28.0, 800.0, 30.0),
+                    &format!("Section title {i}"),
+                );
+                flow(
+                    &mut d,
+                    main,
+                    "p",
+                    (0.0, y + 98.0, 800.0, 20.0),
+                    "What the heading introduces, at some length",
+                );
                 y += 150.0;
             }
             // A third ends its box, and the column: the next block sits 40px
             // under it, outside.
             let last = flow(&mut d, main, "div", (0.0, y, 800.0, 58.0), "");
-            flow(&mut d, last, "p", (0.0, y, 800.0, 20.0), "The paragraph that closes the block above this heading");
-            flow(&mut d, last, "h2", (0.0, y + 28.0, 800.0, 30.0), "Closing title");
+            flow(
+                &mut d,
+                last,
+                "p",
+                (0.0, y, 800.0, 20.0),
+                "The paragraph that closes the block above this heading",
+            );
+            flow(
+                &mut d,
+                last,
+                "h2",
+                (0.0, y + 28.0, 800.0, 30.0),
+                "Closing title",
+            );
             let after = if inside_main { body } else { main };
-            flow(&mut d, after, below_tag, (0.0, y + 98.0, 800.0, 60.0), "Copyright and links");
+            flow(
+                &mut d,
+                after,
+                below_tag,
+                (0.0, y + 98.0, 800.0, 60.0),
+                "Copyright and links",
+            );
             check_heading_rhythm_dom(&d).len()
         };
         assert_eq!(build("div", false), 3, "a block below, in the same column");
-        assert_eq!(build("footer", false), 2, "a footer is not what the heading introduces");
+        assert_eq!(
+            build("footer", false),
+            2,
+            "a footer is not what the heading introduces"
+        );
         assert_eq!(build("nav", false), 2);
-        assert_eq!(build("div", true), 2, "nothing is measured past the end of main");
+        assert_eq!(
+            build("div", true),
+            2,
+            "nothing is measured past the end of main"
+        );
     }
 
     /// observations-28 row 4: a background image paints a band a heading walk
@@ -6149,7 +6918,13 @@ mod tests {
         let (_h, body) = d.with_page();
         let el = d.add(Some(body), "section");
         let band = |d: &mut FakeDom, styles: &[(&str, &str)]| {
-            for p in ["backgroundImage", "backgroundSize", "background", "backgroundClip", "webkitBackgroundClip"] {
+            for p in [
+                "backgroundImage",
+                "backgroundSize",
+                "background",
+                "backgroundClip",
+                "webkitBackgroundClip",
+            ] {
                 d.set_style(el, p, "");
             }
             d.set_styles(el, styles);
@@ -6157,25 +6932,73 @@ mod tests {
         };
         let tile = r#"url("https://www.jyes.com.tw/index-news-bg.jpg")"#;
         let shorthand = |repeat: &str| {
-            format!(r#"rgba(0, 0, 0, 0) {tile} {repeat} scroll 0% 0% / auto padding-box border-box"#)
+            format!(
+                r#"rgba(0, 0, 0, 0) {tile} {repeat} scroll 0% 0% / auto padding-box border-box"#
+            )
         };
         let tiled = shorthand("repeat");
-        assert!(band(&mut d, &[("backgroundImage", tile), ("backgroundSize", "auto"), ("background", &tiled)]));
-        assert!(band(&mut d, &[("backgroundImage", tile), ("backgroundSize", "cover")]));
+        assert!(band(
+            &mut d,
+            &[
+                ("backgroundImage", tile),
+                ("backgroundSize", "auto"),
+                ("background", &tiled)
+            ]
+        ));
+        assert!(band(
+            &mut d,
+            &[("backgroundImage", tile), ("backgroundSize", "cover")]
+        ));
         let grad = "linear-gradient(rgb(255, 255, 255), rgb(250, 250, 250))";
-        assert!(band(&mut d, &[("backgroundImage", grad), ("backgroundSize", "auto")]));
+        assert!(band(
+            &mut d,
+            &[("backgroundImage", grad), ("backgroundSize", "auto")]
+        ));
         // An icon placed once, one axis of tiling, a tiling not recorded.
         let once = shorthand("no-repeat");
-        assert!(!band(&mut d, &[("backgroundImage", tile), ("backgroundSize", "auto"), ("background", &once)]));
+        assert!(!band(
+            &mut d,
+            &[
+                ("backgroundImage", tile),
+                ("backgroundSize", "auto"),
+                ("background", &once)
+            ]
+        ));
         let strip = shorthand("repeat-x");
-        assert!(!band(&mut d, &[("backgroundImage", tile), ("backgroundSize", "auto"), ("background", &strip)]));
-        assert!(!band(&mut d, &[("backgroundImage", tile), ("backgroundSize", "auto")]));
+        assert!(!band(
+            &mut d,
+            &[
+                ("backgroundImage", tile),
+                ("backgroundSize", "auto"),
+                ("background", &strip)
+            ]
+        ));
+        assert!(!band(
+            &mut d,
+            &[("backgroundImage", tile), ("backgroundSize", "auto")]
+        ));
         // A 48px accent bar drawn 3px tall under a title.
         let bar = "linear-gradient(90deg, rgb(17, 17, 17) 0px, rgb(17, 17, 17) 48px, rgba(0, 0, 0, 0) 48px)";
-        let bar_layer = format!("rgba(0, 0, 0, 0) {bar} no-repeat scroll 0% 100% / 100% 3px padding-box border-box");
-        assert!(!band(&mut d, &[("backgroundImage", bar), ("backgroundSize", "100% 3px"), ("background", &bar_layer)]));
+        let bar_layer = format!(
+            "rgba(0, 0, 0, 0) {bar} no-repeat scroll 0% 100% / 100% 3px padding-box border-box"
+        );
+        assert!(!band(
+            &mut d,
+            &[
+                ("backgroundImage", bar),
+                ("backgroundSize", "100% 3px"),
+                ("background", &bar_layer)
+            ]
+        ));
         // Gradient-filled text paints the glyphs, not the box.
-        assert!(!band(&mut d, &[("backgroundImage", grad), ("backgroundSize", "auto"), ("webkitBackgroundClip", "text")]));
+        assert!(!band(
+            &mut d,
+            &[
+                ("backgroundImage", grad),
+                ("backgroundSize", "auto"),
+                ("webkitBackgroundClip", "text")
+            ]
+        ));
         assert!(!band(&mut d, &[("backgroundImage", "none")]));
     }
 
@@ -6188,10 +7011,22 @@ mod tests {
         let (html, body) = d.with_page();
         d.set_rect(html, 0.0, 0.0, 800.0, 2000.0);
         d.el_mut(html).scroll_width = 800.0;
-        let flow = [("display", "block"), ("visibility", "visible"), ("opacity", "1"), ("position", "static")];
+        let flow = [
+            ("display", "block"),
+            ("visibility", "visible"),
+            ("opacity", "1"),
+            ("position", "static"),
+        ];
         let sec = d.add(Some(body), "section");
         d.set_styles(sec, &flow);
-        d.set_styles(sec, &[("backgroundColor", "rgba(0, 0, 0, 0)"), ("borderTopWidth", "0px"), ("boxShadow", "none")]);
+        d.set_styles(
+            sec,
+            &[
+                ("backgroundColor", "rgba(0, 0, 0, 0)"),
+                ("borderTopWidth", "0px"),
+                ("boxShadow", "none"),
+            ],
+        );
         d.set_rect(sec, 0.0, 0.0, 800.0, 1000.0);
         let clip = d.add(Some(sec), "div");
         d.set_styles(clip, &flow);
@@ -6200,9 +7035,12 @@ mod tests {
         let track = d.add(Some(clip), "div");
         d.set_styles(track, &flow);
         d.set_rect(track, -900.0, 400.0, 800.0, 200.0);
-        let mut group = |d: &mut FakeDom, parent: ElId, x: f64, y: f64, title: &str| {
+        let group = |d: &mut FakeDom, parent: ElId, x: f64, y: f64, title: &str| {
             let p0 = d.add(Some(parent), "p");
-            d.add_text(p0, "Intro paragraph text that runs well past forty characters");
+            d.add_text(
+                p0,
+                "Intro paragraph text that runs well past forty characters",
+            );
             d.set_styles(p0, &flow);
             d.set_style(p0, "fontSize", "20px");
             d.set_rect(p0, x, y, 800.0, 20.0);
@@ -6230,25 +7068,52 @@ mod tests {
         let f = check_heading_rhythm_dom(&d);
         let details: Vec<&str> = f.iter().map(|x| x.finding.detail.as_str()).collect();
         assert_eq!(details.len(), 2, "{details:?}");
-        assert!(details.iter().all(|x| x.ends_with("(2 headings on page)")), "{details:?}");
-        assert!(!details.iter().any(|x| x.contains("parked") || x.contains("faded")), "{details:?}");
+        assert!(
+            details.iter().all(|x| x.ends_with("(2 headings on page)")),
+            "{details:?}"
+        );
+        assert!(
+            !details
+                .iter()
+                .any(|x| x.contains("parked") || x.contains("faded")),
+            "{details:?}"
+        );
     }
 
     /// A `display: contents` wrapper whose first child is a spacer: the
     /// block below the heading is the content after the spacer.
     #[test]
     fn heading_rhythm_reads_past_a_spacer_in_a_contents_wrapper() {
-        let shown = [("display", "block"), ("visibility", "visible"), ("opacity", "1"), ("position", "static")];
+        let shown = [
+            ("display", "block"),
+            ("visibility", "visible"),
+            ("opacity", "1"),
+            ("position", "static"),
+        ];
         let build = |spacer_tag: &str| {
             let mut d = FakeDom::new();
             let (_h, body) = d.with_page();
             let sec = d.add(Some(body), "section");
-            d.set_styles(sec, &[("display", "block"), ("visibility", "visible"), ("opacity", "1"), ("position", "static"), ("backgroundColor", "rgba(0, 0, 0, 0)"), ("borderTopWidth", "0px"), ("boxShadow", "none")]);
+            d.set_styles(
+                sec,
+                &[
+                    ("display", "block"),
+                    ("visibility", "visible"),
+                    ("opacity", "1"),
+                    ("position", "static"),
+                    ("backgroundColor", "rgba(0, 0, 0, 0)"),
+                    ("borderTopWidth", "0px"),
+                    ("boxShadow", "none"),
+                ],
+            );
             d.set_rect(sec, 0.0, 0.0, 800.0, 2000.0);
             let mut y = 0.0;
             for i in 0..2 {
                 let p0 = d.add(Some(sec), "p");
-                d.add_text(p0, "Intro paragraph text that runs well past forty characters");
+                d.add_text(
+                    p0,
+                    "Intro paragraph text that runs well past forty characters",
+                );
                 d.set_styles(p0, &shown);
                 d.set_style(p0, "fontSize", "20px");
                 d.set_rect(p0, 0.0, y, 800.0, 20.0);
@@ -6291,7 +7156,10 @@ mod tests {
         let mut d = FakeDom::new();
         let (html, body) = d.with_page();
         let section = d.add(Some(body), "section");
-        d.set_styles(section, &[("display", "block"), ("backgroundColor", "rgb(18, 18, 18)")]);
+        d.set_styles(
+            section,
+            &[("display", "block"), ("backgroundColor", "rgb(18, 18, 18)")],
+        );
         d.set_rect(section, 0.0, 0.0, 800.0, 400.0);
         // On the default white canvas the dark section is a band with an edge.
         assert!(rhythm_draws_bottom_edge(&d, section));
@@ -6308,12 +7176,33 @@ mod tests {
         let (_h, body) = d.with_page();
         let vis = d.add(Some(body), "p");
         d.add_text(vis, "  visible   text ");
-        d.set_styles(vis, &[("display", "block"), ("opacity", "1"), ("visibility", "visible")]);
+        d.set_styles(
+            vis,
+            &[
+                ("display", "block"),
+                ("opacity", "1"),
+                ("visibility", "visible"),
+            ],
+        );
         let hid = d.add(Some(body), "div");
-        d.set_styles(hid, &[("display", "block"), ("opacity", "0"), ("visibility", "visible")]);
+        d.set_styles(
+            hid,
+            &[
+                ("display", "block"),
+                ("opacity", "0"),
+                ("visibility", "visible"),
+            ],
+        );
         let inner = d.add(Some(hid), "span");
         d.add_text(inner, "hidden words here");
-        d.set_styles(inner, &[("display", "inline"), ("opacity", "1"), ("visibility", "visible")]);
+        d.set_styles(
+            inner,
+            &[
+                ("display", "inline"),
+                ("opacity", "1"),
+                ("visibility", "visible"),
+            ],
+        );
         let scr = d.add(Some(body), "script");
         d.add_text(scr, "var x = 1;");
         mark_body_descendants(&mut d);
@@ -6324,9 +7213,22 @@ mod tests {
     }
 
     /// A box of text under `parent`, shown or hidden by `styles`.
-    fn hidden_box(d: &mut FakeDom, parent: ElId, tag: &str, styles: &[(&str, &str)], text: &str) -> ElId {
+    fn hidden_box(
+        d: &mut FakeDom,
+        parent: ElId,
+        tag: &str,
+        styles: &[(&str, &str)],
+        text: &str,
+    ) -> ElId {
         let el = d.add(Some(parent), tag);
-        d.set_styles(el, &[("display", "block"), ("opacity", "1"), ("visibility", "visible")]);
+        d.set_styles(
+            el,
+            &[
+                ("display", "block"),
+                ("opacity", "1"),
+                ("visibility", "visible"),
+            ],
+        );
         d.set_styles(el, styles);
         if !text.is_empty() {
             d.add_text(el, text);
@@ -6363,7 +7265,13 @@ mod tests {
         d.set_attr(flyout, "id", "who-we-are");
         hidden_box(&mut d, flyout, "div", VIS_HIDDEN, "controlled flyout text");
         // capitalone.com: a dialog that is not open.
-        let dialog = hidden_box(&mut d, body, "div", &[("opacity", "0"), ("visibility", "hidden")], "closed dialog");
+        let dialog = hidden_box(
+            &mut d,
+            body,
+            "div",
+            &[("opacity", "0"), ("visibility", "hidden")],
+            "closed dialog",
+        );
         d.set_attr(dialog, "role", "dialog");
         // An unselected tab panel by role, and lpga.or.jp's by class.
         let panel = hidden_box(&mut d, body, "div", VIS_HIDDEN, "unselected tab panel");
@@ -6384,11 +7292,22 @@ mod tests {
         hidden_box(&mut d, body, "div", OPACITY_0, "collapsed answer two");
         // yna.co.kr: a fixed whole-site menu parked right of a 390px viewport.
         d.inner_width = 390.0;
-        let parked = hidden_box(&mut d, body, "div", &[("opacity", "0"), ("position", "fixed")], "parked whole menu");
+        let parked = hidden_box(
+            &mut d,
+            body,
+            "div",
+            &[("opacity", "0"), ("position", "fixed")],
+            "parked whole menu",
+        );
         d.set_rect(parked, 390.0, 0.0, 390.0, 844.0);
         mark_body_descendants(&mut d);
         let m = measure_hidden_text_dom(&d);
-        assert_eq!((m.total_chars, m.hidden_chars), (12.0 + 10.0 + 16.0, 0.0), "{:?}", m.hidden_samples);
+        assert_eq!(
+            (m.total_chars, m.hidden_chars),
+            (12.0 + 10.0 + 16.0, 0.0),
+            "{:?}",
+            m.hidden_samples
+        );
     }
 
     /// The counter-evidence (vestris.ai, findings 141184, 141225) and its
@@ -6406,7 +7325,13 @@ mod tests {
         // the role is on an ancestor that shows, not on the hidden box.
         let panel = hidden_box(&mut d, body, "div", &[], "");
         d.set_attr(panel, "role", "tabpanel");
-        hidden_box(&mut d, panel, "p", OPACITY_0, "reveal in the selected panel");
+        hidden_box(
+            &mut d,
+            panel,
+            "p",
+            OPACITY_0,
+            "reveal in the selected panel",
+        );
         // A panel whose trigger says expanded, and one with two triggers of
         // which one says expanded.
         let trigger = hidden_box(&mut d, body, "button", &[], "Open");
@@ -6423,7 +7348,13 @@ mod tests {
             d.set_attr(p, "id", id);
         }
         // Class words that are content, not closed interface.
-        for class in ["menu-section", "tab", "content", "drawing-board", "modality"] {
+        for class in [
+            "menu-section",
+            "tab",
+            "content",
+            "drawing-board",
+            "modality",
+        ] {
             let el = hidden_box(&mut d, body, "div", OPACITY_0, "plain content");
             d.set_attr(el, "class", class);
         }
@@ -6433,7 +7364,13 @@ mod tests {
         d.set_attr(q, "aria-expanded", "true");
         hidden_box(&mut d, body, "div", OPACITY_0, "expanded answer");
         d.inner_width = 1280.0;
-        let fixed = hidden_box(&mut d, body, "div", &[("opacity", "0"), ("position", "fixed")], "fixed on screen");
+        let fixed = hidden_box(
+            &mut d,
+            body,
+            "div",
+            &[("opacity", "0"), ("position", "fixed")],
+            "fixed on screen",
+        );
         d.set_rect(fixed, 680.0, 16.0, 520.0, 766.0);
         // A site header whose first child is a closed hamburger, then a hero
         // still at opacity 0: the hamburger closes its menu, not the hero.
@@ -6445,7 +7382,10 @@ mod tests {
         mark_body_descendants(&mut d);
         let m = measure_hidden_text_dom(&d);
         let hidden = 19.0 + 28.0 + 2.0 * 19.0 + 5.0 * 13.0 + 15.0 + 15.0 + 12.0;
-        assert_eq!((m.total_chars, m.hidden_chars), (12.0 + 4.0 + 4.0 + 5.0 + 4.0 + hidden, hidden));
+        assert_eq!(
+            (m.total_chars, m.hidden_chars),
+            (12.0 + 4.0 + 4.0 + 5.0 + 4.0 + hidden, hidden)
+        );
     }
 
     /// sona8.com (217624 and five more) and directus.io (216125, 216180):
@@ -6453,7 +7393,11 @@ mod tests {
     /// outside its closed row leaves both counts.
     #[test]
     fn hidden_text_measure_leaves_out_scroll_timelines_and_parked_panels() {
-        let fade = || vec![crate::browser::dom::KeyframeFrame { decls: vec![("opacity".to_string(), "0".to_string())] }];
+        let fade = || {
+            vec![crate::browser::dom::KeyframeFrame {
+                decls: vec![("opacity".to_string(), "0".to_string())],
+            }]
+        };
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         d.html_for_patterns = "<html><head><style>.reveal > * { animation-name: rise; animation-timeline: view(); }\
@@ -6462,40 +7406,117 @@ mod tests {
         d.keyframes.insert("rise".to_string(), fade());
         hidden_box(&mut d, body, "p", &[], "visible text");
         // Held by a view timeline: content a visitor scrolls to.
-        let scrubbed = hidden_box(&mut d, body, "div", &[("opacity", "0"), ("animationName", "rise")], "");
+        let scrubbed = hidden_box(
+            &mut d,
+            body,
+            "div",
+            &[("opacity", "0"), ("animationName", "rise")],
+            "",
+        );
         d.add_selector(scrubbed, ".reveal > *");
         d.set_running_animations(scrubbed, &["opacity", "transform"]);
         hidden_box(&mut d, scrubbed, "p", &[], "scrubbed in on scroll");
         // The same animation on the document timeline, and a scrubbed box
         // from a probe that read no animations: reveals that have not run.
-        let timed = hidden_box(&mut d, body, "div", &[("opacity", "0"), ("animationName", "rise")], "waits on a class");
+        let timed = hidden_box(
+            &mut d,
+            body,
+            "div",
+            &[("opacity", "0"), ("animationName", "rise")],
+            "waits on a class",
+        );
         d.add_selector(timed, ".stagger > *");
         d.set_running_animations(timed, &["opacity"]);
-        let unread = hidden_box(&mut d, body, "div", &[("opacity", "0"), ("animationName", "rise")], "no animations read");
+        let unread = hidden_box(
+            &mut d,
+            body,
+            "div",
+            &[("opacity", "0"), ("animationName", "rise")],
+            "no animations read",
+        );
         d.add_selector(unread, ".reveal > *");
         // A `visibility: hidden` box is not held by its opacity.
-        let vis = hidden_box(&mut d, body, "div", &[("visibility", "hidden"), ("animationName", "rise")], "hidden by visibility");
+        let vis = hidden_box(
+            &mut d,
+            body,
+            "div",
+            &[("visibility", "hidden"), ("animationName", "rise")],
+            "hidden by visibility",
+        );
         d.add_selector(vis, ".reveal > *");
         d.set_running_animations(vis, &["opacity"]);
         // An answer parked below its closed, clipped row.
-        let row = hidden_box(&mut d, body, "div", &[("position", "relative"), ("overflowX", "hidden"), ("overflowY", "hidden")], "");
+        let row = hidden_box(
+            &mut d,
+            body,
+            "div",
+            &[
+                ("position", "relative"),
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+            ],
+            "",
+        );
         d.set_rect(row, 108.0, 3617.0, 1064.0, 76.0);
-        let answer = hidden_box(&mut d, row, "div", &[("opacity", "0"), ("position", "absolute")], "parked answer text");
+        let answer = hidden_box(
+            &mut d,
+            row,
+            "div",
+            &[("opacity", "0"), ("position", "absolute")],
+            "parked answer text",
+        );
         d.set_rect(answer, 132.0, 3744.0, 1016.0, 45.0);
         // The same answer inside its row's box, and one under a slider that
         // never got its height: both still count.
-        let open_row = hidden_box(&mut d, body, "div", &[("position", "relative"), ("overflowX", "hidden"), ("overflowY", "hidden")], "");
+        let open_row = hidden_box(
+            &mut d,
+            body,
+            "div",
+            &[
+                ("position", "relative"),
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+            ],
+            "",
+        );
         d.set_rect(open_row, 108.0, 4000.0, 1064.0, 200.0);
-        let shown = hidden_box(&mut d, open_row, "div", &[("opacity", "0"), ("position", "absolute")], "answer in an open row");
+        let shown = hidden_box(
+            &mut d,
+            open_row,
+            "div",
+            &[("opacity", "0"), ("position", "absolute")],
+            "answer in an open row",
+        );
         d.set_rect(shown, 132.0, 4060.0, 1016.0, 45.0);
-        let slider = hidden_box(&mut d, body, "div", &[("position", "relative"), ("overflowX", "hidden"), ("overflowY", "hidden")], "");
+        let slider = hidden_box(
+            &mut d,
+            body,
+            "div",
+            &[
+                ("position", "relative"),
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+            ],
+            "",
+        );
         d.set_rect(slider, 0.0, 5000.0, 1280.0, 0.0);
-        let slide = hidden_box(&mut d, slider, "div", &[("opacity", "0"), ("position", "absolute")], "slide never shown");
+        let slide = hidden_box(
+            &mut d,
+            slider,
+            "div",
+            &[("opacity", "0"), ("position", "absolute")],
+            "slide never shown",
+        );
         d.set_rect(slide, 0.0, 5000.0, 1280.0, 400.0);
         mark_body_descendants(&mut d);
         let m = measure_hidden_text_dom(&d);
         let hidden = 16.0 + 18.0 + 20.0 + 21.0 + 17.0;
-        assert_eq!((m.total_chars, m.hidden_chars), (12.0 + 21.0 + hidden, hidden), "{:?}", m.hidden_samples);
+        assert_eq!(
+            (m.total_chars, m.hidden_chars),
+            (12.0 + 21.0 + hidden, hidden),
+            "{:?}",
+            m.hidden_samples
+        );
     }
 
     /// r6-t6-hidden-scroll-linked: a hidden box that shows once the page is
@@ -6534,7 +7555,11 @@ mod tests {
             d.set_attr(other, "id", "panel-other");
             mark_body_descendants(&mut d);
             let m = measure_hidden_text_dom(&d);
-            assert_eq!((m.total_chars, m.hidden_chars), (145.0, 40.0), "labelledby: {by_labelledby}");
+            assert_eq!(
+                (m.total_chars, m.hidden_chars),
+                (145.0, 40.0),
+                "labelledby: {by_labelledby}"
+            );
             // An inert wrapper still closes the selected panel (review of
             // #968): only the panel's own role and class yield.
             let wrap = hidden_box(&mut d, body, "div", &[], "");
@@ -6552,7 +7577,11 @@ mod tests {
             }
             mark_body_descendants(&mut d);
             let m = measure_hidden_text_dom(&d);
-            assert_eq!((m.total_chars, m.hidden_chars), (105.0, 0.0), "inert, labelledby: {by_labelledby}");
+            assert_eq!(
+                (m.total_chars, m.hidden_chars),
+                (105.0, 0.0),
+                "inert, labelledby: {by_labelledby}"
+            );
         }
     }
 
@@ -6575,11 +7604,19 @@ mod tests {
         mark_body_descendants(&mut d);
         d.set_rect(img, 0.0, 0.0, 640.0, 120.0);
         let m = measure_hidden_text_dom(&d);
-        assert_eq!((m.total_chars, m.hidden_chars, m.unstarted_slider_chars), (140.0, 40.0, 0.0), "started");
+        assert_eq!(
+            (m.total_chars, m.hidden_chars, m.unstarted_slider_chars),
+            (140.0, 40.0, 0.0),
+            "started"
+        );
         // With no picture laid out, nothing shows: it never started.
         d.set_rect(img, 0.0, 0.0, 0.0, 0.0);
         let m = measure_hidden_text_dom(&d);
-        assert_eq!((m.total_chars, m.hidden_chars, m.unstarted_slider_chars), (100.0, 0.0, 40.0), "unstarted");
+        assert_eq!(
+            (m.total_chars, m.hidden_chars, m.unstarted_slider_chars),
+            (100.0, 0.0, 40.0),
+            "unstarted"
+        );
         // Nor does a 40px arrow icon beside slides that are all hidden.
         d.set_rect(carousel, 0.0, 0.0, 640.0, 120.0);
         let arrow = hidden_box(&mut d, carousel, "svg", &[], "");
@@ -6598,7 +7635,10 @@ mod tests {
         assert_eq!(m.unstarted_slider_chars, 0.0, "a slide's picture");
         d.set_attr(img, "aria-hidden", "true");
         let m = measure_hidden_text_dom(&d);
-        assert_eq!(m.unstarted_slider_chars, 0.0, "an aria-hidden slide picture");
+        assert_eq!(
+            m.unstarted_slider_chars, 0.0,
+            "an aria-hidden slide picture"
+        );
     }
 
     #[test]
@@ -6612,7 +7652,13 @@ mod tests {
         hidden_box(&mut d, scrubbed, "p", &[], &text("s", 150));
         let failed = hidden_box(&mut d, body, "div", &[("opacity", "0")], &text("f", 60));
         d.set_shown_on_scroll(failed, false);
-        hidden_box(&mut d, body, "div", &[("visibility", "hidden")], &text("u", 40));
+        hidden_box(
+            &mut d,
+            body,
+            "div",
+            &[("visibility", "hidden")],
+            &text("u", 40),
+        );
         // A slider that never started: its box is transparent, and so is
         // every slide of one whose box is not.
         let dead = hidden_box(&mut d, body, "div", &[("opacity", "0")], "");
@@ -6621,8 +7667,20 @@ mod tests {
         let rev = hidden_box(&mut d, body, "div", &[], "");
         d.set_attr(rev, "class", "rev_slider");
         let list = hidden_box(&mut d, rev, "ul", &[], "");
-        hidden_box(&mut d, list, "li", &[("visibility", "hidden")], &text("b", 30));
-        hidden_box(&mut d, list, "li", &[("visibility", "hidden")], &text("c", 30));
+        hidden_box(
+            &mut d,
+            list,
+            "li",
+            &[("visibility", "hidden")],
+            &text("b", 30),
+        );
+        hidden_box(
+            &mut d,
+            list,
+            "li",
+            &[("visibility", "hidden")],
+            &text("c", 30),
+        );
         // A slider showing its current slide: the waiting slides are not the
         // slider, though their class names it.
         let live = hidden_box(&mut d, body, "div", &[], "");
@@ -6635,10 +7693,20 @@ mod tests {
         let m = measure_hidden_text_dom(&d);
         assert_eq!(
             (m.total_chars, m.hidden_chars, m.unstarted_slider_chars),
-            (100.0 + 150.0 + 60.0 + 40.0 + 40.0, 60.0 + 40.0 + 20.0, 110.0)
+            (
+                100.0 + 150.0 + 60.0 + 40.0 + 40.0,
+                60.0 + 40.0 + 20.0,
+                110.0
+            )
         );
-        assert_eq!(m.hidden_samples, vec![text("f", 40), text("u", 40), text("e", 20)]);
-        assert_eq!(m.unstarted_slider_samples, vec![text("a", 40), text("b", 30), text("c", 30)]);
+        assert_eq!(
+            m.hidden_samples,
+            vec![text("f", 40), text("u", 40), text("e", 20)]
+        );
+        assert_eq!(
+            m.unstarted_slider_samples,
+            vec![text("a", 40), text("b", 30), text("c", 30)]
+        );
 
         // An outer section revealed on scroll, holding a child that stays at
         // opacity 0: the child's text stays hidden until the probe says it
@@ -6651,7 +7719,11 @@ mod tests {
         let stuck = hidden_box(&mut d, section, "div", &[("opacity", "0")], &text("k", 150));
         mark_body_descendants(&mut d);
         let m = measure_hidden_text_dom(&d);
-        assert_eq!((m.total_chars, m.hidden_chars), (310.0, 150.0), "the inner box was not asked about");
+        assert_eq!(
+            (m.total_chars, m.hidden_chars),
+            (310.0, 150.0),
+            "the inner box was not asked about"
+        );
         d.set_shown_on_scroll(stuck, false);
         let m = measure_hidden_text_dom(&d);
         assert_eq!((m.total_chars, m.hidden_chars), (310.0, 150.0));
@@ -6667,7 +7739,13 @@ mod tests {
         hidden_box(&mut d, body, "p", &[], &text("v", 100));
         let section = hidden_box(&mut d, body, "section", &[("opacity", "0")], &text("s", 60));
         d.set_shown_on_scroll(section, true);
-        hidden_box(&mut d, section, "div", &[("visibility", "hidden")], &text("k", 150));
+        hidden_box(
+            &mut d,
+            section,
+            "div",
+            &[("visibility", "hidden")],
+            &text("k", 150),
+        );
         mark_body_descendants(&mut d);
         let m = measure_hidden_text_dom(&d);
         assert_eq!((m.total_chars, m.hidden_chars), (310.0, 150.0));
@@ -6680,7 +7758,13 @@ mod tests {
         let section = hidden_box(&mut d, body, "section", &[("opacity", "0")], &text("s", 60));
         d.set_shown_on_scroll(section, true);
         let wrap = hidden_box(&mut d, section, "div", &[("visibility", "hidden")], "");
-        hidden_box(&mut d, wrap, "p", &[("visibility", "visible")], &text("k", 150));
+        hidden_box(
+            &mut d,
+            wrap,
+            "p",
+            &[("visibility", "visible")],
+            &text("k", 150),
+        );
         mark_body_descendants(&mut d);
         let m = measure_hidden_text_dom(&d);
         assert_eq!((m.total_chars, m.hidden_chars), (310.0, 0.0));
@@ -6699,13 +7783,40 @@ mod tests {
     #[test]
     fn closed_container_class_words() {
         for token in [
-            "offcanvas", "offcanvas-start", "off-canvas", "nav-drawer", "megamenu", "mega-menu", "megaMenu",
-            "sub-menu", "globalnav-submenu", "user-item-dropdown-popover", "globalnav-flyout", "modal",
-            "sp-tab-content", "tab-pane", "Tabs_panel__x1", "tabpanel", "accordion-body", "accordion__content",
+            "offcanvas",
+            "offcanvas-start",
+            "off-canvas",
+            "nav-drawer",
+            "megamenu",
+            "mega-menu",
+            "megaMenu",
+            "sub-menu",
+            "globalnav-submenu",
+            "user-item-dropdown-popover",
+            "globalnav-flyout",
+            "modal",
+            "sp-tab-content",
+            "tab-pane",
+            "Tabs_panel__x1",
+            "tabpanel",
+            "accordion-body",
+            "accordion__content",
         ] {
             assert!(closed_container_class(token), "{token}");
         }
-        for token in ["menu", "menu-section", "tab", "tabs", "content", "table-content", "panel", "accordion", "reveal", "framer-11o8is2", "submenus-list-x"] {
+        for token in [
+            "menu",
+            "menu-section",
+            "tab",
+            "tabs",
+            "content",
+            "table-content",
+            "panel",
+            "accordion",
+            "reveal",
+            "framer-11o8is2",
+            "submenus-list-x",
+        ] {
             assert!(!closed_container_class(token), "{token}");
         }
     }
@@ -6751,11 +7862,17 @@ mod tests {
         setup_scroller(&mut d, rail, "auto", "auto");
         let lone = card(&mut d, rail, 80.0);
         d.set_rect(lone, 80.0, 40.0, 308.0, 120.0);
-        assert!(check_edge_flush_cards_dom(&d).is_empty(), "one box is not a row");
+        assert!(
+            check_edge_flush_cards_dom(&d).is_empty(),
+            "one box is not a row"
+        );
         // Two boxes stacked in a column are not a row either.
         let below = card(&mut d, rail, 80.0);
         d.set_rect(below, 80.0, 180.0, 308.0, 120.0);
-        assert!(check_edge_flush_cards_dom(&d).is_empty(), "a column is not a row");
+        assert!(
+            check_edge_flush_cards_dom(&d).is_empty(),
+            "a column is not a row"
+        );
         // A second box beside them makes the row.
         card(&mut d, rail, 400.0);
         assert_eq!(check_edge_flush_cards_dom(&d).len(), 1);
@@ -6780,9 +7897,20 @@ mod tests {
         }
         let card = d.add(Some(sc), "article");
         d.set_attr(card, "class", "card");
-        d.set_styles(card, &[("overflowX", "visible"), ("overflow", "visible"), ("backgroundColor", "rgb(255, 255, 255)"), ("borderTopWidth", "0px"), ("borderRightWidth", "0px"), ("borderBottomWidth", "0px"), ("borderLeftWidth", "0px")]);
+        d.set_styles(
+            card,
+            &[
+                ("overflowX", "visible"),
+                ("overflow", "visible"),
+                ("backgroundColor", "rgb(255, 255, 255)"),
+                ("borderTopWidth", "0px"),
+                ("borderRightWidth", "0px"),
+                ("borderBottomWidth", "0px"),
+                ("borderLeftWidth", "0px"),
+            ],
+        );
         d.set_rect(card, 24.0, 110.0, 574.0, 150.0); // right edge at 598 → gap 2
-        // The next card in the row, past the clip edge.
+                                                     // The next card in the row, past the clip edge.
         let next = d.add(Some(sc), "article");
         d.set_styles(next, &[("backgroundColor", "rgb(255, 255, 255)")]);
         d.set_rect(next, 614.0, 110.0, 574.0, 150.0);
@@ -6811,7 +7939,15 @@ mod tests {
         d.set_style(next, "display", "block");
         let table = d.add(Some(body), "table");
         // A painted table draws the edge its cells touch.
-        d.set_styles(table, &[("overflowX", "auto"), ("overflow", "auto"), ("display", "block"), ("backgroundColor", "rgb(255, 255, 255)")]);
+        d.set_styles(
+            table,
+            &[
+                ("overflowX", "auto"),
+                ("overflow", "auto"),
+                ("display", "block"),
+                ("backgroundColor", "rgb(255, 255, 255)"),
+            ],
+        );
         d.set_rect(table, 24.0, 400.0, 342.0, 300.0);
         {
             let e = d.el_mut(table);
@@ -6824,7 +7960,12 @@ mod tests {
             d.set_rect(th, x, 400.0, 200.0, 48.0);
             d.add_text(th, &format!("Column {i}"));
         }
-        assert!(check_edge_flush_cards_dom(&d).iter().all(|f| f.el != Some(table)), "table headers");
+        assert!(
+            check_edge_flush_cards_dom(&d)
+                .iter()
+                .all(|f| f.el != Some(table)),
+            "table headers"
+        );
     }
 
     /// observations-1004 row 28 (w3c.github.io 10046208): a column that
@@ -6838,9 +7979,20 @@ mod tests {
             let grid = d.add(Some(body), "div");
             d.set_styles(grid, &[("display", "grid")]);
             d.set_rect(grid, 0.0, 0.0, 1280.0, 1600.0);
-            let block = |d: &mut FakeDom, parent: ElId, tag: &str, rect: (f64, f64, f64, f64), text: &str| {
+            let block = |d: &mut FakeDom,
+                         parent: ElId,
+                         tag: &str,
+                         rect: (f64, f64, f64, f64),
+                         text: &str| {
                 let e = d.add(Some(parent), tag);
-                d.set_styles(e, &[("display", "block"), ("position", "static"), ("visibility", "visible")]);
+                d.set_styles(
+                    e,
+                    &[
+                        ("display", "block"),
+                        ("position", "static"),
+                        ("visibility", "visible"),
+                    ],
+                );
                 d.set_rect(e, rect.0, rect.1, rect.2, rect.3);
                 if !text.is_empty() {
                     d.add_text(e, text);
@@ -6848,20 +8000,48 @@ mod tests {
                 e
             };
             let article = block(&mut d, grid, "article", (0.0, 0.0, 860.0, 1600.0), "");
-            block(&mut d, article, "p", (0.0, 0.0, 860.0, 1580.0), "A long guidebook article.");
+            block(
+                &mut d,
+                article,
+                "p",
+                (0.0, 0.0, 860.0, 1580.0),
+                "A long guidebook article.",
+            );
             let section = block(&mut d, grid, "section", (900.0, 0.0, 380.0, 1600.0), "");
-            let related = block(&mut d, section, "div", (900.0, 0.0, 380.0, 200.0), wrap_text.unwrap_or(""));
+            let related = block(
+                &mut d,
+                section,
+                "div",
+                (900.0, 0.0, 380.0, 200.0),
+                wrap_text.unwrap_or(""),
+            );
             let rail = block(&mut d, related, rail_tag, (900.0, 0.0, 380.0, 200.0), "");
-            block(&mut d, rail, "h2", (900.0, 0.0, 380.0, 30.0), "Related content");
+            block(
+                &mut d,
+                rail,
+                "h2",
+                (900.0, 0.0, 380.0, 30.0),
+                "Related content",
+            );
             for (i, label) in ["GitHub repositories", "Working groups"].iter().enumerate() {
-                block(&mut d, rail, "a", (900.0, 40.0 + 30.0 * i as f64, 380.0, 24.0), label);
+                block(
+                    &mut d,
+                    rail,
+                    "a",
+                    (900.0, 40.0 + 30.0 * i as f64, 380.0, 24.0),
+                    label,
+                );
             }
             mark_body_descendants(&mut d);
             check_first_viewport_column_overflow_dom(&d).len()
         };
         assert_eq!(build(None, "nav"), 0, "a rail in a wrapper");
         assert_eq!(build(None, "div"), 1, "a short column of copy");
-        assert_eq!(build(Some("Text of the wrapper's own"), "nav"), 1, "a wrapper with copy of its own");
+        assert_eq!(
+            build(Some("Text of the wrapper's own"), "nav"),
+            1,
+            "a wrapper with copy of its own"
+        );
     }
 
     /// observations-1004 row 28 (munsifdaily.in 10046628, imageto3d.studio
@@ -6938,7 +8118,11 @@ mod tests {
             }
             check_edge_flush_cards_dom(&d).len()
         };
-        assert_eq!(in_panel(15.0), 1, "the panel's border sits at the clip edge");
+        assert_eq!(
+            in_panel(15.0),
+            1,
+            "the panel's border sits at the clip edge"
+        );
         assert_eq!(in_panel(4.0), 0, "the panel's border sits 12px out");
         // A shadow-only or gradient panel draws its edge too, and so does a
         // scroller's own shadow.
@@ -6965,10 +8149,30 @@ mod tests {
             check_edge_flush_cards_dom(&d).len()
         };
         let shadow = "rgba(0, 0, 0, 0.12) 0px 4px 16px 0px";
-        assert_eq!(drawn_by(false, "boxShadow", shadow), 1, "a shadow-only panel");
-        assert_eq!(drawn_by(false, "backgroundImage", "linear-gradient(rgb(250, 250, 250), rgb(240, 240, 240))"), 1, "a gradient panel");
-        assert_eq!(drawn_by(true, "boxShadow", shadow), 1, "the scroller's own shadow");
-        assert_eq!(drawn_by(false, "boxShadow", "none"), 0, "an unpainted panel");
+        assert_eq!(
+            drawn_by(false, "boxShadow", shadow),
+            1,
+            "a shadow-only panel"
+        );
+        assert_eq!(
+            drawn_by(
+                false,
+                "backgroundImage",
+                "linear-gradient(rgb(250, 250, 250), rgb(240, 240, 240))"
+            ),
+            1,
+            "a gradient panel"
+        );
+        assert_eq!(
+            drawn_by(true, "boxShadow", shadow),
+            1,
+            "the scroller's own shadow"
+        );
+        assert_eq!(
+            drawn_by(false, "boxShadow", "none"),
+            0,
+            "an unpainted panel"
+        );
         // A transparent border draws nothing, on the panel or the scroller.
         let transparent_border = |on_scroller: bool| {
             let mut d = FakeDom::new();
@@ -7020,24 +8224,52 @@ mod tests {
             d.set_styles(card, &[("backgroundColor", "rgb(255, 255, 255)")]);
             d.set_rect(card, x, 110.0, 360.0, 150.0);
         }
-        assert_eq!(check_edge_flush_cards_dom(&d).len(), 1, "90px in: not the page's gutter");
+        assert_eq!(
+            check_edge_flush_cards_dom(&d).len(),
+            1,
+            "90px in: not the page's gutter"
+        );
     }
 
     #[test]
     fn text_occlusion_box_and_inline_leak() {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
-        let base = &[("display", "block"), ("visibility", "visible"), ("opacity", "1"), ("contentVisibility", "visible"), ("position", "static"), ("cssFloat", "none"), ("animationName", "none")][..];
+        let base = &[
+            ("display", "block"),
+            ("visibility", "visible"),
+            ("opacity", "1"),
+            ("contentVisibility", "visible"),
+            ("position", "static"),
+            ("cssFloat", "none"),
+            ("animationName", "none"),
+        ][..];
         let txt = d.add(Some(body), "p");
         d.set_attr(txt, "class", "victim");
         d.add_text(txt, "Readable headline");
         d.set_styles(txt, base);
-        d.set_styles(txt, &[("fontSize", "16px"), ("overflow", "visible"), ("overflowX", "visible"), ("overflowY", "visible"), ("clip", "auto"), ("clipPath", "none")]);
+        d.set_styles(
+            txt,
+            &[
+                ("fontSize", "16px"),
+                ("overflow", "visible"),
+                ("overflowX", "visible"),
+                ("overflowY", "visible"),
+                ("clip", "auto"),
+                ("clipPath", "none"),
+            ],
+        );
         d.set_rect(txt, 100.0, 100.0, 240.0, 28.0);
         let boxel = d.add(Some(body), "div");
         d.set_attr(boxel, "class", "cover");
         d.set_styles(boxel, base);
-        d.set_styles(boxel, &[("position", "absolute"), ("backgroundColor", "rgb(20, 20, 20)")]);
+        d.set_styles(
+            boxel,
+            &[
+                ("position", "absolute"),
+                ("backgroundColor", "rgb(20, 20, 20)"),
+            ],
+        );
         d.set_rect(boxel, 100.0, 100.0, 240.0, 28.0);
         // FakeDom's elementsFromPoint returns the last element in document
         // order whose rect contains the point → the box.
@@ -7063,7 +8295,17 @@ mod tests {
         let leak = d.add(Some(wrap), "span");
         d.set_attr(leak, "class", "marker");
         d.set_styles(leak, base);
-        d.set_styles(leak, &[("display", "inline"), ("backgroundColor", "rgb(255, 0, 0)"), ("paddingTop", "20px"), ("paddingBottom", "20px"), ("fontSize", "16px"), ("lineHeight", "20px")]);
+        d.set_styles(
+            leak,
+            &[
+                ("display", "inline"),
+                ("backgroundColor", "rgb(255, 0, 0)"),
+                ("paddingTop", "20px"),
+                ("paddingBottom", "20px"),
+                ("fontSize", "16px"),
+                ("lineHeight", "20px"),
+            ],
+        );
         d.set_rect(leak, 10.0, 10.0, 40.0, 60.0);
         let sib = d.add(Some(wrap), "p");
         d.add_text(sib, "neighbour");
@@ -7090,36 +8332,88 @@ mod tests {
     /// ink a parent's `background-clip: text` paints.
     #[test]
     fn text_occlusion_skips_a_victim_that_paints_no_glyphs() {
-        let base = &[("display", "block"), ("visibility", "visible"), ("opacity", "1"), ("contentVisibility", "visible"), ("position", "static"), ("cssFloat", "none"), ("animationName", "none")][..];
+        let base = &[
+            ("display", "block"),
+            ("visibility", "visible"),
+            ("opacity", "1"),
+            ("contentVisibility", "visible"),
+            ("position", "static"),
+            ("cssFloat", "none"),
+            ("animationName", "none"),
+        ][..];
         let run = |victim_styles: &[(&str, &str)], parent_clip: &str| {
             let mut d = FakeDom::new();
             let (_h, body) = d.with_page();
             let wrap = d.add(Some(body), "div");
             d.set_styles(wrap, base);
-            d.set_styles(wrap, &[("backgroundClip", parent_clip), ("webkitBackgroundClip", parent_clip)]);
+            d.set_styles(
+                wrap,
+                &[
+                    ("backgroundClip", parent_clip),
+                    ("webkitBackgroundClip", parent_clip),
+                ],
+            );
             d.set_rect(wrap, 0.0, 0.0, 600.0, 400.0);
             let txt = d.add(Some(wrap), "div");
             d.add_text(txt, "fn let match ret u32 end");
             d.set_styles(txt, base);
-            d.set_styles(txt, &[("overflow", "visible"), ("overflowX", "visible"), ("overflowY", "visible"), ("clip", "auto"), ("clipPath", "none")]);
+            d.set_styles(
+                txt,
+                &[
+                    ("overflow", "visible"),
+                    ("overflowX", "visible"),
+                    ("overflowY", "visible"),
+                    ("clip", "auto"),
+                    ("clipPath", "none"),
+                ],
+            );
             d.set_styles(txt, victim_styles);
             d.set_rect(txt, 100.0, 100.0, 240.0, 28.0);
             let boxel = d.add(Some(body), "div");
             d.set_styles(boxel, base);
-            d.set_styles(boxel, &[("position", "absolute"), ("backgroundColor", "rgb(20, 20, 20)")]);
+            d.set_styles(
+                boxel,
+                &[
+                    ("position", "absolute"),
+                    ("backgroundColor", "rgb(20, 20, 20)"),
+                ],
+            );
             d.set_rect(boxel, 100.0, 100.0, 240.0, 28.0);
             mark_body_descendants(&mut d);
             check_text_occlusion_dom(&d).len()
         };
         let ink = [("textShadow", "none"), ("webkitTextStrokeWidth", "0px")];
         let clear = |size: &'static str| {
-            vec![("fontSize", size), ("color", "rgba(0, 0, 0, 0)"), ("webkitTextFillColor", "rgba(0, 0, 0, 0)"), ink[0], ink[1]]
+            vec![
+                ("fontSize", size),
+                ("color", "rgba(0, 0, 0, 0)"),
+                ("webkitTextFillColor", "rgba(0, 0, 0, 0)"),
+                ink[0],
+                ink[1],
+            ]
         };
         assert_eq!(run(&clear("0px"), "border-box"), 0);
         assert_eq!(run(&clear("16px"), "border-box"), 0);
-        assert_eq!(run(&[("fontSize", "0.5px"), ("color", "rgb(10, 10, 10)")], "border-box"), 0);
+        assert_eq!(
+            run(
+                &[("fontSize", "0.5px"), ("color", "rgb(10, 10, 10)")],
+                "border-box"
+            ),
+            0
+        );
         // Should-flag twins.
-        assert_eq!(run(&[("fontSize", "16px"), ("color", "rgb(10, 10, 10)"), ink[0], ink[1]], "border-box"), 1);
+        assert_eq!(
+            run(
+                &[
+                    ("fontSize", "16px"),
+                    ("color", "rgb(10, 10, 10)"),
+                    ink[0],
+                    ink[1]
+                ],
+                "border-box"
+            ),
+            1
+        );
         let mut stroked = clear("16px");
         stroked.push(("webkitTextStrokeWidth", "1px"));
         assert_eq!(run(&stroked, "border-box"), 1);
@@ -7129,7 +8423,16 @@ mod tests {
         assert_eq!(run(&clear("16px"), "text"), 1);
         // Set at 1px and drawn at 16px by a transform: readable letters.
         assert_eq!(
-            run(&[("fontSize", "1px"), ("color", "rgb(10, 10, 10)"), ("transform", "matrix(16, 0, 0, 16, 0, 0)"), ink[0], ink[1]], "border-box"),
+            run(
+                &[
+                    ("fontSize", "1px"),
+                    ("color", "rgb(10, 10, 10)"),
+                    ("transform", "matrix(16, 0, 0, 16, 0, 0)"),
+                    ink[0],
+                    ink[1]
+                ],
+                "border-box"
+            ),
             1
         );
         // A glitch heading that clears its ink and draws the words with
@@ -7140,13 +8443,28 @@ mod tests {
             let txt = d.add(Some(body), "h2");
             d.add_text(txt, "Glitch heading");
             d.set_styles(txt, base);
-            d.set_styles(txt, &[("overflow", "visible"), ("overflowX", "visible"), ("overflowY", "visible"), ("clip", "auto"), ("clipPath", "none")]);
+            d.set_styles(
+                txt,
+                &[
+                    ("overflow", "visible"),
+                    ("overflowX", "visible"),
+                    ("overflowY", "visible"),
+                    ("clip", "auto"),
+                    ("clipPath", "none"),
+                ],
+            );
             d.set_styles(txt, &clear("16px"));
             d.set_pseudo_style(txt, "::before", "content", content);
             d.set_rect(txt, 100.0, 100.0, 240.0, 28.0);
             let boxel = d.add(Some(body), "div");
             d.set_styles(boxel, base);
-            d.set_styles(boxel, &[("position", "absolute"), ("backgroundColor", "rgb(20, 20, 20)")]);
+            d.set_styles(
+                boxel,
+                &[
+                    ("position", "absolute"),
+                    ("backgroundColor", "rgb(20, 20, 20)"),
+                ],
+            );
             d.set_rect(boxel, 100.0, 100.0, 240.0, 28.0);
             mark_body_descendants(&mut d);
             check_text_occlusion_dom(&d).len()
@@ -7156,7 +8474,13 @@ mod tests {
         assert_eq!(glitch("none"), 0);
         // A fill the capture did not record leaves `color` to decide; ink
         // properties it did not record keep the victim.
-        assert_eq!(run(&[("fontSize", "16px"), ("color", "rgba(0, 0, 0, 0)")], "border-box"), 1);
+        assert_eq!(
+            run(
+                &[("fontSize", "16px"), ("color", "rgba(0, 0, 0, 0)")],
+                "border-box"
+            ),
+            1
+        );
     }
 
     /// Decision r8-t2-occlusion-stacked-mockup (advisory): covered text in a
@@ -7167,7 +8491,15 @@ mod tests {
         let build = |tag: &str, frame: &dyn Fn(&mut FakeDom, ElId)| {
             let mut d = FakeDom::new();
             let (_h, body) = d.with_page();
-            let base = &[("display", "block"), ("visibility", "visible"), ("opacity", "1"), ("contentVisibility", "visible"), ("position", "static"), ("cssFloat", "none"), ("animationName", "none")][..];
+            let base = &[
+                ("display", "block"),
+                ("visibility", "visible"),
+                ("opacity", "1"),
+                ("contentVisibility", "visible"),
+                ("position", "static"),
+                ("cssFloat", "none"),
+                ("animationName", "none"),
+            ][..];
             let deck = d.add(Some(body), "div");
             d.set_styles(deck, base);
             d.set_rect(deck, 0.0, 0.0, 600.0, 400.0);
@@ -7178,11 +8510,27 @@ mod tests {
             let txt = d.add(Some(card), tag);
             d.add_text(txt, "Needs attention");
             d.set_styles(txt, base);
-            d.set_styles(txt, &[("fontSize", "16px"), ("overflow", "visible"), ("overflowX", "visible"), ("overflowY", "visible"), ("clip", "auto"), ("clipPath", "none")]);
+            d.set_styles(
+                txt,
+                &[
+                    ("fontSize", "16px"),
+                    ("overflow", "visible"),
+                    ("overflowX", "visible"),
+                    ("overflowY", "visible"),
+                    ("clip", "auto"),
+                    ("clipPath", "none"),
+                ],
+            );
             d.set_rect(txt, 100.0, 100.0, 240.0, 28.0);
             let front = d.add(Some(deck), "div");
             d.set_styles(front, base);
-            d.set_styles(front, &[("position", "absolute"), ("backgroundColor", "rgb(20, 20, 20)")]);
+            d.set_styles(
+                front,
+                &[
+                    ("position", "absolute"),
+                    ("backgroundColor", "rgb(20, 20, 20)"),
+                ],
+            );
             d.set_rect(front, 100.0, 100.0, 240.0, 28.0);
             mark_body_descendants(&mut d);
             let f = check_text_occlusion_dom(&d);
@@ -7195,25 +8543,53 @@ mod tests {
         };
         let advisory = Some(crate::checks::rules::ADVISORY_SEVERITY.to_string());
         assert_eq!(build("p", &|_, _| {}), None, "covered page text");
-        assert_eq!(build("p", &tilted), advisory, "covered in a tilted device frame");
+        assert_eq!(
+            build("p", &tilted),
+            advisory,
+            "covered in a tilted device frame"
+        );
         assert_eq!(build("button", &tilted), None, "a control in the mockup");
         // The picture path has no control guard of its own.
-        let picture = |d: &mut FakeDom, card: ElId| { d.set_attr(card, "role", "img"); };
-        assert_eq!(build("p", &picture), advisory, "covered in a subtree marked as a picture");
+        let picture = |d: &mut FakeDom, card: ElId| {
+            d.set_attr(card, "role", "img");
+        };
+        assert_eq!(
+            build("p", &picture),
+            advisory,
+            "covered in a subtree marked as a picture"
+        );
         assert_eq!(build("button", &picture), None, "a control in a picture");
 
         // An inline box whose fill leaks onto its neighbour is what covers,
         // not what is covered: in a mockup it keeps its severity.
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
-        let base = &[("display", "block"), ("visibility", "visible"), ("opacity", "1"), ("contentVisibility", "visible"), ("position", "static"), ("cssFloat", "none"), ("animationName", "none")][..];
+        let base = &[
+            ("display", "block"),
+            ("visibility", "visible"),
+            ("opacity", "1"),
+            ("contentVisibility", "visible"),
+            ("position", "static"),
+            ("cssFloat", "none"),
+            ("animationName", "none"),
+        ][..];
         let wrap = d.add(Some(body), "div");
         d.set_styles(wrap, base);
         d.set_style(wrap, "transform", "perspective(900px) rotateX(8deg)");
         d.set_rect(wrap, 0.0, 0.0, 400.0, 200.0);
         let leak = d.add(Some(wrap), "span");
         d.set_styles(leak, base);
-        d.set_styles(leak, &[("display", "inline"), ("backgroundColor", "rgb(255, 0, 0)"), ("paddingTop", "20px"), ("paddingBottom", "20px"), ("fontSize", "16px"), ("lineHeight", "20px")]);
+        d.set_styles(
+            leak,
+            &[
+                ("display", "inline"),
+                ("backgroundColor", "rgb(255, 0, 0)"),
+                ("paddingTop", "20px"),
+                ("paddingBottom", "20px"),
+                ("fontSize", "16px"),
+                ("lineHeight", "20px"),
+            ],
+        );
         d.set_rect(leak, 10.0, 10.0, 40.0, 60.0);
         let sib = d.add(Some(wrap), "p");
         d.add_text(sib, "neighbour");
@@ -7252,7 +8628,14 @@ mod tests {
             ],
         );
         d.set_rect(btn, 100.0, 88.0, 600.0, 50.0);
-        d.set_text_lines(btn, &[(110.0, 105.0, 40.0, 16.0), (330.0, 105.0, 50.0, 16.0), (560.0, 105.0, 55.0, 16.0)]);
+        d.set_text_lines(
+            btn,
+            &[
+                (110.0, 105.0, 40.0, 16.0),
+                (330.0, 105.0, 50.0, 16.0),
+                (560.0, 105.0, 55.0, 16.0),
+            ],
+        );
         let sib = d.add(Some(wrap), "p");
         d.add_text(sib, "The paragraph under the link's line.");
         d.set_attr(sib, "class", "next");
@@ -7262,12 +8645,33 @@ mod tests {
         let f = check_text_occlusion_dom(&d);
         let leak: Vec<_> = f.iter().filter(|f| f.el == Some(btn)).collect();
         assert_eq!(leak.len(), 1, "{f:?}");
-        assert!(leak[0].finding.detail.contains("leaks 30px past its line onto"), "{:?}", leak[0].finding.detail);
+        assert!(
+            leak[0]
+                .finding
+                .detail
+                .contains("leaks 30px past its line onto"),
+            "{:?}",
+            leak[0].finding.detail
+        );
         // Two rows of runs are two lines: 50 less 40 leaves 10px.
-        d.set_text_lines(btn, &[(110.0, 95.0, 40.0, 16.0), (330.0, 95.0, 50.0, 16.0), (110.0, 115.0, 55.0, 16.0)]);
+        d.set_text_lines(
+            btn,
+            &[
+                (110.0, 95.0, 40.0, 16.0),
+                (330.0, 95.0, 50.0, 16.0),
+                (110.0, 115.0, 55.0, 16.0),
+            ],
+        );
         let f = check_text_occlusion_dom(&d);
         let leak: Vec<_> = f.iter().filter(|f| f.el == Some(btn)).collect();
-        assert!(leak[0].finding.detail.contains("leaks 10px past its line onto"), "{:?}", leak[0].finding.detail);
+        assert!(
+            leak[0]
+                .finding
+                .detail
+                .contains("leaks 10px past its line onto"),
+            "{:?}",
+            leak[0].finding.detail
+        );
     }
 
     const PROBE_BASE: &[(&str, &str)] = &[
@@ -7295,12 +8699,24 @@ mod tests {
             d.set_rect(field, 12.0, 104.0, 228.0, 58.0);
             let label = d.add(Some(field), "label");
             d.set_styles(label, PROBE_BASE);
-            d.set_styles(label, &[("position", "absolute"), ("pointerEvents", pointer_events)]);
+            d.set_styles(
+                label,
+                &[("position", "absolute"), ("pointerEvents", pointer_events)],
+            );
             d.set_rect(label, 24.0, 112.0, 120.0, 20.0);
             d.add_text(label, "Emailadresse");
-            let input = d.add(Some(field), if input_text.is_some() { "div" } else { "input" });
+            let input = d.add(
+                Some(field),
+                if input_text.is_some() { "div" } else { "input" },
+            );
             d.set_styles(input, PROBE_BASE);
-            d.set_styles(input, &[("position", "absolute"), ("backgroundColor", "rgb(255, 255, 255)")]);
+            d.set_styles(
+                input,
+                &[
+                    ("position", "absolute"),
+                    ("backgroundColor", "rgb(255, 255, 255)"),
+                ],
+            );
             d.set_rect(input, 12.0, 104.0, 228.0, 58.0);
             if let Some(t) = input_text {
                 d.add_text(input, t);
@@ -7336,7 +8752,14 @@ mod tests {
             d.inner_height = 844.0;
             let footer = d.add(Some(body), "footer");
             d.set_styles(footer, PROBE_BASE);
-            d.set_styles(footer, &[("position", "sticky"), ("zIndex", z), ("backgroundColor", "rgb(43, 70, 249)")]);
+            d.set_styles(
+                footer,
+                &[
+                    ("position", "sticky"),
+                    ("zIndex", z),
+                    ("backgroundColor", "rgb(43, 70, 249)"),
+                ],
+            );
             d.set_styles(footer, &[("top", top), ("bottom", bottom)]);
             d.set_rect(footer, 0.0, 90.0, 390.0, 754.0);
             let privacy = d.add(Some(footer), "a");
@@ -7349,11 +8772,25 @@ mod tests {
             d.add_text(terms, "Terms");
             let main = d.add(Some(body), "main");
             d.set_styles(main, PROBE_BASE);
-            d.set_styles(main, &[("position", "relative"), ("zIndex", "1"), ("backgroundColor", page_fill), ("opacity", page_opacity)]);
+            d.set_styles(
+                main,
+                &[
+                    ("position", "relative"),
+                    ("zIndex", "1"),
+                    ("backgroundColor", page_fill),
+                    ("opacity", page_opacity),
+                ],
+            );
             d.set_styles(main, page_extra);
             // The page covers the whole footer, or stops short of its last
             // row, which then shows.
-            d.set_rect(main, 0.0, 0.0, 390.0, if footer_shows { 780.0 } else { 13087.0 });
+            d.set_rect(
+                main,
+                0.0,
+                0.0,
+                390.0,
+                if footer_shows { 780.0 } else { 13087.0 },
+            );
             let h2 = d.add(Some(main), "h2");
             d.set_styles(h2, PROBE_BASE);
             d.set_rect(h2, 16.0, 690.0, 358.0, 40.0);
@@ -7367,7 +8804,13 @@ mod tests {
             // it overhangs nothing a reader sees.
             let card = d.add(Some(main), "article");
             d.set_styles(card, PROBE_BASE);
-            d.set_styles(card, &[("backgroundColor", "rgb(255, 255, 255)"), ("borderTopWidth", "1px")]);
+            d.set_styles(
+                card,
+                &[
+                    ("backgroundColor", "rgb(255, 255, 255)"),
+                    ("borderTopWidth", "1px"),
+                ],
+            );
             d.set_rect(card, 200.0, 300.0, 170.0, 120.0);
             let mark = d.add(Some(footer), "span");
             d.set_styles(mark, PROBE_BASE);
@@ -7378,16 +8821,26 @@ mod tests {
             check_text_occlusion_dom(&d)
                 .into_iter()
                 .map(|f| f.finding.detail)
-                .filter(|s| s.contains("\"Privacy\"") || s.contains("\"Terms\"") || s.contains("\"Latent\""))
+                .filter(|s| {
+                    s.contains("\"Privacy\"") || s.contains("\"Terms\"") || s.contains("\"Latent\"")
+                })
                 .collect::<Vec<_>>()
         };
-        let run_full = |z: &str, page_fill: &str, footer_shows: bool, top: &str, bottom: &str, page_opacity: &str| {
+        let run_full = |z: &str,
+                        page_fill: &str,
+                        footer_shows: bool,
+                        top: &str,
+                        bottom: &str,
+                        page_opacity: &str| {
             run_with(z, page_fill, footer_shows, top, bottom, page_opacity, &[])
         };
-        let run_anchored = |z: &str, page_fill: &str, footer_shows: bool, top: &str, bottom: &str| {
-            run_full(z, page_fill, footer_shows, top, bottom, "1")
+        let run_anchored =
+            |z: &str, page_fill: &str, footer_shows: bool, top: &str, bottom: &str| {
+                run_full(z, page_fill, footer_shows, top, bottom, "1")
+            };
+        let run = |z: &str, page_fill: &str, footer_shows: bool| {
+            run_anchored(z, page_fill, footer_shows, "auto", "0px")
         };
-        let run = |z: &str, page_fill: &str, footer_shows: bool| run_anchored(z, page_fill, footer_shows, "auto", "0px");
         // Both links: one under the page's heading, one under its fill;
         // and the wordmark, under the card.
         let base = run("auto", "rgb(10, 11, 16)", false);
@@ -7399,7 +8852,10 @@ mod tests {
         // The same layer pinned to the top (a header at `z-index: 0` that
         // the page lays over) is buried for good, not uncovered by scrolling:
         // its words collide. So does one whose anchoring was not recorded.
-        assert_eq!(run_anchored("0", "rgb(10, 11, 16)", false, "0px", "auto").len(), 3);
+        assert_eq!(
+            run_anchored("0", "rgb(10, 11, 16)", false, "0px", "auto").len(),
+            3
+        );
         assert_eq!(run_anchored("0", "rgb(10, 11, 16)", false, "", "").len(), 3);
         // A page block caught part way into its fade-in buries nothing: the
         // footer shows through it.
@@ -7421,8 +8877,14 @@ mod tests {
             ("backgroundClip", "content-box"),
         ] {
             let seen = run_with("0", "rgb(10, 11, 16)", false, "auto", "0px", "1", &[extra]);
-            assert!(seen.iter().any(|s| s.contains("\"Privacy\"")), "{extra:?}: {seen:?}");
-            assert!(seen.iter().any(|s| s.contains("\"Latent\"")), "{extra:?}: {seen:?}");
+            assert!(
+                seen.iter().any(|s| s.contains("\"Privacy\"")),
+                "{extra:?}: {seen:?}"
+            );
+            assert!(
+                seen.iter().any(|s| s.contains("\"Latent\"")),
+                "{extra:?}: {seen:?}"
+            );
         }
         // Where one of its links shows, the footer is on screen, and what
         // the page lies on is covered: the link under its heading, the
@@ -7430,7 +8892,10 @@ mod tests {
         let shows = run("0", "rgb(10, 11, 16)", true);
         assert_eq!(shows.len(), 2, "{shows:?}");
         assert!(shows[0].contains("\"Privacy\""), "{shows:?}");
-        assert!(shows[1].contains("\"Latent\" is 100% covered by an opaque element (main)"), "{shows:?}");
+        assert!(
+            shows[1].contains("\"Latent\" is 100% covered by an opaque element (main)"),
+            "{shows:?}"
+        );
     }
 
     /// boardlab.dev (10047349): the canvas hint panel is `pointer-events:
@@ -7448,7 +8913,10 @@ mod tests {
             d.set_rect(canvas, 589.0, 148.0, 496.0, 651.0);
             let panel = d.add(Some(canvas), "div");
             d.set_styles(panel, PROBE_BASE);
-            d.set_styles(panel, &[("position", "absolute"), ("pointerEvents", pointer_events)]);
+            d.set_styles(
+                panel,
+                &[("position", "absolute"), ("pointerEvents", pointer_events)],
+            );
             d.set_rect(panel, 601.0, 160.0, 240.0, 120.0);
             let label = d.add(Some(panel), "p");
             d.set_styles(label, PROBE_BASE);
@@ -7499,7 +8967,14 @@ mod tests {
             d.add_text(topic, "Faits divers");
             let link = d.add(Some(overlay), "a");
             d.set_styles(link, PROBE_BASE);
-            d.set_styles(link, &[("position", "absolute"), ("fontSize", font_size), ("scale", scale)]);
+            d.set_styles(
+                link,
+                &[
+                    ("position", "absolute"),
+                    ("fontSize", font_size),
+                    ("scale", scale),
+                ],
+            );
             // The rect the hit test answers for: the overlay's whole card.
             d.set_rect(link, 85.0, 700.0, 665.0, 280.0);
             d.add_text(link, "Messe polémique à Carcassonne");
@@ -7509,7 +8984,9 @@ mod tests {
             mark_body_descendants(&mut d);
             check_text_occlusion_dom(&d)
         };
-        let run = |text_rect: Option<(f64, f64)>, font_size: &str| run_scaled(text_rect, font_size, "none");
+        let run = |text_rect: Option<(f64, f64)>, font_size: &str| {
+            run_scaled(text_rect, font_size, "none")
+        };
         // The title's glyphs sit at y 800; the topic at y 710 is not under them.
         assert!(run(Some((95.0, 800.0)), "16px").is_empty());
         // Glyphs over the topic, and a text rect the capture did not record,
@@ -7556,7 +9033,11 @@ mod tests {
             mark_body_descendants(&mut d);
             check_text_occlusion_dom(&d).len()
         };
-        assert_eq!(run("19", 445.0), 0, "the digits start under the label's ink");
+        assert_eq!(
+            run("19", 445.0),
+            0,
+            "the digits start under the label's ink"
+        );
         // Pulled up until the digits themselves cross the label, it reports.
         assert_eq!(run("19", 425.0), 1);
         // Text that reaches past the Latin band keeps its content area.
@@ -7582,7 +9063,14 @@ mod tests {
         // Several lines with no line rects, an unknown font size and
         // non-Latin text keep the rect.
         assert!(glyph_ink_band(&d, el, &Rect::from_xywh(0.0, 0.0, 60.0, 60.0)).is_none());
-        d.set_text_lines(el, &[(0.0, 0.0, 60.0, 19.0), (0.0, 22.0, 40.0, 19.0), (0.0, 44.0, 50.0, 19.0)]);
+        d.set_text_lines(
+            el,
+            &[
+                (0.0, 0.0, 60.0, 19.0),
+                (0.0, 22.0, 40.0, 19.0),
+                (0.0, 44.0, 50.0, 19.0),
+            ],
+        );
         assert!(glyph_ink_band(&d, el, &Rect::from_xywh(0.0, 0.0, 60.0, 63.0)).is_some());
         d.set_style(el, "fontSize", "");
         assert!(glyph_ink_band(&d, el, &Rect::from_xywh(0.0, 0.0, 60.0, 19.0)).is_none());
@@ -7642,8 +9130,16 @@ mod tests {
             mark_body_descendants(&mut d);
             check_text_occlusion_dom(&d).len()
         };
-        assert_eq!(run("photo"), 0, "a picture between the headline and the label");
-        assert_eq!(run("ancestor"), 0, "the label's own container paints over it");
+        assert_eq!(
+            run("photo"),
+            0,
+            "a picture between the headline and the label"
+        );
+        assert_eq!(
+            run("ancestor"),
+            0,
+            "the label's own container paints over it"
+        );
         assert_eq!(run("none"), 1, "the headline lies on the label itself");
         assert_eq!(run("unlisted"), 1, "a stack that does not place the label");
     }
@@ -7685,7 +9181,12 @@ mod tests {
         // The label's glyphs lie under the heading's.
         let f = run(Some((16.0, 32.0)));
         assert_eq!(f.len(), 1, "{f:?}");
-        assert!(f[0].finding.detail.contains("100% covered by overlapping text"), "{f:?}");
+        assert!(
+            f[0].finding
+                .detail
+                .contains("100% covered by overlapping text"),
+            "{f:?}"
+        );
         // Glyphs clear of the heading's are not covered, however wide the box.
         assert!(run(Some((200.0, 32.0))).is_empty());
         // A label whose glyphs the capture did not record keeps every answer.
@@ -7719,7 +9220,12 @@ mod tests {
         mark_body_descendants(&mut d);
         let f = check_text_occlusion_dom(&d);
         assert_eq!(f.len(), 1, "{f:?}");
-        assert!(f[0].finding.detail.contains("100% covered by overlapping text"), "{f:?}");
+        assert!(
+            f[0].finding
+                .detail
+                .contains("100% covered by overlapping text"),
+            "{f:?}"
+        );
     }
 
     /// cnnbrasil.com.br's react-fast-marquee: the track that moves is the
@@ -7731,7 +9237,10 @@ mod tests {
             let (_h, body) = d.with_page();
             let track = d.add(Some(body), "div");
             d.set_styles(track, PROBE_BASE);
-            d.set_styles(track, &[("position", "absolute"), ("animationName", animation)]);
+            d.set_styles(
+                track,
+                &[("position", "absolute"), ("animationName", animation)],
+            );
             d.set_rect(track, -100.0, 75.0, 2417.0, 16.0);
             let child = d.add(Some(track), "div");
             d.set_styles(child, PROBE_BASE);
@@ -7762,7 +9271,10 @@ mod tests {
             let (_h, body) = d.with_page();
             let wrapper = d.add(Some(body), "div");
             d.set_styles(wrapper, PROBE_BASE);
-            d.set_styles(wrapper, &[("position", "relative"), ("animationName", animation)]);
+            d.set_styles(
+                wrapper,
+                &[("position", "relative"), ("animationName", animation)],
+            );
             d.set_attr(wrapper, "class", class);
             d.set_rect(wrapper, 0.0, 0.0, 1280.0, 800.0);
             let mut parent = wrapper;
@@ -7802,7 +9314,15 @@ mod tests {
         let run = |card_at: (f64, f64)| {
             let mut d = FakeDom::new();
             let (_h, body) = d.with_page();
-            let base = &[("display", "block"), ("visibility", "visible"), ("opacity", "1"), ("contentVisibility", "visible"), ("position", "static"), ("cssFloat", "none"), ("animationName", "none")][..];
+            let base = &[
+                ("display", "block"),
+                ("visibility", "visible"),
+                ("opacity", "1"),
+                ("contentVisibility", "visible"),
+                ("position", "static"),
+                ("cssFloat", "none"),
+                ("animationName", "none"),
+            ][..];
             let track = d.add(Some(body), "div");
             d.set_styles(track, base);
             d.set_rect(track, 0.0, 0.0, 1280.0, 400.0);
@@ -7831,7 +9351,12 @@ mod tests {
         assert!(run((632.0, 84.0)).is_empty(), "{:?}", run((632.0, 84.0)));
         let f = run((96.0, 84.0));
         assert_eq!(f.len(), 1, "{f:?}");
-        assert!(f[0].finding.detail.contains("is 100% covered by an opaque element"), "{f:?}");
+        assert!(
+            f[0].finding
+                .detail
+                .contains("is 100% covered by an opaque element"),
+            "{f:?}"
+        );
     }
 
     const OCCLUSION_BASE: &[(&str, &str)] = &[
@@ -7902,7 +9427,14 @@ mod tests {
             let (_h, body) = d.with_page();
             let tagline = d.add(Some(body), "span");
             d.set_styles(tagline, PROBE_BASE);
-            d.set_styles(tagline, &[("position", "absolute"), ("fontSize", "52px"), ("fontFamily", "Arial")]);
+            d.set_styles(
+                tagline,
+                &[
+                    ("position", "absolute"),
+                    ("fontSize", "52px"),
+                    ("fontFamily", "Arial"),
+                ],
+            );
             d.set_styles(tagline, GLYPHS);
             d.set_rect(tagline, 190.0, 80.0, 777.0, 60.0);
             d.set_text_rect(tagline, 190.0, 81.0, 442.0, 58.0);
@@ -7910,7 +9442,14 @@ mod tests {
             let logo = d.add(Some(body), "a");
             d.set_styles(logo, PROBE_BASE);
             d.set_styles(logo, GLYPHS);
-            d.set_styles(logo, &[("position", "absolute"), ("fontSize", size), ("fontFamily", "Arial")]);
+            d.set_styles(
+                logo,
+                &[
+                    ("position", "absolute"),
+                    ("fontSize", size),
+                    ("fontFamily", "Arial"),
+                ],
+            );
             d.set_styles(logo, extra);
             d.set_rect(logo, 190.0 + shift, 80.0, 442.0, 60.0);
             d.set_text_rect(logo, 190.0 + shift, 81.0, 442.0, 58.0);
@@ -7924,14 +9463,23 @@ mod tests {
         assert_eq!(run(30.0, "52px").len(), 1);
         assert_eq!(run(0.0, "48px").len(), 1);
         // Upper-cased, the same DOM text draws other glyphs.
-        assert_eq!(run_with(0.0, "52px", &[("textTransform", "uppercase")]).len(), 1);
+        assert_eq!(
+            run_with(0.0, "52px", &[("textTransform", "uppercase")]).len(),
+            1
+        );
         // Other ligatures or numeral forms draw other glyphs too.
-        assert_eq!(run_with(0.0, "52px", &[("fontVariant", "tabular-nums")]).len(), 1);
+        assert_eq!(
+            run_with(0.0, "52px", &[("fontVariant", "tabular-nums")]).len(),
+            1
+        );
         // A glyph property the capture did not record is unknown.
         assert_eq!(run_with(0.0, "52px", &[("wordSpacing", "")]).len(), 1);
         // The logo's own opaque fill hides the words after the one it
         // redraws.
-        assert_eq!(run_with(0.0, "52px", &[("backgroundColor", "rgb(255, 255, 255)")]).len(), 1);
+        assert_eq!(
+            run_with(0.0, "52px", &[("backgroundColor", "rgb(255, 255, 255)")]).len(),
+            1
+        );
     }
 
     /// Review: two transparent runs of the same words from the same origin
@@ -7957,15 +9505,28 @@ mod tests {
             ("hyphens", "manual"),
         ];
         // `tagline` and `logo` are the two runs' text rects (width, height).
-        let run_lines = |tagline_text: (f64, f64), logo_text: (f64, f64), tagline_lh: &str, logo_lh: &str, extra: &[(&str, &str)]| {
+        let run_lines = |tagline_text: (f64, f64),
+                         logo_text: (f64, f64),
+                         tagline_lh: &str,
+                         logo_lh: &str,
+                         extra: &[(&str, &str)]| {
             let mut d = FakeDom::new();
             let (_h, body) = d.with_page();
             let words = "Schlittermann internet consulting and hosting";
             let tagline = d.add(Some(body), "span");
             d.set_styles(tagline, PROBE_BASE);
             d.set_styles(tagline, GLYPHS);
-            d.set_styles(tagline, &[("position", "absolute"), ("lineHeight", tagline_lh)]);
-            d.set_rect(tagline, 190.0, 80.0, tagline_text.0 + 10.0, tagline_text.1 + 6.0);
+            d.set_styles(
+                tagline,
+                &[("position", "absolute"), ("lineHeight", tagline_lh)],
+            );
+            d.set_rect(
+                tagline,
+                190.0,
+                80.0,
+                tagline_text.0 + 10.0,
+                tagline_text.1 + 6.0,
+            );
             d.set_text_rect(tagline, 190.0, 81.0, tagline_text.0, tagline_text.1);
             d.add_text(tagline, words);
             let logo = d.add(Some(body), "a");
@@ -7999,14 +9560,47 @@ mod tests {
         assert_eq!(run((290.0, 96.0), (280.0, 48.0), "normal"), 1);
         // Review: wrapped at the same width, a tighter `line-height` sets
         // the logo's later lines between the tagline's, and the two collide.
-        assert_eq!(run_lines((290.0, 120.0), (290.0, 84.0), "40px", "28px", &[]), 1);
-        assert_eq!(run_lines((290.0, 84.0), (290.0, 84.0), "28px", "28px", &[]), 0);
+        assert_eq!(
+            run_lines((290.0, 120.0), (290.0, 84.0), "40px", "28px", &[]),
+            1
+        );
+        assert_eq!(
+            run_lines((290.0, 84.0), (290.0, 84.0), "28px", "28px", &[]),
+            0
+        );
         // Centred, or with a `line-height` or break rule the capture did not
         // record, the later lines may sit elsewhere too.
-        assert_eq!(run_lines((290.0, 84.0), (290.0, 84.0), "28px", "28px", &[("textAlign", "center")]), 1);
-        assert_eq!(run_lines((290.0, 84.0), (290.0, 84.0), "28px", "28px", &[("wordBreak", "")]), 1);
+        assert_eq!(
+            run_lines(
+                (290.0, 84.0),
+                (290.0, 84.0),
+                "28px",
+                "28px",
+                &[("textAlign", "center")]
+            ),
+            1
+        );
+        assert_eq!(
+            run_lines(
+                (290.0, 84.0),
+                (290.0, 84.0),
+                "28px",
+                "28px",
+                &[("wordBreak", "")]
+            ),
+            1
+        );
         // On one line, only the first line's origin matters.
-        assert_eq!(run_lines((290.0, 56.0), (280.0, 28.0), "28px", "normal", &[("textAlign", "center")]), 0);
+        assert_eq!(
+            run_lines(
+                (290.0, 56.0),
+                (280.0, 28.0),
+                "28px",
+                "normal",
+                &[("textAlign", "center")]
+            ),
+            0
+        );
     }
 
     /// v0-orbit-internal-app: a KPI label clipped by its squeezed card to the
@@ -8019,7 +9613,15 @@ mod tests {
             let (_h, body) = d.with_page();
             let card = d.add(Some(body), "div");
             d.set_styles(card, OCCLUSION_BASE);
-            d.set_styles(card, &[("position", "relative"), ("overflow", "hidden"), ("overflowX", "hidden"), ("overflowY", "hidden")]);
+            d.set_styles(
+                card,
+                &[
+                    ("position", "relative"),
+                    ("overflow", "hidden"),
+                    ("overflowX", "hidden"),
+                    ("overflowY", "hidden"),
+                ],
+            );
             d.set_rect(card, 384.0, 260.0, card_width, 80.0);
             let label = d.add(Some(card), "span");
             d.set_styles(label, OCCLUSION_BASE);
@@ -8027,7 +9629,13 @@ mod tests {
             d.add_text(label, "Total Book of Business");
             let next = d.add(Some(body), "div");
             d.set_styles(next, OCCLUSION_BASE);
-            d.set_styles(next, &[("position", "relative"), ("backgroundColor", "rgb(255, 255, 255)")]);
+            d.set_styles(
+                next,
+                &[
+                    ("position", "relative"),
+                    ("backgroundColor", "rgb(255, 255, 255)"),
+                ],
+            );
             // The grid squeezes the card under its neighbour, which is laid
             // over the label.
             d.set_rect(next, 384.0, 260.0, 300.0, 80.0);
@@ -8057,7 +9665,11 @@ mod tests {
             d.set_styles(card, OCCLUSION_BASE);
             d.set_styles(
                 card,
-                &[("position", "absolute"), ("backgroundColor", "rgb(255, 255, 255)"), ("borderTopWidth", "1px")],
+                &[
+                    ("position", "absolute"),
+                    ("backgroundColor", "rgb(255, 255, 255)"),
+                    ("borderTopWidth", "1px"),
+                ],
             );
             d.set_rect(card, 150.0, 300.0, 300.0, 200.0);
             if !card_painted {
@@ -8071,7 +9683,10 @@ mod tests {
         };
         let shown = run(true);
         assert_eq!(shown.len(), 1, "{shown:?}");
-        assert!(shown[0].finding.detail.contains("overhangs div by 82px"), "{shown:?}");
+        assert!(
+            shown[0].finding.detail.contains("overhangs div by 82px"),
+            "{shown:?}"
+        );
         assert!(run(false).is_empty());
     }
 
@@ -8095,32 +9710,69 @@ mod tests {
             let kicker = d.add(Some(h1), "small");
             d.add_text(kicker, "A personal trainer, in your pocket");
             d.set_styles(kicker, OCCLUSION_BASE);
-            d.set_styles(kicker, &[("fontSize", "24.576px"), ("lineHeight", "24.576px")]);
+            d.set_styles(
+                kicker,
+                &[("fontSize", "24.576px"), ("lineHeight", "24.576px")],
+            );
             d.set_rect(kicker, 52.2, 527.6, 476.7, 24.6);
             d.set_text_rect(kicker, 52.2, 524.6, 305.6, 30.0);
             let head = d.add(Some(h1), "span");
             d.add_text(head, "Train with Pasta.");
             d.set_styles(head, OCCLUSION_BASE);
-            d.set_styles(head, &[("fontSize", "76.8px"), ("lineHeight", head_lh), ("position", head_position)]);
-            let top = if head_position == "relative-up" { "-20px" } else { "auto" };
+            d.set_styles(
+                head,
+                &[
+                    ("fontSize", "76.8px"),
+                    ("lineHeight", head_lh),
+                    ("position", head_position),
+                ],
+            );
+            let top = if head_position == "relative-up" {
+                "-20px"
+            } else {
+                "auto"
+            };
             if head_position.starts_with("relative") {
                 d.set_style(head, "position", "relative");
             }
-            d.set_styles(head, &[("top", top), ("right", "auto"), ("bottom", "auto"), ("left", "auto")]);
+            d.set_styles(
+                head,
+                &[
+                    ("top", top),
+                    ("right", "auto"),
+                    ("bottom", "auto"),
+                    ("left", "auto"),
+                ],
+            );
             d.set_rect(head, 51.2, head_top + 14.0, 477.7, 73.7);
             d.set_text_rect(head, 51.2, head_top, 471.5, 93.0);
             mark_body_descendants(&mut d);
             for (x, y) in occlusion_probe_points(&d.rect(kicker), 1280.0, 800.0) {
                 d.set_point(x, y, vec![head, h1, slide, body]);
             }
-            check_text_occlusion_dom(&d).into_iter().map(|f| f.finding.detail).collect::<Vec<_>>()
+            check_text_occlusion_dom(&d)
+                .into_iter()
+                .map(|f| f.finding.detail)
+                .collect::<Vec<_>>()
         };
-        assert!(run("66.048px", 542.6, "static").is_empty(), "{:?}", run("66.048px", 542.6, "static"));
+        assert!(
+            run("66.048px", 542.6, "static").is_empty(),
+            "{:?}",
+            run("66.048px", 542.6, "static")
+        );
         // Leading so tight the headline's em box runs 8px into the kicker's.
         assert_eq!(run("30px", 532.0, "static").len(), 1, "glyphs meet");
         // Moved out of flow, the overlap is the page's doing.
-        assert_eq!(run("66.048px", 542.6, "relative").len(), 0, "relative with no offset is in flow");
-        assert_eq!(run("66.048px", 542.6, "relative-up").len(), 1, "relative and moved");
+        assert_eq!(
+            run("66.048px", 542.6, "relative").len(),
+            0,
+            "relative with no offset is in flow"
+        );
+        assert_eq!(
+            run("66.048px", 542.6, "relative-up").len(),
+            1,
+            "relative and moved"
+        );
         assert_eq!(run("66.048px", 542.6, "absolute").len(), 1, "out of flow");
     }
 
@@ -8140,7 +9792,14 @@ mod tests {
             d.set_rect(pill, 100.0, 300.0, 200.0, 32.0);
             let ring = d.add(Some(body), tag);
             d.set_styles(ring, OCCLUSION_BASE);
-            d.set_styles(ring, &[("position", "absolute"), ("backgroundColor", "rgba(0, 0, 0, 0)"), ("transform", transform)]);
+            d.set_styles(
+                ring,
+                &[
+                    ("position", "absolute"),
+                    ("backgroundColor", "rgba(0, 0, 0, 0)"),
+                    ("transform", transform),
+                ],
+            );
             if !extra.0.is_empty() {
                 d.set_style(ring, extra.0, extra.1);
             }
@@ -8158,15 +9817,25 @@ mod tests {
             }
             check_text_occlusion_dom(&d).len()
         };
-        let run_tag = |tag: &str, transform: &str, ring_left: f64| run_full(tag, transform, ring_left, ("", ""));
-        let run_styled = |tag: &str, prop: &str, value: &str| run_full(tag, "none", 0.0, (prop, value));
+        let run_tag = |tag: &str, transform: &str, ring_left: f64| {
+            run_full(tag, transform, ring_left, ("", ""))
+        };
+        let run_styled =
+            |tag: &str, prop: &str, value: &str| run_full(tag, "none", 0.0, (prop, value));
         let run = |transform: &str, ring_left: f64| run_tag("div", transform, ring_left);
         // A transparent input over the words draws its value there.
-        assert_eq!(run_tag("input", "none", 0.0), 1, "a control covers its rect");
+        assert_eq!(
+            run_tag("input", "none", 0.0),
+            1,
+            "a control covers its rect"
+        );
         // A bordered card painted by a gradient, a picture or a frosted
         // backdrop fills its box.
         for (prop, value) in [
-            ("backgroundImage", "linear-gradient(rgb(255, 255, 255), rgb(238, 238, 238))"),
+            (
+                "backgroundImage",
+                "linear-gradient(rgb(255, 255, 255), rgb(238, 238, 238))",
+            ),
             ("backgroundImage", "url(\"card.jpg\")"),
             ("backdropFilter", "blur(8px)"),
         ] {
@@ -8181,7 +9850,11 @@ mod tests {
         // A layer promoted with translateZ computes to `matrix3d`: still only
         // a translation, so the border band covers as before.
         let lifted = "matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1)";
-        assert_eq!(run(lifted, 100.0), 1, "a translated 3D frame crossing the words");
+        assert_eq!(
+            run(lifted, 100.0),
+            1,
+            "a translated 3D frame crossing the words"
+        );
         assert_eq!(run(lifted, 0.0), 0, "a translated 3D frame around the pill");
         // A 3D rotation is not a translation.
         let tilted = "matrix3d(1, 0, 0, 0, 0, 0.866, 0.5, 0, 0, -0.5, 0.866, 0, 0, 0, 0, 1)";
@@ -8245,21 +9918,32 @@ mod tests {
             for (x, y) in occlusion_probe_points(&d.rect(copy), 1280.0, 800.0) {
                 d.set_point(x, y, vec![top, body]);
             }
-            check_text_occlusion_dom(&d).into_iter().map(|f| f.finding.detail).collect::<Vec<_>>()
+            check_text_occlusion_dom(&d)
+                .into_iter()
+                .map(|f| f.finding.detail)
+                .collect::<Vec<_>>()
         };
         assert_eq!(
             run("Palais Garnier, Paris", "none", Cover::Fill),
-            vec!["p.copy \"Palais Garnier, Paris\" is 100% covered by an opaque element (div.cover)"]
+            vec![
+                "p.copy \"Palais Garnier, Paris\" is 100% covered by an opaque element (div.cover)"
+            ]
         );
         assert_eq!(
             run("Calendar", "none", Cover::Border),
             vec!["p.copy \"Calendar\" is 100% covered by a bordered element (div.cover)"]
         );
-        assert_eq!(run("Team", "none", Cover::Svg), vec!["p.copy \"Team\" is 100% covered by an SVG graphic (rect)"]);
+        assert_eq!(
+            run("Team", "none", Cover::Svg),
+            vec!["p.copy \"Team\" is 100% covered by an SVG graphic (rect)"]
+        );
         // Blurred past reading, under a gate.
         assert!(run("Palais Garnier, Paris", "blur(12px)", Cover::Fill).is_empty());
         // A soft blur still reads.
-        assert_eq!(run("Palais Garnier, Paris", "blur(2px)", Cover::Fill).len(), 1);
+        assert_eq!(
+            run("Palais Garnier, Paris", "blur(2px)", Cover::Fill).len(),
+            1
+        );
         // One emoji is one character; two letters are two.
         assert!(run("\u{1F3AF}", "none", Cover::Fill).is_empty());
         assert_eq!(run("Go", "none", Cover::Fill).len(), 1);
@@ -8267,10 +9951,24 @@ mod tests {
 
     #[test]
     fn characters_on_screen() {
-        for one in ["\u{1F3AF}", "\u{1F44D}\u{1F3FD}", "\u{1F1EF}\u{1F1F5}", "e\u{301}", "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}", "\u{2764}\u{FE0F}", "x"] {
+        for one in [
+            "\u{1F3AF}",
+            "\u{1F44D}\u{1F3FD}",
+            "\u{1F1EF}\u{1F1F5}",
+            "e\u{301}",
+            "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}",
+            "\u{2764}\u{FE0F}",
+            "x",
+        ] {
             assert!(fewer_characters_than(one, 2), "{one:?}");
         }
-        for two in ["Go", "\u{1F1EF}\u{1F1F5}\u{1F1E9}\u{1F1EA}", "\u{1F3AF}\u{1F3AF}", "\u{AC00}\u{AC01}", "a\u{301}b"] {
+        for two in [
+            "Go",
+            "\u{1F1EF}\u{1F1F5}\u{1F1E9}\u{1F1EA}",
+            "\u{1F3AF}\u{1F3AF}",
+            "\u{AC00}\u{AC01}",
+            "a\u{301}b",
+        ] {
             assert!(!fewer_characters_than(two, 2), "{two:?}");
         }
     }
@@ -8281,7 +9979,15 @@ mod tests {
     fn text_occlusion_skips_content_the_browser_reports_unpainted() {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
-        let base = &[("display", "block"), ("visibility", "visible"), ("opacity", "1"), ("contentVisibility", "visible"), ("position", "static"), ("cssFloat", "none"), ("animationName", "none")][..];
+        let base = &[
+            ("display", "block"),
+            ("visibility", "visible"),
+            ("opacity", "1"),
+            ("contentVisibility", "visible"),
+            ("position", "static"),
+            ("cssFloat", "none"),
+            ("animationName", "none"),
+        ][..];
         let details = d.add(Some(body), "details");
         d.set_styles(details, base);
         let link = d.add(Some(details), "a");
@@ -8316,13 +10022,27 @@ mod tests {
         d.set_styles(a, &[("display", "block"), ("position", "static")]);
         d.set_rect(a, 0.0, 0.0, 640.0, 1400.0);
         let a_in = d.add(Some(a), "p");
-        d.set_styles(a_in, &[("display", "block"), ("position", "static"), ("visibility", "visible")]);
+        d.set_styles(
+            a_in,
+            &[
+                ("display", "block"),
+                ("position", "static"),
+                ("visibility", "visible"),
+            ],
+        );
         d.set_rect(a_in, 0.0, 0.0, 600.0, 1300.0);
         let b = d.add(Some(grid), "div");
         d.set_styles(b, &[("display", "block"), ("position", "static")]);
         d.set_rect(b, 640.0, 0.0, 640.0, 1400.0);
         let b_in = d.add(Some(b), "p");
-        d.set_styles(b_in, &[("display", "block"), ("position", "static"), ("visibility", "visible")]);
+        d.set_styles(
+            b_in,
+            &[
+                ("display", "block"),
+                ("position", "static"),
+                ("visibility", "visible"),
+            ],
+        );
         d.set_rect(b_in, 640.0, 0.0, 600.0, 300.0);
         mark_body_descendants(&mut d);
         let f = check_first_viewport_column_overflow_dom(&d);
@@ -8343,9 +10063,16 @@ mod tests {
         d.set_rect(b_in, 640.0, 0.0, 600.0, 300.0);
         d.set_styles(a, &[("overflowY", "auto")]);
         d.set_rect(a, 0.0, 0.0, 640.0, 700.0);
-        assert!(check_first_viewport_column_overflow_dom(&d).is_empty(), "clipped at 700px");
+        assert!(
+            check_first_viewport_column_overflow_dom(&d).is_empty(),
+            "clipped at 700px"
+        );
         d.set_styles(a, &[("overflowY", "visible")]);
-        assert_eq!(check_first_viewport_column_overflow_dom(&d).len(), 1, "unclipped");
+        assert_eq!(
+            check_first_viewport_column_overflow_dom(&d).len(),
+            1,
+            "unclipped"
+        );
     }
 
     /// observations-35 row 15 (submitmap.com 216883): `flex-col lg:flex-row`
@@ -8364,24 +10091,42 @@ mod tests {
             d.set_styles(col, &[("display", "block"), ("position", "static")]);
             d.set_rect(col, rect.0, rect.1, rect.2, rect.3);
             let inner = d.add(Some(col), "p");
-            d.set_styles(inner, &[("display", "block"), ("position", "static"), ("visibility", "visible")]);
+            d.set_styles(
+                inner,
+                &[
+                    ("display", "block"),
+                    ("position", "static"),
+                    ("visibility", "visible"),
+                ],
+            );
             d.set_rect(inner, rect.0, rect.1, rect.2, content_h);
             col
         };
         let intro = block(&mut d, (20.0, 100.0, 350.0, 44.0), 40.0);
         let list = block(&mut d, (20.0, 176.0, 350.0, 4200.0), 4160.0);
         mark_body_descendants(&mut d);
-        assert!(check_first_viewport_column_overflow_dom(&d).is_empty(), "stacked");
+        assert!(
+            check_first_viewport_column_overflow_dom(&d).is_empty(),
+            "stacked"
+        );
         // The same two boxes side by side are columns.
         d.inner_width = 1280.0;
         d.set_rect(stack, 0.0, 65.0, 1280.0, 4600.0);
         d.set_rect(intro, 20.0, 100.0, 400.0, 44.0);
         d.set_rect(list, 440.0, 100.0, 800.0, 4200.0);
-        assert_eq!(check_first_viewport_column_overflow_dom(&d).len(), 1, "side by side");
+        assert_eq!(
+            check_first_viewport_column_overflow_dom(&d).len(),
+            1,
+            "side by side"
+        );
         // A short block stacked under the tall column, in its track, does
         // not hide the column beside it.
         let _extra = block(&mut d, (440.0, 120.0, 800.0, 30.0), 24.0);
-        assert_eq!(check_first_viewport_column_overflow_dom(&d).len(), 1, "a short block in the tall track");
+        assert_eq!(
+            check_first_viewport_column_overflow_dom(&d).len(),
+            1,
+            "a short block in the tall track"
+        );
     }
 
     /// cisco.com and picomq.com: a tab list, a collapsed panel and an outline
@@ -8398,10 +10143,23 @@ mod tests {
             d.set_styles(a, &[("display", "block"), ("position", "static")]);
             d.set_rect(a, 0.0, 0.0, 640.0, 1400.0);
             let a_in = d.add(Some(a), "p");
-            d.set_styles(a_in, &[("display", "block"), ("position", "static"), ("visibility", "visible")]);
+            d.set_styles(
+                a_in,
+                &[
+                    ("display", "block"),
+                    ("position", "static"),
+                    ("visibility", "visible"),
+                ],
+            );
             d.set_rect(a_in, 0.0, 0.0, 600.0, 1300.0);
             let b = d.add(Some(grid), "div");
-            d.set_styles(b, &[("display", "block"), ("position", if sticky { "sticky" } else { "static" })]);
+            d.set_styles(
+                b,
+                &[
+                    ("display", "block"),
+                    ("position", if sticky { "sticky" } else { "static" }),
+                ],
+            );
             if let Some(role) = role {
                 d.set_attr(b, "role", role);
             }
@@ -8409,13 +10167,24 @@ mod tests {
             let b_in = d.add(Some(b), "p");
             d.set_styles(
                 b_in,
-                &[("display", "block"), ("position", if empty { "fixed" } else { "static" }), ("visibility", "visible")],
+                &[
+                    ("display", "block"),
+                    ("position", if empty { "fixed" } else { "static" }),
+                    ("visibility", "visible"),
+                ],
             );
             d.set_rect(b_in, 640.0, 0.0, 600.0, 300.0);
             if empty {
                 // The outline's items sit in flow inside the fixed layer.
                 let item = d.add(Some(b_in), "p");
-                d.set_styles(item, &[("display", "block"), ("position", "static"), ("visibility", "visible")]);
+                d.set_styles(
+                    item,
+                    &[
+                        ("display", "block"),
+                        ("position", "static"),
+                        ("visibility", "visible"),
+                    ],
+                );
                 d.set_rect(item, 1024.0, 0.0, 224.0, 700.0);
             }
             mark_body_descendants(&mut d);
@@ -8445,9 +10214,20 @@ mod tests {
                 d.set_rect(c, x, 0.0, 640.0, 1400.0);
                 c
             };
-            let block = |d: &mut FakeDom, parent: ElId, tag: &str, rect: (f64, f64, f64, f64), text: &str| {
+            let block = |d: &mut FakeDom,
+                         parent: ElId,
+                         tag: &str,
+                         rect: (f64, f64, f64, f64),
+                         text: &str| {
                 let e = d.add(Some(parent), tag);
-                d.set_styles(e, &[("display", "block"), ("position", "static"), ("visibility", "visible")]);
+                d.set_styles(
+                    e,
+                    &[
+                        ("display", "block"),
+                        ("position", "static"),
+                        ("visibility", "visible"),
+                    ],
+                );
                 d.set_rect(e, rect.0, rect.1, rect.2, rect.3);
                 if !text.is_empty() {
                     d.add_text(e, text);
@@ -8461,45 +10241,99 @@ mod tests {
                     if tall == "open" {
                         d.set_attr(det, "open", "");
                     }
-                    block(&mut d, det, "summary", (0.0, 0.0, 600.0, 43.0), "How do I contact investor relations?");
+                    block(
+                        &mut d,
+                        det,
+                        "summary",
+                        (0.0, 0.0, 600.0, 43.0),
+                        "How do I contact investor relations?",
+                    );
                     let answer = block(&mut d, det, "div", (0.0, 44.0, 600.0, 1250.0), "");
-                    block(&mut d, answer, "p", (0.0, 44.0, 600.0, 1250.0), "If you are an investor, write to us.");
+                    block(
+                        &mut d,
+                        answer,
+                        "p",
+                        (0.0, 44.0, 600.0, 1250.0),
+                        "If you are an investor, write to us.",
+                    );
                 }
                 _ => {
-                    block(&mut d, a, "p", (0.0, 0.0, 600.0, 1300.0), "A long column of copy.");
+                    block(
+                        &mut d,
+                        a,
+                        "p",
+                        (0.0, 0.0, 600.0, 1300.0),
+                        "A long column of copy.",
+                    );
                 }
             }
             let b = col(&mut d, 640.0);
             match short {
                 "hidden-menu" => {
                     // Copy, and a closed menu of links nobody sees.
-                    block(&mut d, b, "p", (640.0, 0.0, 600.0, 200.0), "A short column of copy that a reader reads.");
+                    block(
+                        &mut d,
+                        b,
+                        "p",
+                        (640.0, 0.0, 600.0, 200.0),
+                        "A short column of copy that a reader reads.",
+                    );
                     let menu = block(&mut d, b, "ul", (640.0, 200.0, 600.0, 100.0), "");
-                    for label in ["Who We Are", "Leadership", "Careers", "Newsroom", "Investors", "Contact"] {
+                    for label in [
+                        "Who We Are",
+                        "Leadership",
+                        "Careers",
+                        "Newsroom",
+                        "Investors",
+                        "Contact",
+                    ] {
                         let a = block(&mut d, menu, "a", (640.0, 200.0, 200.0, 24.0), label);
                         d.el_mut(a).check_visibility = Some(false);
                     }
                 }
                 "links" | "prose" => {
                     let ul = block(&mut d, b, "ul", (640.0, 0.0, 600.0, 300.0), "");
-                    for (i, label) in ["Who We Are", "Leadership", "Careers", "News"].iter().enumerate() {
+                    for (i, label) in ["Who We Are", "Leadership", "Careers", "News"]
+                        .iter()
+                        .enumerate()
+                    {
                         let li = block(&mut d, ul, "li", (640.0, i as f64 * 40.0, 600.0, 40.0), "");
                         if short == "links" {
-                            block(&mut d, li, "a", (640.0, i as f64 * 40.0, 200.0, 24.0), label);
+                            block(
+                                &mut d,
+                                li,
+                                "a",
+                                (640.0, i as f64 * 40.0, 200.0, 24.0),
+                                label,
+                            );
                         } else {
                             d.add_text(li, label);
                         }
                     }
                 }
                 _ => {
-                    block(&mut d, b, "p", (640.0, 0.0, 600.0, 300.0), "A short column.");
+                    block(
+                        &mut d,
+                        b,
+                        "p",
+                        (640.0, 0.0, 600.0, 300.0),
+                        "A short column.",
+                    );
                 }
             }
             mark_body_descendants(&mut d);
             check_first_viewport_column_overflow_dom(&d).len()
         }
-        assert_eq!(build("open", "prose"), 1, "an open disclosure shows its answer");
-        assert_eq!(build("details", "prose"), 0, "a closed one shows its summary");
+        assert_eq!(
+            build("open", "prose"),
+            1,
+            "an open disclosure shows its answer"
+        );
+        assert_eq!(
+            build("details", "prose"),
+            0,
+            "a closed one shows its summary"
+        );
         assert_eq!(build("copy", "prose"), 1, "a short list of items");
         assert_eq!(build("copy", "links"), 0, "a list of links is a menu");
         assert_eq!(build("copy", "hidden-menu"), 1, "copy beside a hidden menu");
@@ -8532,7 +10366,12 @@ mod tests {
         );
         d.set_rect(btn, 427.0, 88.0, 201.0, 50.0);
         mark_body_descendants(&mut d);
-        assert!(check_text_occlusion_dom(&d).iter().all(|f| f.el != Some(btn)), "nothing beside it");
+        assert!(
+            check_text_occlusion_dom(&d)
+                .iter()
+                .all(|f| f.el != Some(btn)),
+            "nothing beside it"
+        );
     }
 
     /// observations-42 row 13, verizon.com: a sticker overlaps the empty end
@@ -8550,15 +10389,31 @@ mod tests {
             d.set_styles(p, &[("fontSize", "11px"), ("lineHeight", "16px")]);
             d.set_rect(p, 36.0, 533.0, 338.0, 48.0);
             if lines {
-                d.set_text_lines(p, &[(36.0, 534.0, 102.0, 13.0), (36.0, 550.0, 136.5, 13.0), (36.0, 566.0, 112.7, 13.0)]);
+                d.set_text_lines(
+                    p,
+                    &[
+                        (36.0, 534.0, 102.0, 13.0),
+                        (36.0, 550.0, 136.5, 13.0),
+                        (36.0, 566.0, 112.7, 13.0),
+                    ],
+                );
             }
             let sticker = d.add(Some(body), "div");
             d.set_attr(sticker, "class", "circle");
             d.set_styles(sticker, PROBE_BASE);
-            d.set_styles(sticker, &[("position", "absolute"), ("backgroundColor", "rgb(248, 255, 60)")]);
+            d.set_styles(
+                sticker,
+                &[
+                    ("position", "absolute"),
+                    ("backgroundColor", "rgb(248, 255, 60)"),
+                ],
+            );
             d.set_rect(sticker, 183.0, 503.0, 195.0, 195.0);
             mark_body_descendants(&mut d);
-            check_text_occlusion_dom(&d).into_iter().filter(|f| f.el == Some(p)).count()
+            check_text_occlusion_dom(&d)
+                .into_iter()
+                .filter(|f| f.el == Some(p))
+                .count()
         };
         assert_eq!(run(false), 1, "the box, as before");
         assert_eq!(run(true), 0, "the lines end before the sticker");
@@ -8574,10 +10429,22 @@ mod tests {
         d.set_text_lines(label, &[(40.0, 151.0, 200.0, 18.0)]);
         let cover = d.add(Some(body), "div");
         d.set_styles(cover, PROBE_BASE);
-        d.set_styles(cover, &[("position", "absolute"), ("backgroundColor", "rgb(20, 20, 20)")]);
+        d.set_styles(
+            cover,
+            &[
+                ("position", "absolute"),
+                ("backgroundColor", "rgb(20, 20, 20)"),
+            ],
+        );
         d.set_rect(cover, 40.0, 100.0, 200.0, 120.0);
         mark_body_descendants(&mut d);
-        assert_eq!(check_text_occlusion_dom(&d).iter().filter(|f| f.el == Some(label)).count(), 1);
+        assert_eq!(
+            check_text_occlusion_dom(&d)
+                .iter()
+                .filter(|f| f.el == Some(label))
+                .count(),
+            1
+        );
     }
 
     /// observations-42 row 13, lance.com.br: a strip that scrolls sideways
@@ -8604,14 +10471,31 @@ mod tests {
             let arrow = d.add(Some(section), "button");
             d.set_attr(arrow, "class", "next");
             d.set_styles(arrow, PROBE_BASE);
-            d.set_styles(arrow, &[("position", position), ("backgroundColor", "rgb(245, 245, 245)")]);
+            d.set_styles(
+                arrow,
+                &[
+                    ("position", position),
+                    ("backgroundColor", "rgb(245, 245, 245)"),
+                ],
+            );
             d.set_rect(arrow, 1240.0, 54.0, 40.0, height);
             mark_body_descendants(&mut d);
-            check_text_occlusion_dom(&d).into_iter().filter(|f| f.el == Some(card)).count()
+            check_text_occlusion_dom(&d)
+                .into_iter()
+                .filter(|f| f.el == Some(card))
+                .count()
         };
         assert_eq!(run("absolute", 154.0, 1400.0), 0, "the strip's own arrow");
-        assert_eq!(run("absolute", 40.0, 1400.0), 1, "a small box over the card");
-        assert_eq!(run("absolute", 154.0, 1072.0), 1, "a strip with nothing to page to");
+        assert_eq!(
+            run("absolute", 40.0, 1400.0),
+            1,
+            "a small box over the card"
+        );
+        assert_eq!(
+            run("absolute", 154.0, 1072.0),
+            1,
+            "a strip with nothing to page to"
+        );
     }
 
     /// observations-42 row 17, suitemigration.com: a probe over a stacked
@@ -8627,7 +10511,13 @@ mod tests {
         d.set_rect(deck, 0.0, 100.0, 600.0, 400.0);
         let back = d.add(Some(deck), "div");
         d.set_styles(back, PROBE_BASE);
-        d.set_styles(back, &[("position", "absolute"), ("backgroundColor", "rgb(255, 255, 255)")]);
+        d.set_styles(
+            back,
+            &[
+                ("position", "absolute"),
+                ("backgroundColor", "rgb(255, 255, 255)"),
+            ],
+        );
         d.set_rect(back, 0.0, 100.0, 400.0, 300.0);
         let victim = d.add(Some(back), "span");
         d.add_text(victim, "Needs attention");
@@ -8637,7 +10527,14 @@ mod tests {
         let front = d.add(Some(deck), "div");
         d.set_attr(front, "class", "front-card");
         d.set_styles(front, PROBE_BASE);
-        d.set_styles(front, &[("position", "absolute"), ("transform", "rotate(4deg)"), ("backgroundColor", "rgb(255, 255, 255)")]);
+        d.set_styles(
+            front,
+            &[
+                ("position", "absolute"),
+                ("transform", "rotate(4deg)"),
+                ("backgroundColor", "rgb(255, 255, 255)"),
+            ],
+        );
         d.set_rect(front, 150.0, 150.0, 400.0, 300.0);
         let row = d.add(Some(front), "span");
         d.add_text(row, "Trial Balance");
@@ -8648,7 +10545,10 @@ mod tests {
         d.set_text_rect(row, 190.0, 195.0, 160.0, 30.0);
         mark_body_descendants(&mut d);
         let f = check_text_occlusion_dom(&d);
-        let hit = f.iter().find(|f| f.el == Some(victim)).expect("victim reported");
+        let hit = f
+            .iter()
+            .find(|f| f.el == Some(victim))
+            .expect("victim reported");
         assert_eq!(
             hit.finding.detail,
             format!(
@@ -8672,7 +10572,11 @@ mod tests {
             let (w, s, c): (&'static str, &'static str, &'static str) = match side {
                 "Top" => ("borderTopWidth", "borderTopStyle", "borderTopColor"),
                 "Right" => ("borderRightWidth", "borderRightStyle", "borderRightColor"),
-                "Bottom" => ("borderBottomWidth", "borderBottomStyle", "borderBottomColor"),
+                "Bottom" => (
+                    "borderBottomWidth",
+                    "borderBottomStyle",
+                    "borderBottomColor",
+                ),
                 _ => ("borderLeftWidth", "borderLeftStyle", "borderLeftColor"),
             };
             styles.push((w, "1px"));
@@ -8686,7 +10590,15 @@ mod tests {
         let el = d.add(Some(parent), "div");
         outlined(d, el, "12px");
         d.set_rect(el, rect.0, rect.1, rect.2, rect.3);
-        d.set_styles(el, &[("fontSize", "16px"), ("lineHeight", "24px"), ("paddingTop", "16px"), ("paddingBottom", "16px")]);
+        d.set_styles(
+            el,
+            &[
+                ("fontSize", "16px"),
+                ("lineHeight", "24px"),
+                ("paddingTop", "16px"),
+                ("paddingBottom", "16px"),
+            ],
+        );
         d.add_text(el, "An inner card with copy of its own");
         el
     }
@@ -8705,12 +10617,23 @@ mod tests {
         let button = d.add(Some(card), "div");
         outlined(&mut d, button, "6px");
         d.set_rect(button, 400.0, 13.0, 114.0, 34.0);
-        d.set_styles(button, &[("fontSize", "14px"), ("lineHeight", "normal"), ("paddingTop", "0px"), ("paddingBottom", "0px")]);
+        d.set_styles(
+            button,
+            &[
+                ("fontSize", "14px"),
+                ("lineHeight", "normal"),
+                ("paddingTop", "0px"),
+                ("paddingBottom", "0px"),
+            ],
+        );
         d.add_text(button, "Accept All");
         // Without recorded lines the box reads as two lines tall, as before.
         assert_eq!(check_layout(&d).len(), 1, "no line rects: base behaviour");
         d.set_text_lines(button, &[(425.0, 20.5, 64.0, 19.0)]);
-        assert!(check_layout(&d).is_empty(), "one rendered line in a fixed-height box");
+        assert!(
+            check_layout(&d).is_empty(),
+            "one rendered line in a fixed-height box"
+        );
         // A box with an element child is not read this way.
         let icon = d.add(Some(button), "span");
         d.set_rect(icon, 495.0, 22.0, 12.0, 12.0);
@@ -8739,18 +10662,31 @@ mod tests {
         };
         // oklab(0.16 0 0 / 0.5) composites to about 7 on black.
         let (d, _) = dark_page("oklab(0.16 -0.00000158697 0.00000374019 / 0.5)");
-        assert!(check_layout(&d).is_empty(), "the shell's border draws no edge");
+        assert!(
+            check_layout(&d).is_empty(),
+            "the shell's border draws no edge"
+        );
         // A descendant that paints nothing is no evidence about the surface:
         // its unreadable ink does not make the shell's border count.
-        for (prop, value) in [("display", "none"), ("visibility", "hidden"), ("opacity", "0")] {
+        for (prop, value) in [
+            ("display", "none"),
+            ("visibility", "hidden"),
+            ("opacity", "0"),
+        ] {
             let (mut d, panel) = dark_page("oklab(0.16 -0.00000158697 0.00000374019 / 0.5)");
             let shell = d.parent(panel).unwrap();
             let hidden = d.add(Some(shell), "span");
             d.set_style(hidden, "color", "rgb(10, 10, 10)");
             d.add_text(hidden, "Dark copy nobody sees");
-            assert!(super::edge_surface_under(&d, shell).is_none(), "painted dark copy spoils the surface");
+            assert!(
+                super::edge_surface_under(&d, shell).is_none(),
+                "painted dark copy spoils the surface"
+            );
             d.set_style(hidden, prop, value);
-            assert!(super::edge_surface_under(&d, shell).is_some(), "{prop}: {value}");
+            assert!(
+                super::edge_surface_under(&d, shell).is_some(),
+                "{prop}: {value}"
+            );
             assert!(check_layout(&d).is_empty(), "{prop}: {value}");
         }
         let (d, panel) = dark_page("rgba(255, 255, 255, 0.1)");
@@ -8765,8 +10701,15 @@ mod tests {
         d.set_style(body, "backgroundColor", "rgb(250, 250, 250)");
         let shell = d.parent(panel).unwrap();
         d.set_style(shell, "backgroundColor", "rgba(0, 0, 0, 0)");
-        assert!(super::edge_surface_under(&d, shell).is_none(), "white copy on a white surface");
-        assert_eq!(check_layout(&d).len(), 1, "an unreadable surface keeps the border");
+        assert!(
+            super::edge_surface_under(&d, shell).is_none(),
+            "white copy on a white surface"
+        );
+        assert_eq!(
+            check_layout(&d).len(),
+            1,
+            "an unreadable surface keeps the border"
+        );
     }
 
     /// auradeballet.com's `border-t` footer, vibe-audit-lab.base44.app's
@@ -8853,9 +10796,16 @@ mod tests {
         assert!(check_layout(&d).is_empty(), "a field box");
         let note = d.add(Some(field), "p");
         d.add_text(note, "Pick the service you need");
-        assert!(check_layout(&d).is_empty(), "a fill with no border or shadow (r4-p16)");
+        assert!(
+            check_layout(&d).is_empty(),
+            "a fill with no border or shadow (r4-p16)"
+        );
         outlined(&mut d, field, "10px");
-        assert_eq!(check_layout(&d).len(), 1, "a framed box with content beside the control");
+        assert_eq!(
+            check_layout(&d).len(),
+            1,
+            "a framed box with content beside the control"
+        );
 
         // resineda.com (observations-1006 row 19): a bordered composer
         // around a textarea, with a screen-reader label in a clipped 1px box
@@ -8875,7 +10825,10 @@ mod tests {
             d.add_text(label, "Message Resin AI");
             d.set_styles(
                 label,
-                &[("position", "absolute"), ("clip", "rect(0px, 0px, 0px, 0px)")],
+                &[
+                    ("position", "absolute"),
+                    ("clip", "rect(0px, 0px, 0px, 0px)"),
+                ],
             );
             d.set_rect(label, 789.0, 652.0, 1.0, 1.0);
             let area = d.add(Some(form), "textarea");
@@ -8986,8 +10939,16 @@ mod tests {
             d.set_rect(p, 40.0, 160.0, 320.0, 40.0);
             check_layout(&d).len()
         };
-        assert_eq!(tile("button", "hidden"), 1, "a plan card with a hidden input");
-        assert_eq!(tile("div", "checkbox"), 1, "a selectable tile around a checkbox");
+        assert_eq!(
+            tile("button", "hidden"),
+            1,
+            "a plan card with a hidden input"
+        );
+        assert_eq!(
+            tile("div", "checkbox"),
+            1,
+            "a selectable tile around a checkbox"
+        );
 
         // clipto.com: a tinted, rounded `<mark>` run; demotv.lol: a bordered
         // frame around a video thumbnail.
@@ -9102,7 +11063,10 @@ mod tests {
         d.set_style(bubble, "boxShadow", "rgba(0, 0, 0, 0.1) 0px 1px 3px 0px");
         assert_eq!(check_layout(&d).len(), 1, "a fill with a shadow");
         d.set_style(bubble, "boxShadow", "rgba(0, 0, 0, 0) 0px 1px 3px 0px");
-        assert!(check_layout(&d).is_empty(), "a transparent shadow casts nothing");
+        assert!(
+            check_layout(&d).is_empty(),
+            "a transparent shadow casts nothing"
+        );
 
         // The outer card may be fill-only: the narrowing reads the inner box.
         let (mut d, card) = page();
@@ -9111,7 +11075,11 @@ mod tests {
         }
         d.set_style(card, "backgroundColor", "rgb(233, 236, 239)");
         outlined_card(&mut d, card, (24.0, 24.0, 400.0, 90.0));
-        assert_eq!(check_layout(&d).len(), 1, "a framed box in a fill-only card");
+        assert_eq!(
+            check_layout(&d).len(),
+            1,
+            "a framed box in a fill-only card"
+        );
 
         // A figure: an svg covering 40% or more of the box, with a caption.
         let (mut d, card) = page();
@@ -9151,9 +11119,19 @@ mod tests {
         let stack = d.add(Some(card), "div");
         outlined(&mut d, stack, "12px");
         d.set_rect(stack, 24.0, 24.0, 500.0, 400.0);
-        for name in ["Vertex AI speech to speech", "Deepgram speech to text", "Gemini Flash brain"] {
+        for name in [
+            "Vertex AI speech to speech",
+            "Deepgram speech to text",
+            "Gemini Flash brain",
+        ] {
             let row = d.add(Some(stack), "div");
-            d.set_styles(row, &[("display", "flex"), ("fontFamily", "\"JetBrains Mono\", monospace")]);
+            d.set_styles(
+                row,
+                &[
+                    ("display", "flex"),
+                    ("fontFamily", "\"JetBrains Mono\", monospace"),
+                ],
+            );
             d.add_text(row, name);
         }
         assert_eq!(check_layout(&d).len(), 1, "a stack of monospace rows");
@@ -9165,13 +11143,30 @@ mod tests {
         outlined(&mut d, sample, "8px");
         d.set_rect(sample, 24.0, 24.0, 500.0, 160.0);
         d.set_style(sample, "fontFamily", "\"Geist Mono\", monospace");
-        for (i, line) in ["// Example: Send notification", "const response = await nexus.send({", "channel: \"#general\",", "});"].iter().enumerate() {
+        for (i, line) in [
+            "// Example: Send notification",
+            "const response = await nexus.send({",
+            "channel: \"#general\",",
+            "});",
+        ]
+        .iter()
+        .enumerate()
+        {
             let row = d.add(Some(sample), "div");
-            d.set_styles(row, &[("display", "block"), ("fontFamily", "\"Geist Mono\", monospace")]);
+            d.set_styles(
+                row,
+                &[
+                    ("display", "block"),
+                    ("fontFamily", "\"Geist Mono\", monospace"),
+                ],
+            );
             d.set_rect(row, 48.0, 48.0 + 24.0 * i as f64, 452.0, 16.0);
             d.add_text(row, line);
         }
-        assert!(check_layout(&d).is_empty(), "a code sample, one row per line");
+        assert!(
+            check_layout(&d).is_empty(),
+            "a code sample, one row per line"
+        );
         // The same runs laid side by side are one line of chips (paseo.sh's
         // `create_agent #412` tool-call row), not a stack.
         for (i, row) in d.children(sample).into_iter().enumerate() {
@@ -9184,8 +11179,17 @@ mod tests {
         // A row that is not one run (a row holding a block) breaks the read.
         let rows = d.children(sample);
         let nested = d.add(Some(rows[1]), "div");
-        d.set_styles(nested, &[("display", "block"), ("fontFamily", "\"Geist Mono\", monospace")]);
-        d.add_text(nested, "a block of its own inside a row, longer than the row's own text");
+        d.set_styles(
+            nested,
+            &[
+                ("display", "block"),
+                ("fontFamily", "\"Geist Mono\", monospace"),
+            ],
+        );
+        d.add_text(
+            nested,
+            "a block of its own inside a row, longer than the row's own text",
+        );
         assert_eq!(check_layout(&d).len(), 1, "a row that holds a block");
         // Review of round 11: monospace rows holding a quote, an underscore
         // or a `>` are labels, not code.
@@ -9193,13 +11197,30 @@ mod tests {
         let stack = d.add(Some(card), "div");
         outlined(&mut d, stack, "8px");
         d.set_rect(stack, 24.0, 24.0, 500.0, 160.0);
-        for (i, line) in ["Added \"dark mode\"", "Renamed user_id", "Settings > Billing"].iter().enumerate() {
+        for (i, line) in [
+            "Added \"dark mode\"",
+            "Renamed user_id",
+            "Settings > Billing",
+        ]
+        .iter()
+        .enumerate()
+        {
             let row = d.add(Some(stack), "div");
-            d.set_styles(row, &[("display", "block"), ("fontFamily", "\"Geist Mono\", monospace")]);
+            d.set_styles(
+                row,
+                &[
+                    ("display", "block"),
+                    ("fontFamily", "\"Geist Mono\", monospace"),
+                ],
+            );
             d.set_rect(row, 48.0, 48.0 + 24.0 * i as f64, 452.0, 16.0);
             d.add_text(row, line);
         }
-        assert_eq!(check_layout(&d).len(), 1, "a changelog set in a monospace face");
+        assert_eq!(
+            check_layout(&d).len(),
+            1,
+            "a changelog set in a monospace face"
+        );
         // A terminal: a header line and one paragraph of monospace output
         // with inline links in it.
         let (mut d, card) = page();
@@ -9213,7 +11234,13 @@ mod tests {
         d.set_style(para, "fontFamily", "\"JetBrains Mono\", monospace");
         d.add_text(para, "Signup for an account and get an API key with");
         let link = d.add(Some(para), "a");
-        d.set_styles(link, &[("display", "inline"), ("fontFamily", "\"JetBrains Mono\", monospace")]);
+        d.set_styles(
+            link,
+            &[
+                ("display", "inline"),
+                ("fontFamily", "\"JetBrains Mono\", monospace"),
+            ],
+        );
         d.add_text(link, "context.dev/auth.md");
         d.add_text(para, "then follow the quickstart to integrate it");
         assert!(check_layout(&d).is_empty(), "a terminal transcript");
@@ -9223,7 +11250,10 @@ mod tests {
         d.set_style(output, "fontFamily", "\"Courier New\", monospace");
         let prose = d.add(Some(output), "p");
         d.set_style(prose, "fontFamily", "Inter, sans-serif");
-        d.add_text(prose, "A paragraph of ordinary copy that outweighs the monospace line above it");
+        d.add_text(
+            prose,
+            "A paragraph of ordinary copy that outweighs the monospace line above it",
+        );
         assert_eq!(check_layout(&d).len(), 1, "mostly ordinary text");
 
         // A media player.
@@ -9234,19 +11264,29 @@ mod tests {
         assert_eq!(check_layout(&d).len(), 1, "a button alone");
         let seek = d.add(Some(player), "div");
         d.set_attr(seek, "role", "slider");
-        assert!(check_layout(&d).is_empty(), "a play button beside a seek bar");
+        assert!(
+            check_layout(&d).is_empty(),
+            "a play button beside a seek bar"
+        );
         let mute = d.add(Some(player), "button");
         d.set_attr(mute, "aria-label", "Mute");
         assert!(check_layout(&d).is_empty(), "the player's own buttons");
         let choose = d.add(Some(player), "button");
         d.add_text(choose, "Choose");
-        assert_eq!(check_layout(&d).len(), 1, "a pricing tier with a promo player");
+        assert_eq!(
+            check_layout(&d).len(),
+            1,
+            "a pricing tier with a promo player"
+        );
         let (mut d, card) = page();
         let player = outlined_card(&mut d, card, (24.0, 24.0, 500.0, 120.0));
         let audio = d.add(Some(player), "audio");
         d.set_attr(audio, "controls", "");
         d.set_rect(audio, 40.0, 60.0, 300.0, 54.0);
-        assert!(check_layout(&d).is_empty(), "an audio element with its controls");
+        assert!(
+            check_layout(&d).is_empty(),
+            "an audio element with its controls"
+        );
         d.set_rect(audio, 0.0, 0.0, 0.0, 0.0);
         assert_eq!(check_layout(&d).len(), 1, "a hidden audio element");
         // A settings panel with a hidden sound element, and a profile card
@@ -9256,14 +11296,22 @@ mod tests {
         d.add(Some(panel), "audio");
         let save = d.add(Some(panel), "button");
         d.add_text(save, "Save");
-        assert_eq!(check_layout(&d).len(), 1, "a panel with a hidden audio element");
+        assert_eq!(
+            check_layout(&d).len(),
+            1,
+            "a panel with a hidden audio element"
+        );
         let (mut d, card) = page();
         let profile = outlined_card(&mut d, card, (24.0, 24.0, 500.0, 160.0));
         let video = d.add(Some(profile), "video");
         d.set_rect(video, 40.0, 40.0, 48.0, 48.0);
         let follow = d.add(Some(profile), "button");
         d.add_text(follow, "Follow");
-        assert_eq!(check_layout(&d).len(), 1, "a profile card with an avatar video");
+        assert_eq!(
+            check_layout(&d).len(),
+            1,
+            "a profile card with an avatar video"
+        );
         // A player whose text is more than a title and a time is a card.
         let (mut d, card) = page();
         let player = outlined_card(&mut d, card, (24.0, 24.0, 500.0, 200.0));
@@ -9278,17 +11326,28 @@ mod tests {
             "Show notes for the episode: the guests talk about type, colour, layout and the \
              long road from a first sketch to a shipped design system, then take questions.",
         );
-        assert_eq!(check_layout(&d).len(), 1, "a player beside a paragraph of copy");
+        assert_eq!(
+            check_layout(&d).len(),
+            1,
+            "a player beside a paragraph of copy"
+        );
 
         // A feature tile: a large illustration, a heading, copy and buttons.
         let (mut d, card) = page();
         let tile = outlined_card(&mut d, card, (24.0, 24.0, 474.0, 309.0));
         let svg = d.add(Some(tile), "svg");
         d.set_rect(svg, 38.0, 56.0, 446.0, 168.0);
-        assert!(check_layout(&d).is_empty(), "an illustration with a caption line");
+        assert!(
+            check_layout(&d).is_empty(),
+            "an illustration with a caption line"
+        );
         let button = d.add(Some(tile), "button");
         d.add_text(button, "Try it");
-        assert_eq!(check_layout(&d).len(), 1, "a tile with a control beside its svg");
+        assert_eq!(
+            check_layout(&d).len(),
+            1,
+            "a tile with a control beside its svg"
+        );
         let (mut d, card) = page();
         let tile = outlined_card(&mut d, card, (24.0, 24.0, 474.0, 309.0));
         let svg = d.add(Some(tile), "svg");
@@ -9308,7 +11367,10 @@ mod tests {
         assert!(check_layout(&d).is_empty(), "a monospace output block");
         let copy_button = d.add(Some(tier), "button");
         d.set_attr(copy_button, "aria-label", "Copy code");
-        assert!(check_layout(&d).is_empty(), "a code block with its copy button");
+        assert!(
+            check_layout(&d).is_empty(),
+            "a code block with its copy button"
+        );
         // context.dev's code window: a "more options" icon menu in its header.
         let menu = d.add(Some(tier), "button");
         d.set_attr(menu, "aria-label", "More options");
@@ -9316,10 +11378,18 @@ mod tests {
         assert!(check_layout(&d).is_empty(), "a code window's icon menu");
         let upgrade = d.add(Some(tier), "button");
         d.add_text(upgrade, "Upgrade");
-        assert_eq!(check_layout(&d).len(), 1, "a monospace card with an Upgrade button");
+        assert_eq!(
+            check_layout(&d).len(),
+            1,
+            "a monospace card with an Upgrade button"
+        );
 
         // The dialog itself as the outer card, or the first card inside it.
-        for (attr, value) in [("role", "dialog"), ("role", "alertdialog"), ("aria-modal", "true")] {
+        for (attr, value) in [
+            ("role", "dialog"),
+            ("role", "alertdialog"),
+            ("aria-modal", "true"),
+        ] {
             let (mut d, card) = page();
             outlined_card(&mut d, card, (24.0, 24.0, 400.0, 90.0));
             d.set_attr(card, attr, value);
@@ -9338,7 +11408,11 @@ mod tests {
         // A card inside a card inside the dialog's panel is an ordinary
         // nested card.
         outlined_card(&mut d, group, (420.0, 320.0, 400.0, 120.0));
-        assert_eq!(check_layout(&d).len(), 1, "a card nested inside the dialog's panel");
+        assert_eq!(
+            check_layout(&d).len(),
+            1,
+            "a card nested inside the dialog's panel"
+        );
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         let overlay = d.add(Some(body), "div");
@@ -9358,7 +11432,10 @@ mod tests {
         d.set_attr(body, "class", "bg-amber-50 text-black");
         let f = check_cream_palette(&d);
         assert_eq!(f.len(), 1);
-        assert_eq!(f[0].snippet, "cream/beige page background (Tailwind bg-amber-50)");
+        assert_eq!(
+            f[0].snippet,
+            "cream/beige page background (Tailwind bg-amber-50)"
+        );
     }
 
     /// useforward.co (322742): a cream body under full-width sections that
@@ -9378,7 +11455,10 @@ mod tests {
             let mut y = 0.0;
             for &(fill, h) in fills {
                 let section = d.add(Some(main), "section");
-                d.set_styles(section, &[("backgroundColor", fill), ("backgroundImage", "none")]);
+                d.set_styles(
+                    section,
+                    &[("backgroundColor", fill), ("backgroundImage", "none")],
+                );
                 d.set_rect(section, 0.0, y, 1280.0, h);
                 y += h;
             }
@@ -9394,22 +11474,49 @@ mod tests {
         // finding stands as the body names it.
         let f = build(&[(dark, 800.0), (cream, 4900.0)], 5700.0);
         assert_eq!(f.len(), 1);
-        assert_eq!(f[0].snippet, "cream/beige page background rgb(245, 242, 236)");
+        assert_eq!(
+            f[0].snippet,
+            "cream/beige page background rgb(245, 242, 236)"
+        );
         // The bands leave a third of the page to the body: its fill stands.
         let f = build(&[(dark, 800.0), (grey, 3000.0)], 5700.0);
         assert_eq!(f.len(), 1);
-        assert_eq!(f[0].snippet, "cream/beige page background rgb(245, 242, 236)");
+        assert_eq!(
+            f[0].snippet,
+            "cream/beige page background rgb(245, 242, 236)"
+        );
         // A cream strip laid over a white ground shows the cream.
-        let f = build(&[("rgb(255, 255, 255)", 2000.0), (cream, 300.0), ("rgb(255, 255, 255)", 3400.0)], 5700.0);
+        let f = build(
+            &[
+                ("rgb(255, 255, 255)", 2000.0),
+                (cream, 300.0),
+                ("rgb(255, 255, 255)", 3400.0),
+            ],
+            5700.0,
+        );
         assert_eq!(f.len(), 1);
         // Warmth at the boundaries of the near-cream floor (2): white drops,
         // warmth 2 and 5 are warm paper, and a grey with green over red
         // drops whatever its warmth.
         assert!(build(&[("rgb(250, 250, 250)", 5700.0)], 5700.0).is_empty());
-        assert!(build(&[("rgb(250, 249, 249)", 5700.0)], 5700.0).is_empty(), "warmth 1");
-        assert_eq!(build(&[("rgb(250, 249, 248)", 5700.0)], 5700.0).len(), 1, "warmth 2");
-        assert_eq!(build(&[("rgb(250, 248, 245)", 5700.0)], 5700.0).len(), 1, "warmth 5");
-        assert!(build(&[("rgb(241, 242, 239)", 5700.0)], 5700.0).is_empty(), "grey");
+        assert!(
+            build(&[("rgb(250, 249, 249)", 5700.0)], 5700.0).is_empty(),
+            "warmth 1"
+        );
+        assert_eq!(
+            build(&[("rgb(250, 249, 248)", 5700.0)], 5700.0).len(),
+            1,
+            "warmth 2"
+        );
+        assert_eq!(
+            build(&[("rgb(250, 248, 245)", 5700.0)], 5700.0).len(),
+            1,
+            "warmth 5"
+        );
+        assert!(
+            build(&[("rgb(241, 242, 239)", 5700.0)], 5700.0).is_empty(),
+            "grey"
+        );
         // A band at half alpha, or an opaque band at half opacity, lets the
         // cream through: it is no band.
         let f = build(&[("rgba(16, 16, 14, 0.5)", 5700.0)], 5700.0);
@@ -9422,7 +11529,14 @@ mod tests {
             d.set_rect(html, 0.0, 0.0, 1280.0, 1000.0);
             d.set_rect(body, 0.0, 0.0, 1280.0, 1000.0);
             let band = d.add(Some(body), "section");
-            d.set_styles(band, &[("backgroundColor", dark), ("backgroundImage", "none"), ("opacity", "0.5")]);
+            d.set_styles(
+                band,
+                &[
+                    ("backgroundColor", dark),
+                    ("backgroundImage", "none"),
+                    ("opacity", "0.5"),
+                ],
+            );
             d.set_rect(band, 0.0, 0.0, 1280.0, 1000.0);
             check_cream_palette(&d)
         };
@@ -9437,7 +11551,10 @@ mod tests {
             d.set_rect(html, 0.0, 0.0, 1280.0, 1000.0);
             d.set_rect(body, 0.0, 0.0, 1280.0, 1000.0);
             let band = d.add(Some(body), "section");
-            d.set_styles(band, &[("backgroundColor", dark), ("backgroundImage", "none")]);
+            d.set_styles(
+                band,
+                &[("backgroundColor", dark), ("backgroundImage", "none")],
+            );
             d.set_rect(band, 640.0, 0.0, 1280.0, 1000.0);
             check_cream_palette(&d)
         };
@@ -9460,7 +11577,13 @@ mod tests {
         d.set_rect(body, 0.0, 0.0, 1280.0, 4000.0);
         d.el_mut(html).scroll_height = Some(4000.0);
         let root = d.add(Some(body), "div");
-        d.set_styles(root, &[("backgroundColor", "rgb(255, 255, 255)"), ("backgroundImage", "none")]);
+        d.set_styles(
+            root,
+            &[
+                ("backgroundColor", "rgb(255, 255, 255)"),
+                ("backgroundImage", "none"),
+            ],
+        );
         d.set_rect(root, 0.0, 0.0, 1280.0, 4000.0);
         let mut parent = root;
         for tag in ["div", "div", "main"] {
@@ -9482,7 +11605,13 @@ mod tests {
         d.set_rect(html, 0.0, 0.0, 1280.0, 1000.0);
         d.set_rect(body, 0.0, 0.0, 1280.0, 1000.0);
         let hero = d.add(Some(body), "section");
-        d.set_styles(hero, &[("backgroundColor", "rgb(16, 16, 14)"), ("backgroundImage", "url(\"/hero.jpg\")")]);
+        d.set_styles(
+            hero,
+            &[
+                ("backgroundColor", "rgb(16, 16, 14)"),
+                ("backgroundImage", "url(\"/hero.jpg\")"),
+            ],
+        );
         d.set_rect(hero, 0.0, 0.0, 1280.0, 1000.0);
         assert_eq!(check_cream_palette(&d).len(), 1);
     }
@@ -9496,19 +11625,32 @@ mod tests {
             let (_h, body) = d.with_page();
             d.inner_width = 390.0;
             d.inner_height = 844.0;
-            hidden_box(&mut d, body, "p", &[], "visible text on the page around the dialog");
+            hidden_box(
+                &mut d,
+                body,
+                "p",
+                &[],
+                "visible text on the page around the dialog",
+            );
             let dialog = hidden_box(&mut d, body, "div", styles, "Create Itinerary");
             d.set_rect(dialog, rect.0, rect.1, rect.2, rect.3);
             mark_body_descendants(&mut d);
             measure_hidden_text_dom(&d).hidden_chars
         };
         let full = (0.0, 0.0, 390.0, 844.0);
-        let hidden_fixed = [("position", "fixed"), ("opacity", "0"), ("visibility", "hidden")];
+        let hidden_fixed = [
+            ("position", "fixed"),
+            ("opacity", "0"),
+            ("visibility", "hidden"),
+        ];
         assert_eq!(run(&hidden_fixed, full), 0.0);
         // Transparent but not hidden: a shell waiting for a reveal.
         assert_eq!(run(&[("position", "fixed"), ("opacity", "0")], full), 16.0);
         // Not fixed, or not over the whole viewport: content.
-        assert_eq!(run(&[("position", "absolute"), ("visibility", "hidden")], full), 16.0);
+        assert_eq!(
+            run(&[("position", "absolute"), ("visibility", "hidden")], full),
+            16.0
+        );
         assert_eq!(run(&hidden_fixed, (0.0, 0.0, 390.0, 300.0)), 16.0);
 
         // An app shell fixed over the viewport and held hidden by a reveal
@@ -9522,13 +11664,22 @@ mod tests {
             hidden_box(&mut d, body, "p", &[], "Loading");
             let app = hidden_box(&mut d, body, "div", &hidden_fixed, "");
             d.set_rect(app, 0.0, 0.0, 390.0, 844.0);
-            let inner = hidden_box(&mut d, app, if with_main { "main" } else { "div" }, &[], text);
+            let inner = hidden_box(
+                &mut d,
+                app,
+                if with_main { "main" } else { "div" },
+                &[],
+                text,
+            );
             d.set_rect(inner, 0.0, 0.0, 390.0, 844.0);
             mark_body_descendants(&mut d);
             measure_hidden_text_dom(&d).hidden_chars
         };
         assert_eq!(shell(true, "Short"), 5.0);
-        assert_eq!(shell(false, "Your orders, your saved items and your account"), 46.0);
+        assert_eq!(
+            shell(false, "Your orders, your saved items and your account"),
+            46.0
+        );
         // A short overlay beside more page text is still closed interface.
         assert_eq!(shell(false, "Hi"), 0.0);
         // The layer that is itself the `main` holds the page too.
@@ -9537,7 +11688,13 @@ mod tests {
             let (_h, body) = d.with_page();
             d.inner_width = 390.0;
             d.inner_height = 844.0;
-            hidden_box(&mut d, body, "p", &[], "visible text on the page around the dialog");
+            hidden_box(
+                &mut d,
+                body,
+                "p",
+                &[],
+                "visible text on the page around the dialog",
+            );
             let app = hidden_box(&mut d, body, "main", &hidden_fixed, "Short");
             d.set_rect(app, 0.0, 0.0, 390.0, 844.0);
             mark_body_descendants(&mut d);
@@ -9568,7 +11725,13 @@ mod tests {
             "",
         );
         d.set_rect(panel, -1280.0, 0.0, 1280.0, 800.0);
-        let menu = hidden_box(&mut d, panel, "div", &[("opacity", "0"), ("position", "absolute")], "Mode Schmuck");
+        let menu = hidden_box(
+            &mut d,
+            panel,
+            "div",
+            &[("opacity", "0"), ("position", "absolute")],
+            "Mode Schmuck",
+        );
         d.set_rect(menu, -1280.0, 0.0, 1280.0, 0.0);
         mark_body_descendants(&mut d);
         let m = measure_hidden_text_dom(&d);
@@ -9578,7 +11741,10 @@ mod tests {
         for (prop, value) in [
             ("transitionDuration", "0s"),
             ("transform", "none"),
-            ("transform", "matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)"),
+            (
+                "transform",
+                "matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)",
+            ),
             ("position", "static"),
         ] {
             d.set_style(panel, prop, value);
@@ -9608,11 +11774,18 @@ mod tests {
         d.keyframes.insert(
             "sent".to_string(),
             vec![
-                crate::browser::dom::KeyframeFrame { decls: vec![("opacity".into(), "0".into())] },
-                crate::browser::dom::KeyframeFrame { decls: vec![("opacity".into(), "1".into())] },
+                crate::browser::dom::KeyframeFrame {
+                    decls: vec![("opacity".into(), "0".into())],
+                },
+                crate::browser::dom::KeyframeFrame {
+                    decls: vec![("opacity".into(), "1".into())],
+                },
             ],
         );
-        d.keyframe_keys.insert("sent".to_string(), vec!["0%, 25%".to_string(), "27%, 100%".to_string()]);
+        d.keyframe_keys.insert(
+            "sent".to_string(),
+            vec!["0%, 25%".to_string(), "27%, 100%".to_string()],
+        );
         hidden_box(&mut d, body, "p", &[], "visible text");
         let bubble = hidden_box(
             &mut d,
@@ -9649,7 +11822,14 @@ mod tests {
         assert_eq!(measure_hidden_text_dom(&d).hidden_chars, 18.0);
         // A fade that ends at 0 is not shown either.
         d.set_running_animations(bubble, &["opacity"]);
-        d.set_styles(bubble, &[("animationIterationCount", "1"), ("animationFillMode", "forwards"), ("animationDirection", "reverse")]);
+        d.set_styles(
+            bubble,
+            &[
+                ("animationIterationCount", "1"),
+                ("animationFillMode", "forwards"),
+                ("animationDirection", "reverse"),
+            ],
+        );
         assert_eq!(measure_hidden_text_dom(&d).hidden_chars, 18.0);
     }
 }

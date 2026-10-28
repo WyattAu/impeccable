@@ -30,14 +30,25 @@ fn engine() -> Option<BrowserEngine> {
 #[test]
 fn the_shell_fixture_reports_exactly_its_flag_column() {
     let Some(engine) = engine() else { return };
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/antipatterns").join(FIXTURE);
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/antipatterns")
+        .join(FIXTURE);
     let body = std::fs::read(path).expect("fixture");
-    let origin = http::serve(move |p| (p == "/").then(|| ("text/html; charset=utf-8", body.clone())));
-    let findings = engine.detect_url(&format!("{origin}/"), &ScanOptions::default()).expect("scan");
+    let origin =
+        http::serve(move |p| (p == "/").then(|| ("text/html; charset=utf-8", body.clone())));
+    let findings = engine
+        .detect_url(&format!("{origin}/"), &ScanOptions::default())
+        .expect("scan");
     let mut flagged: Vec<String> = findings
         .iter()
         .filter(|f| f.antipattern == "cramped-padding")
-        .map(|f| f.extras.get("selector").and_then(|v| v.as_str()).unwrap_or("").to_string())
+        .map(|f| {
+            f.extras
+                .get("selector")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string()
+        })
         .filter(|s| s.starts_with("#flag-") || s.starts_with("#pass-"))
         .collect();
     flagged.sort();
@@ -49,7 +60,12 @@ fn the_shell_fixture_reports_exactly_its_flag_column() {
             "#flag-shell-loose-sibling",
             "#flag-shell-margins-escape",
             "#flag-shell-negative-margin",
-            "#flag-shell-offset-left", "#flag-shell-offset-top", "#flag-shell-paragraph-offset", "#flag-shell-shorthand-pull", "#flag-shell-transform"],
+            "#flag-shell-offset-left",
+            "#flag-shell-offset-top",
+            "#flag-shell-paragraph-offset",
+            "#flag-shell-shorthand-pull",
+            "#flag-shell-transform"
+        ],
         "{findings:#?}"
     );
 }

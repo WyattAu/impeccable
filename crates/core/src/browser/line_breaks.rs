@@ -72,7 +72,10 @@ fn line_widths(dom: &dyn Dom, el: ElId) -> Option<Vec<f64>> {
     if lines_run_past_a_clip(dom, el, &rects) {
         return None;
     }
-    let widest = rects.iter().copied().reduce(|a, b| if b.width > a.width { b } else { a });
+    let widest = rects
+        .iter()
+        .copied()
+        .reduce(|a, b| if b.width > a.width { b } else { a });
     if let Some(w) = widest {
         if rects.iter().any(|r| r.right <= w.left || r.left >= w.right) {
             return None;
@@ -85,7 +88,11 @@ fn line_widths(dom: &dyn Dom, el: ElId) -> Option<Vec<f64>> {
 /// computed `text-wrap` alone, as a longhand that took the same values.
 fn wraps_with(dom: &dyn Dom, el: ElId, style: &str) -> bool {
     let computed = dom.style(el, "textWrapStyle");
-    let computed = if computed.is_empty() { dom.style(el, "textWrap") } else { computed };
+    let computed = if computed.is_empty() {
+        dom.style(el, "textWrap")
+    } else {
+        computed
+    };
     computed.split_whitespace().any(|s| s == style)
 }
 
@@ -148,19 +155,30 @@ fn push_rendered_text(dom: &dyn Dom, el: ElId, out: &mut String) {
 /// edge, is hidden. Clips that hide nothing
 /// leave the lines as they are.
 fn lines_run_past_a_clip(dom: &dyn Dom, el: ElId, lines: &[super::dom::Rect]) -> bool {
-    let Some(lowest) = lines.iter().map(|r| r.top + r.height / 2.0).reduce(f64::max) else {
+    let Some(lowest) = lines
+        .iter()
+        .map(|r| r.top + r.height / 2.0)
+        .reduce(f64::max)
+    else {
         return false;
     };
     let mut cur = Some(el);
     for _ in 0..=CLIP_SEARCH_DEPTH {
         let Some(c) = cur else { break };
-        let clamp = crate::checks::text_rules::is_line_clamp(&dom.style(c, "display"), &dom.style(c, "webkitLineClamp"));
+        let clamp = crate::checks::text_rules::is_line_clamp(
+            &dom.style(c, "display"),
+            &dom.style(c, "webkitLineClamp"),
+        );
         let clips = |k: &str| matches!(dom.style(c, k).as_str(), "hidden" | "clip");
         if clamp || clips("overflowY") || clips("overflow") {
             let r = dom.rect(c);
             let px = |k: &str| {
                 let v = js::parse_float(&dom.style(c, k));
-                if v.is_finite() { v } else { 0.0 }
+                if v.is_finite() {
+                    v
+                } else {
+                    0.0
+                }
             };
             // A clamp hides the lines past its count, so its content edge is
             // the last line shown; overflow clips at the padding edge, and
@@ -184,7 +202,10 @@ fn lines_run_past_a_clip(dom: &dyn Dom, el: ElId, lines: &[super::dom::Rect]) ->
 /// visitor never sees. `visibility` inherits, so each box's own computed
 /// value is the one its text paints with; a child set `visible` again shows.
 fn sets_unpainted_text(dom: &dyn Dom, el: ElId) -> bool {
-    let hidden = matches!(js::to_lower_case(&dom.style(el, "visibility")).as_str(), "hidden" | "collapse");
+    let hidden = matches!(
+        js::to_lower_case(&dom.style(el, "visibility")).as_str(),
+        "hidden" | "collapse"
+    );
     dom.child_nodes(el).into_iter().any(|child| match child {
         DomChild::Text(text) => hidden && !text.trim().is_empty(),
         DomChild::Element(c) => !renders_no_text(dom, c) && sets_unpainted_text(dom, c),
@@ -198,7 +219,11 @@ fn words(dom: &dyn Dom, el: ElId) -> Vec<String> {
     let mut text = String::new();
     push_rendered_text(dom, el, &mut text);
     text.split_whitespace()
-        .map(|w| w.chars().filter(|c| !matches!(c, '\u{AD}' | '\u{200B}')).collect::<String>())
+        .map(|w| {
+            w.chars()
+                .filter(|c| !matches!(c, '\u{AD}' | '\u{200B}'))
+                .collect::<String>()
+        })
         .filter(|w| !w.is_empty())
         .collect()
 }
@@ -279,7 +304,10 @@ fn check_unbalanced_heading(dom: &dyn Dom, el: ElId) -> Option<RuleHit> {
     }
     let tail = widths[widths.len() - 1];
     let above = widths[widths.len() - 2];
-    if tail >= above * HEADING_MIN_TAIL_RATIO || words(dom, el).len() < MIN_WORDS || sets_unpainted_text(dom, el) {
+    if tail >= above * HEADING_MIN_TAIL_RATIO
+        || words(dom, el).len() < MIN_WORDS
+        || sets_unpainted_text(dom, el)
+    {
         return None;
     }
     // A heading with mixed faces gives no character count to trust, and is
@@ -324,9 +352,19 @@ mod tests {
     fn block(d: &mut FakeDom, body: ElId, tag: &str, text: &str, lines: &[f64]) -> ElId {
         let el = d.add(Some(body), tag);
         d.add_text(el, text);
-        d.set_styles(el, &[("fontSize", "16px"), ("display", "block"), ("whiteSpace", "normal")]);
-        let rects: Vec<(f64, f64, f64, f64)> =
-            lines.iter().enumerate().map(|(i, w)| (0.0, 100.0 + 24.0 * i as f64, *w, 19.0)).collect();
+        d.set_styles(
+            el,
+            &[
+                ("fontSize", "16px"),
+                ("display", "block"),
+                ("whiteSpace", "normal"),
+            ],
+        );
+        let rects: Vec<(f64, f64, f64, f64)> = lines
+            .iter()
+            .enumerate()
+            .map(|(i, w)| (0.0, 100.0 + 24.0 * i as f64, *w, 19.0))
+            .collect();
         d.set_text_lines(el, &rects);
         // The last word alone: the word before it ends the line above.
         if let [.., (_, above, w_above, _), (_, y, w, h)] = rects[..] {
@@ -335,7 +373,13 @@ mod tests {
         el
     }
 
-    fn inline(d: &mut FakeDom, parent: ElId, tag: &str, text: &str, styles: &[(&str, &str)]) -> ElId {
+    fn inline(
+        d: &mut FakeDom,
+        parent: ElId,
+        tag: &str,
+        text: &str,
+        styles: &[(&str, &str)],
+    ) -> ElId {
         let c = d.add(Some(parent), tag);
         d.add_text(c, text);
         d.set_styles(c, &[("fontSize", "16px"), ("display", "inline")]);
@@ -344,7 +388,10 @@ mod tests {
     }
 
     fn ids(d: &FakeDom, el: ElId) -> Vec<String> {
-        check_element_line_breaks_dom(d, el).into_iter().map(|h| h.id).collect()
+        check_element_line_breaks_dom(d, el)
+            .into_iter()
+            .map(|h| h.id)
+            .collect()
     }
 
     /// The case the rule exists for: the last word of a paragraph wrapped
@@ -359,7 +406,10 @@ mod tests {
         let hits = check_element_line_breaks_dom(&d, p);
         assert_eq!(hits.len(), 1, "{hits:?}");
         assert_eq!(hits[0].id, "straggler");
-        assert_eq!(hits[0].snippet, "\"text.\" alone on the last of 3 lines (7% of the measure)");
+        assert_eq!(
+            hits[0].snippet,
+            "\"text.\" alone on the last of 3 lines (7% of the measure)"
+        );
     }
 
     /// vercel.com's template cards: `-webkit-line-clamp: 2` on a paragraph
@@ -371,12 +421,26 @@ mod tests {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         let clamped = block(&mut d, body, "p", PROSE, &[560.0, 560.0, 40.0]);
-        d.set_styles(clamped, &[("display", "-webkit-box"), ("webkitLineClamp", "2"), ("overflow", "hidden")]);
+        d.set_styles(
+            clamped,
+            &[
+                ("display", "-webkit-box"),
+                ("webkitLineClamp", "2"),
+                ("overflow", "hidden"),
+            ],
+        );
         d.set_rect(clamped, 0.0, 100.0, 600.0, 48.0);
         assert!(ids(&d, clamped).is_empty());
         // In a clipping wrapper two levels up.
         let card = d.add(Some(body), "div");
-        d.set_styles(card, &[("overflowY", "hidden"), ("paddingBottom", "0px"), ("borderBottomWidth", "0px")]);
+        d.set_styles(
+            card,
+            &[
+                ("overflowY", "hidden"),
+                ("paddingBottom", "0px"),
+                ("borderBottomWidth", "0px"),
+            ],
+        );
         d.set_rect(card, 0.0, 100.0, 600.0, 48.0);
         let inner = d.add(Some(card), "div");
         let wrapped = block(&mut d, inner, "p", PROSE, &[560.0, 560.0, 40.0]);
@@ -386,9 +450,20 @@ mod tests {
         d.set_rect(free, 0.0, 100.0, 600.0, 72.0);
         assert_eq!(ids(&d, free), vec!["straggler"]);
         let roomy = block(&mut d, body, "p", PROSE, &[560.0, 560.0, 40.0]);
-        d.set_styles(roomy, &[("display", "-webkit-box"), ("webkitLineClamp", "3"), ("overflow", "hidden")]);
+        d.set_styles(
+            roomy,
+            &[
+                ("display", "-webkit-box"),
+                ("webkitLineClamp", "3"),
+                ("overflow", "hidden"),
+            ],
+        );
         d.set_rect(roomy, 0.0, 100.0, 600.0, 72.0);
-        assert_eq!(ids(&d, roomy), vec!["straggler"], "a clamp of three shows all three lines");
+        assert_eq!(
+            ids(&d, roomy),
+            vec!["straggler"],
+            "a clamp of three shows all three lines"
+        );
     }
 
     /// A soft hyphen paints nothing, so the snippet names the word a reader
@@ -401,7 +476,11 @@ mod tests {
         let p = block(&mut d, body, "p", &text, &[560.0, 560.0, 50.0]);
         let hits = check_element_line_breaks_dom(&d, p);
         assert_eq!(hits.len(), 1, "{hits:?}");
-        assert!(hits[0].snippet.starts_with("\"return.\" alone"), "{}", hits[0].snippet);
+        assert!(
+            hits[0].snippet.starts_with("\"return.\" alone"),
+            "{}",
+            hits[0].snippet
+        );
     }
 
     /// Two words on the last line is what `text-wrap: pretty` leaves when it
@@ -456,7 +535,11 @@ mod tests {
     /// `text-wrap-style`, or as the `text-wrap` longhand of an older Chrome.
     #[test]
     fn an_authored_wrap_stands_the_rule_down() {
-        for (prop, value) in [("textWrapStyle", "pretty"), ("textWrapStyle", "balance"), ("textWrap", "pretty")] {
+        for (prop, value) in [
+            ("textWrapStyle", "pretty"),
+            ("textWrapStyle", "balance"),
+            ("textWrap", "pretty"),
+        ] {
             let mut d = FakeDom::new();
             let (_h, body) = d.with_page();
             let p = block(&mut d, body, "p", PROSE, &[560.0, 560.0, 40.0]);
@@ -479,7 +562,13 @@ mod tests {
             &[420.0, 230.0],
         );
         assert!(ids(&d, long).is_empty(), "long last word");
-        let narrow = block(&mut d, body, "li", "Settings and account preferences", &[150.0, 100.0, 30.0]);
+        let narrow = block(
+            &mut d,
+            body,
+            "li",
+            "Settings and account preferences",
+            &[150.0, 100.0, 30.0],
+        );
         assert!(ids(&d, narrow).is_empty(), "narrow column");
     }
 
@@ -509,11 +598,20 @@ mod tests {
     fn a_short_last_heading_line_is_unbalanced() {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
-        let h = block(&mut d, body, "h2", "Design that holds up under real content and real people", &[856.0, 110.0]);
+        let h = block(
+            &mut d,
+            body,
+            "h2",
+            "Design that holds up under real content and real people",
+            &[856.0, 110.0],
+        );
         let hits = check_element_line_breaks_dom(&d, h);
         assert_eq!(hits.len(), 1, "{hits:?}");
         assert_eq!(hits[0].id, "unbalanced-heading");
-        assert_eq!(hits[0].snippet, "last of 2 lines is 13% as wide as the line above");
+        assert_eq!(
+            hits[0].snippet,
+            "last of 2 lines is 13% as wide as the line above"
+        );
 
         d.set_style(h, "textWrapStyle", "balance");
         assert!(ids(&d, h).is_empty(), "balanced");
@@ -526,7 +624,13 @@ mod tests {
     fn a_pretty_heading_is_still_unbalanced() {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
-        let h = block(&mut d, body, "h2", "Design that holds up under real content and real people", &[856.0, 110.0]);
+        let h = block(
+            &mut d,
+            body,
+            "h2",
+            "Design that holds up under real content and real people",
+            &[856.0, 110.0],
+        );
         d.set_style(h, "textWrapStyle", "pretty");
         assert_eq!(ids(&d, h), ["unbalanced-heading"]);
     }
@@ -562,7 +666,13 @@ mod tests {
     fn even_single_and_long_headings_pass() {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
-        let even = block(&mut d, body, "h2", "Design that holds up under real content", &[513.0, 454.0]);
+        let even = block(
+            &mut d,
+            body,
+            "h2",
+            "Design that holds up under real content",
+            &[513.0, 454.0],
+        );
         assert!(ids(&d, even).is_empty(), "even");
         let one = block(&mut d, body, "h2", "Design that holds up", &[400.0]);
         assert!(ids(&d, one).is_empty(), "one line");
@@ -594,10 +704,20 @@ mod tests {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         let p = block(&mut d, body, "p", PROSE, &[560.0, 560.0, 40.0]);
-        inline(&mut d, p, "span", " Read the full typography guide", &[("display", "none")]);
+        inline(
+            &mut d,
+            p,
+            "span",
+            " Read the full typography guide",
+            &[("display", "none")],
+        );
         let hits = check_element_line_breaks_dom(&d, p);
         assert_eq!(hits.len(), 1, "{hits:?}");
-        assert!(hits[0].snippet.starts_with("\"text.\" alone"), "{}", hits[0].snippet);
+        assert!(
+            hits[0].snippet.starts_with("\"text.\" alone"),
+            "{}",
+            hits[0].snippet
+        );
     }
 
     /// Text in a `visibility: hidden` box keeps its room on the line, so
@@ -612,7 +732,13 @@ mod tests {
         assert!(ids(&d, p).is_empty(), "hidden tail");
 
         let collapsed = block(&mut d, body, "p", PROSE, &[560.0, 560.0, 40.0]);
-        inline(&mut d, collapsed, "span", " more", &[("visibility", "collapse")]);
+        inline(
+            &mut d,
+            collapsed,
+            "span",
+            " more",
+            &[("visibility", "collapse")],
+        );
         assert!(ids(&d, collapsed).is_empty(), "collapsed tail");
 
         let shown = block(&mut d, body, "p", PROSE, &[560.0, 560.0, 40.0]);
@@ -620,9 +746,19 @@ mod tests {
         inline(&mut d, wrap, "span", " more", &[("visibility", "visible")]);
         let hits = check_element_line_breaks_dom(&d, shown);
         assert_eq!(hits.len(), 1, "visible again: {hits:?}");
-        assert!(hits[0].snippet.starts_with("\"more\" alone"), "{}", hits[0].snippet);
+        assert!(
+            hits[0].snippet.starts_with("\"more\" alone"),
+            "{}",
+            hits[0].snippet
+        );
 
-        let h = block(&mut d, body, "h2", "Design that holds up under real content and real", &[856.0, 110.0]);
+        let h = block(
+            &mut d,
+            body,
+            "h2",
+            "Design that holds up under real content and real",
+            &[856.0, 110.0],
+        );
         inline(&mut d, h, "span", " people", &[("visibility", "hidden")]);
         assert!(ids(&d, h).is_empty(), "hidden heading tail");
     }
@@ -657,7 +793,11 @@ mod tests {
         let p = block(&mut d, body, "p", &text, &[560.0, 560.0, 45.0]);
         let hits = check_element_line_breaks_dom(&d, p);
         assert_eq!(hits.len(), 1, "{hits:?}");
-        assert!(hits[0].snippet.starts_with("\"'done.'\" alone"), "{}", hits[0].snippet);
+        assert!(
+            hits[0].snippet.starts_with("\"'done.'\" alone"),
+            "{}",
+            hits[0].snippet
+        );
     }
 
     /// `balance` cannot move a word in a two-word heading, so advising it
@@ -678,10 +818,14 @@ mod tests {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         let text = [PROSE; 3].join(" ");
-        let p = block(&mut d, body, "p", &text, &[560.0, 560.0, 560.0, 560.0, 560.0, 560.0, 560.0, 40.0]);
+        let p = block(
+            &mut d,
+            body,
+            "p",
+            &text,
+            &[560.0, 560.0, 560.0, 560.0, 560.0, 560.0, 560.0, 40.0],
+        );
         d.set_style(p, "textWrapStyle", "balance");
         assert_eq!(ids(&d, p), vec!["straggler"]);
     }
 }
-
-

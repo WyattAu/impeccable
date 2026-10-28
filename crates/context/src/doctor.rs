@@ -1,6 +1,8 @@
 //! JS: doctor.mjs -> `impeccable doctor`
 
-use crate::artifact_schema::{read_product_schema_version, stamp_product_schema, PRODUCT_SCHEMA_VERSION};
+use crate::artifact_schema::{
+    read_product_schema_version, stamp_product_schema, PRODUCT_SCHEMA_VERSION,
+};
 use crate::context::*;
 use crate::jsp;
 use crate::staleness::*;
@@ -17,7 +19,11 @@ struct Flags {
 }
 
 fn parse_args(argv: &[String]) -> Result<(Flags, TargetOptions), String> {
-    let mut flags = Flags { json: false, fix: false, help: false };
+    let mut flags = Flags {
+        json: false,
+        fix: false,
+        help: false,
+    };
     let mut passthrough: Vec<String> = Vec::new();
     for a in argv {
         match a.as_str() {
@@ -65,13 +71,18 @@ fn read_project_root_patterns(repo_root: &str) -> Vec<String> {
 
 fn collect(cwd: &str, target: &TargetOptions, env: &Env, provider_id: &str) -> Report {
     let ctx = load_context(cwd, target, env);
-    let project_root = if ctx.project_root.is_empty() { cwd.to_string() } else { ctx.project_root.clone() };
+    let project_root = if ctx.project_root.is_empty() {
+        cwd.to_string()
+    } else {
+        ctx.project_root.clone()
+    };
     let abs_product_path = ctx.product_path.as_deref().map(|p| jsp::resolve(cwd, &[p]));
     let abs_design_path = ctx.design_path.as_deref().map(|p| jsp::resolve(cwd, &[p]));
     let sidecar_candidates = design_sidecar_candidates_for(&project_root, Some(&ctx.context_dir));
     let known = load_known_rule_ids();
     let selection = resolve_workspace_selection(cwd, target, env);
-    let workspace_candidates: Vec<TargetCandidate> = selection.map(|s| s.target_candidates).unwrap_or_default();
+    let workspace_candidates: Vec<TargetCandidate> =
+        selection.map(|s| s.target_candidates).unwrap_or_default();
     let (ws_findings, workspaces) = check_workspaces(&ctx.repo_root, &workspace_candidates);
 
     // JS: doctor builds on collectBootFindingGroups, interleaving only its
@@ -91,14 +102,26 @@ fn collect(cwd: &str, target: &TargetOptions, env: &Env, provider_id: &str) -> R
     findings.extend(boot.product);
     findings.extend(boot.native_platform);
     findings.extend(boot.design_sidecar);
-    findings.extend(check_design_drift(abs_design_path.as_deref(), &project_root, 25));
-    findings.extend(check_design_coverage(ctx.design.as_deref(), ctx.design_path.as_deref()));
+    findings.extend(check_design_drift(
+        abs_design_path.as_deref(),
+        &project_root,
+        25,
+    ));
+    findings.extend(check_design_coverage(
+        ctx.design.as_deref(),
+        ctx.design_path.as_deref(),
+    ));
     findings.extend(boot.config);
     findings.extend(boot.build_path);
     findings.extend(check_detector_ignores(&project_root, known.as_deref()));
     findings.extend(boot.surface_briefs);
     let user_manifest = crate::context_cli::user_hook_manifest(provider_id, cwd, env);
-    findings.extend(check_hook_installation(&project_root, Some(&ctx.repo_root), provider_id, user_manifest.as_deref()));
+    findings.extend(check_hook_installation(
+        &project_root,
+        Some(&ctx.repo_root),
+        provider_id,
+        user_manifest.as_deref(),
+    ));
     findings.extend(check_legacy_live_state(&project_root));
     findings.extend(boot.project_roots);
     findings.extend(ws_findings);
@@ -133,28 +156,49 @@ fn apply_fixes(report: &Report) -> Fixes {
     let mut skipped: Vec<(String, String)> = Vec::new();
     for entry in &report.findings {
         if entry.severity != "auto" {
-            skipped.push((entry.id.clone(), "needs a decision from the user".to_string()));
+            skipped.push((
+                entry.id.clone(),
+                "needs a decision from the user".to_string(),
+            ));
             continue;
         }
         if entry.id == "design-sidecar-legacy-path" {
             let canonical = report.sidecar_candidates.first();
             let present = report.sidecar_candidates.iter().find(|c| exists(c));
-            let (Some(canonical), Some(present)) = (canonical, present) else { continue };
+            let (Some(canonical), Some(present)) = (canonical, present) else {
+                continue;
+            };
             if jsp::resolve(canonical, &[]) == jsp::resolve(present, &[]) {
                 continue;
             }
             if exists(canonical) {
-                skipped.push((entry.id.clone(), format!("{} already exists; not overwriting", rel(canonical, &report.project_root))));
+                skipped.push((
+                    entry.id.clone(),
+                    format!(
+                        "{} already exists; not overwriting",
+                        rel(canonical, &report.project_root)
+                    ),
+                ));
                 continue;
             }
             let _ = std::fs::create_dir_all(jsp::dirname(canonical));
             let _ = std::fs::rename(present, canonical);
-            applied.push(format!("Moved {} to {}.", rel(present, &report.project_root), rel(canonical, &report.project_root)));
+            applied.push(format!(
+                "Moved {} to {}.",
+                rel(present, &report.project_root),
+                rel(canonical, &report.project_root)
+            ));
             continue;
         }
         if entry.id == "cursor-hook-pre-edit-gate" {
-            let Some(path) = entry.path.as_deref() else { continue };
-            let abs = if jsp::is_absolute(path) { path.to_string() } else { jsp::join(&[&report.project_root, path]) };
+            let Some(path) = entry.path.as_deref() else {
+                continue;
+            };
+            let abs = if jsp::is_absolute(path) {
+                path.to_string()
+            } else {
+                jsp::join(&[&report.project_root, path])
+            };
             let migrated = std::fs::read_to_string(&abs)
                 .ok()
                 .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
@@ -163,53 +207,104 @@ fn apply_fixes(report: &Report) -> Fixes {
                 Some(next) => {
                     let body = format!("{}\n", json_pretty(&next));
                     if std::fs::write(&abs, body).is_ok() {
-                        applied.push(format!("Moved the design hook in {} from preToolUse to postToolUse.", rel(&abs, &report.project_root)));
+                        applied.push(format!(
+                            "Moved the design hook in {} from preToolUse to postToolUse.",
+                            rel(&abs, &report.project_root)
+                        ));
                     } else {
-                        skipped.push((entry.id.clone(), format!("could not write {}", rel(&abs, &report.project_root))));
+                        skipped.push((
+                            entry.id.clone(),
+                            format!("could not write {}", rel(&abs, &report.project_root)),
+                        ));
                     }
                 }
-                None => skipped.push((entry.id.clone(), "the gate entry is not in the launcher form; run `impeccable hooks on`".to_string())),
+                None => skipped.push((
+                    entry.id.clone(),
+                    "the gate entry is not in the launcher form; run `impeccable hooks on`"
+                        .to_string(),
+                )),
             }
             continue;
         }
         if entry.id == "legacy-live-state" {
-            skipped.push((entry.id.clone(), "delete by hand once no live session is running".to_string()));
+            skipped.push((
+                entry.id.clone(),
+                "delete by hand once no live session is running".to_string(),
+            ));
             continue;
         }
-        skipped.push((entry.id.clone(), "no automatic migration implemented".to_string()));
+        skipped.push((
+            entry.id.clone(),
+            "no automatic migration implemented".to_string(),
+        ));
     }
     if let (Some(pp), Some(product)) = (&report.abs_product_path, report.ctx.product.as_deref()) {
         if !product.is_empty()
             && read_product_schema_version(product).is_none()
-            && !report.findings.iter().any(|f| f.id == "product-schema-legacy")
+            && !report
+                .findings
+                .iter()
+                .any(|f| f.id == "product-schema-legacy")
         {
             let _ = std::fs::write(pp, stamp_product_schema(product, PRODUCT_SCHEMA_VERSION));
-            applied.push(format!("Stamped {} as product-schema {}.", rel(pp, &report.project_root), PRODUCT_SCHEMA_VERSION));
+            applied.push(format!(
+                "Stamped {} as product-schema {}.",
+                rel(pp, &report.project_root),
+                PRODUCT_SCHEMA_VERSION
+            ));
         }
     }
     Fixes { applied, skipped }
 }
 
-fn render_text(report: &Report, fixes: Option<&Fixes>, cwd: &str, command: &str, self_cmd: &str) -> String {
+fn render_text(
+    report: &Report,
+    fixes: Option<&Fixes>,
+    cwd: &str,
+    command: &str,
+    self_cmd: &str,
+) -> String {
     let mut lines: Vec<String> = Vec::new();
     let pr = rel(&report.project_root, cwd);
-    lines.push(format!("Impeccable doctor: {}", if pr.is_empty() { "." } else { &pr }));
+    lines.push(format!(
+        "Impeccable doctor: {}",
+        if pr.is_empty() { "." } else { &pr }
+    ));
     if report.ctx.is_monorepo {
         let rr = rel(&report.ctx.repo_root, cwd);
-        lines.push(format!("Monorepo, repo root {}.", if rr.is_empty() { "." } else { &rr }));
+        lines.push(format!(
+            "Monorepo, repo root {}.",
+            if rr.is_empty() { "." } else { &rr }
+        ));
     }
     lines.push(String::new());
     if report.findings.is_empty() {
         lines.push("No drift found. Every artifact matches what this version reads.".to_string());
     } else {
-        for (severity, label) in [("route", "needs a command"), ("mention", "worth saying"), ("auto", "automatic")] {
-            let group: Vec<&Finding> = report.findings.iter().filter(|f| f.severity == severity).collect();
+        for (severity, label) in [
+            ("route", "needs a command"),
+            ("mention", "worth saying"),
+            ("auto", "automatic"),
+        ] {
+            let group: Vec<&Finding> = report
+                .findings
+                .iter()
+                .filter(|f| f.severity == severity)
+                .collect();
             if group.is_empty() {
                 continue;
             }
             lines.push(format!("{} ({}):", label, group.len()));
             for f in group {
-                lines.push(format!("  {}{}", f.id, f.path.as_ref().filter(|p| !p.is_empty()).map(|p| format!("  [{}]", p)).unwrap_or_default()));
+                lines.push(format!(
+                    "  {}{}",
+                    f.id,
+                    f.path
+                        .as_ref()
+                        .filter(|p| !p.is_empty())
+                        .map(|p| format!("  [{}]", p))
+                        .unwrap_or_default()
+                ));
                 lines.push(format!("    {}", f.summary));
                 lines.push(format!("    → {}", f.fix));
             }
@@ -224,7 +319,11 @@ fn render_text(report: &Report, fixes: Option<&Fixes>, cwd: &str, command: &str,
                 w.path,
                 w.product_status,
                 w.design_status,
-                w.platform.as_ref().filter(|p| !p.is_empty()).map(|p| format!("  platform: {}", p)).unwrap_or_default()
+                w.platform
+                    .as_ref()
+                    .filter(|p| !p.is_empty())
+                    .map(|p| format!("  platform: {}", p))
+                    .unwrap_or_default()
             ));
         }
         lines.push(String::new());
@@ -234,11 +333,19 @@ fn render_text(report: &Report, fixes: Option<&Fixes>, cwd: &str, command: &str,
         lines.push(String::new());
     }
     if let Some(f) = fixes {
-        lines.push(if f.applied.is_empty() { "Applied nothing.".to_string() } else { "Applied:".to_string() });
+        lines.push(if f.applied.is_empty() {
+            "Applied nothing.".to_string()
+        } else {
+            "Applied:".to_string()
+        });
         for a in &f.applied {
             lines.push(format!("  {}", a));
         }
-        let held: Vec<&(String, String)> = f.skipped.iter().filter(|(_, r)| r != "needs a decision from the user").collect();
+        let held: Vec<&(String, String)> = f
+            .skipped
+            .iter()
+            .filter(|(_, r)| r != "needs a decision from the user")
+            .collect();
         if !held.is_empty() {
             lines.push("Left alone:".to_string());
             for (id, reason) in held {
@@ -278,21 +385,43 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
         return 0;
     }
     let report = collect(&cwd, &target, &env, &provider.id);
-    let fixes = if flags.fix { Some(apply_fixes(&report)) } else { None };
+    let fixes = if flags.fix {
+        Some(apply_fixes(&report))
+    } else {
+        None
+    };
     if flags.json {
         let mut m = Map::new();
-        m.insert("projectRoot".into(), Value::String(report.project_root.clone()));
-        m.insert("repoRoot".into(), Value::String(report.ctx.repo_root.clone()));
+        m.insert(
+            "projectRoot".into(),
+            Value::String(report.project_root.clone()),
+        );
+        m.insert(
+            "repoRoot".into(),
+            Value::String(report.ctx.repo_root.clone()),
+        );
         m.insert("isMonorepo".into(), Value::Bool(report.ctx.is_monorepo));
         m.insert("productPath".into(), opt_string(&report.ctx.product_path));
         m.insert("designPath".into(), opt_string(&report.ctx.design_path));
         m.insert("platform".into(), opt_string(&report.ctx.platform));
-        m.insert("ruleRegistryAvailable".into(), Value::Bool(report.rule_registry_available));
-        m.insert("findings".into(), Value::Array(report.findings.iter().map(|f| f.to_value()).collect()));
-        m.insert("workspaces".into(), Value::Array(report.workspaces.iter().map(|w| w.to_value()).collect()));
+        m.insert(
+            "ruleRegistryAvailable".into(),
+            Value::Bool(report.rule_registry_available),
+        );
+        m.insert(
+            "findings".into(),
+            Value::Array(report.findings.iter().map(|f| f.to_value()).collect()),
+        );
+        m.insert(
+            "workspaces".into(),
+            Value::Array(report.workspaces.iter().map(|w| w.to_value()).collect()),
+        );
         if let Some(f) = &fixes {
             let mut fm = Map::new();
-            fm.insert("applied".into(), Value::Array(f.applied.iter().cloned().map(Value::String).collect()));
+            fm.insert(
+                "applied".into(),
+                Value::Array(f.applied.iter().cloned().map(Value::String).collect()),
+            );
             fm.insert(
                 "skipped".into(),
                 Value::Array(
@@ -312,6 +441,9 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
         io.out(&format!("{}\n", json_pretty(&Value::Object(m))));
         return 0;
     }
-    io.out(&format!("{}\n", render_text(&report, fixes.as_ref(), &cwd, &provider.command, &self_cmd)));
+    io.out(&format!(
+        "{}\n",
+        render_text(&report, fixes.as_ref(), &cwd, &provider.command, &self_cmd)
+    ));
     0
 }

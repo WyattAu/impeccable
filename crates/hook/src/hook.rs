@@ -70,7 +70,12 @@ fn session_key(v: &Option<Value>) -> String {
 /// Records the root whose cache this edit just wrote, so a Stop from a
 /// session cwd above it finds it (#1101). Only for a named session, and only
 /// for harnesses that run a Stop pass: Cursor and GitHub Copilot install none.
-fn record_session_root(rt: &Runtime, harness: &str, session_value: &Option<Value>, project_cwd: &str) {
+fn record_session_root(
+    rt: &Runtime,
+    harness: &str,
+    session_value: &Option<Value>,
+    project_cwd: &str,
+) {
     if session_value.is_none() || matches!(harness, "cursor" | "github") {
         return;
     }
@@ -164,7 +169,10 @@ pub fn run_hook(rt: &Runtime, stdin: &str) -> RunResult {
         // Cursor rejects a postToolUse `additional_context` longer than
         // 10,000 characters and drops it, so a raised `limits.maxChars`
         // must not push the findings past that.
-        config.limits.max_chars = config.limits.max_chars.min(CURSOR_ADDITIONAL_CONTEXT_MAX_CHARS);
+        config.limits.max_chars = config
+            .limits
+            .max_chars
+            .min(CURSOR_ADDITIONAL_CONTEXT_MAX_CHARS);
     }
     if !config.enabled {
         return result(
@@ -190,7 +198,9 @@ pub fn run_hook(rt: &Runtime, stdin: &str) -> RunResult {
 
     // Several Impeccable hooks can fire for one edit (home and project
     // manifests, a plugin and a project hook): only the first scans.
-    if crate::hook_claim::claim_event(rt, &raw_event, &project_cwd, &primary_files) == crate::hook_claim::Claim::Duplicate {
+    if crate::hook_claim::claim_event(rt, &raw_event, &project_cwd, &primary_files)
+        == crate::hook_claim::Claim::Duplicate
+    {
         return result(
             &audit,
             vec![
@@ -287,7 +297,14 @@ pub fn run_hook(rt: &Runtime, stdin: &str) -> RunResult {
         let use_html_engine = uses_html_engine(file_path, &config.extensions);
         if primary_files.contains(file_path) {
             if harness == "claude" {
-                stop_baseline::capture(rt, &event, &mut cache, &session_id, file_path, use_html_engine);
+                stop_baseline::capture(
+                    rt,
+                    &event,
+                    &mut cache,
+                    &session_id,
+                    file_path,
+                    use_html_engine,
+                );
             }
             let edit_count = bump_edit_count(&mut cache, &session_id, file_path);
             cache_dirty = true;
@@ -505,7 +522,8 @@ pub fn run_hook(rt: &Runtime, stdin: &str) -> RunResult {
     // `.impeccable/`, so the extra check changes nothing there.
     let wants_persist = deferred_total > 0
         || (cache_dirty
-            && (exists(&jsp::join(&[&project_cwd, ".impeccable"])) || exists(&get_cache_path(&project_cwd))));
+            && (exists(&jsp::join(&[&project_cwd, ".impeccable"]))
+                || exists(&get_cache_path(&project_cwd))));
     if wants_persist && persist_cache(rt, &project_cwd, &cache) {
         record_session_root(rt, harness, &session_value, &project_cwd);
     }
@@ -715,34 +733,71 @@ pub fn run_stop_hook(rt: &Runtime, stdin: &str) -> RunResult {
     // included. Resolving the platform reads PRODUCT.md, so it is paid only
     // when there is a build state to remind about or touched files to scan.
     let mut platform_memo: Option<Option<String>> = None;
-    let native_skip = |audit: &Map<String, Value>, cwd: &str, platform_memo: &mut Option<Option<String>>| -> Option<RunResult> {
-        let platform = platform_memo.get_or_insert_with(|| resolve_project_platform(rt, cwd)).clone();
-        is_native_platform(platform.as_deref()).then(|| result(
-            audit,
-            vec![
-                ("skipped", Value::from("native-platform")),
-                ("platform", Value::String(platform.unwrap_or_default())),
-                ("durationMs", ms_since(started)),
-            ],
-        ))
+    let native_skip = |audit: &Map<String, Value>,
+                       cwd: &str,
+                       platform_memo: &mut Option<Option<String>>|
+     -> Option<RunResult> {
+        let platform = platform_memo
+            .get_or_insert_with(|| resolve_project_platform(rt, cwd))
+            .clone();
+        is_native_platform(platform.as_deref()).then(|| {
+            result(
+                audit,
+                vec![
+                    ("skipped", Value::from("native-platform")),
+                    ("platform", Value::String(platform.unwrap_or_default())),
+                    ("durationMs", ms_since(started)),
+                ],
+            )
+        })
     };
-    if std::path::Path::new(&session_cwd).join(".impeccable/build/state.json").is_file() {
-        if let Some(skip) = native_skip(&audit, &session_cwd, &mut platform_memo) { return skip; }
+    if std::path::Path::new(&session_cwd)
+        .join(".impeccable/build/state.json")
+        .is_file()
+    {
+        if let Some(skip) = native_skip(&audit, &session_cwd, &mut platform_memo) {
+            return skip;
+        }
     }
     let mut cache = read_cache(&session_cwd);
     if matches!(harness, "claude" | "codex" | "gemini") {
-        if let Some(message) = crate::build_completion::reminder(rt, &session_cwd, &session_id, stop_hook_active, &mut cache) {
+        if let Some(message) = crate::build_completion::reminder(
+            rt,
+            &session_cwd,
+            &session_id,
+            stop_hook_active,
+            &mut cache,
+        ) {
             return RunResult {
                 stdout: payload(&message, "Stop", harness),
-                audit: with(&audit, vec![("kind", Value::from("build-completion")), ("emitted", Value::Bool(true)), ("durationMs", ms_since(started))]),
+                audit: with(
+                    &audit,
+                    vec![
+                        ("kind", Value::from("build-completion")),
+                        ("emitted", Value::Bool(true)),
+                        ("durationMs", ms_since(started)),
+                    ],
+                ),
             };
         }
     }
     if stop_hook_active {
-        return result(&audit, vec![("skipped", Value::from("stop-hook-active")), ("durationMs", ms_since(started))]);
+        return result(
+            &audit,
+            vec![
+                ("skipped", Value::from("stop-hook-active")),
+                ("durationMs", ms_since(started)),
+            ],
+        );
     }
     if truthy(rt.env("IMPECCABLE_HOOK_COMPLETION_ONLY")) {
-        return result(&audit, vec![("skipped", Value::from("no-build-continuation")), ("durationMs", ms_since(started))]);
+        return result(
+            &audit,
+            vec![
+                ("skipped", Value::from("no-build-continuation")),
+                ("durationMs", ms_since(started)),
+            ],
+        );
     }
     // The roots to scan: the nearest one from the session cwd up whose cache
     // this session touched (#1088), then every root the per-edit pass
@@ -780,24 +835,46 @@ pub fn run_stop_hook(rt: &Runtime, stdin: &str) -> RunResult {
             root_audit.insert("cwd".into(), Value::String(root.clone()));
         }
         let at_session_cwd = *root == session_cwd;
-        let root_config = if at_session_cwd { config.clone() } else { read_config(root) };
+        let root_config = if at_session_cwd {
+            config.clone()
+        } else {
+            read_config(root)
+        };
         if !root_config.enabled {
-            first_skip.get_or_insert_with(|| result(
-                &root_audit,
-                vec![("skipped", Value::from("config-disabled")), ("durationMs", ms_since(started))],
-            ));
+            first_skip.get_or_insert_with(|| {
+                result(
+                    &root_audit,
+                    vec![
+                        ("skipped", Value::from("config-disabled")),
+                        ("durationMs", ms_since(started)),
+                    ],
+                )
+            });
             continue;
         }
-        let mut root_cache = if at_session_cwd { cache.clone() } else { read_cache(root) };
+        let mut root_cache = if at_session_cwd {
+            cache.clone()
+        } else {
+            read_cache(root)
+        };
         let touched = touched_files(&root_cache, &session_id);
         if touched.is_empty() {
-            first_skip.get_or_insert_with(|| result(
-                &root_audit,
-                vec![("skipped", Value::from("no-touched-files")), ("durationMs", ms_since(started))],
-            ));
+            first_skip.get_or_insert_with(|| {
+                result(
+                    &root_audit,
+                    vec![
+                        ("skipped", Value::from("no-touched-files")),
+                        ("durationMs", ms_since(started)),
+                    ],
+                )
+            });
             continue;
         }
-        let mut root_memo = if at_session_cwd { platform_memo.clone() } else { None };
+        let mut root_memo = if at_session_cwd {
+            platform_memo.clone()
+        } else {
+            None
+        };
         if let Some(skip) = native_skip(&root_audit, root, &mut root_memo) {
             first_skip.get_or_insert(skip);
             continue;
@@ -854,11 +931,22 @@ pub fn run_stop_hook(rt: &Runtime, stdin: &str) -> RunResult {
                 stop_baseline::reconcile(&mut root_cache, &session_id, file_path, &findings);
             }
             let filtered = filter_findings(findings, &root_config);
-            let classified = stop_baseline::classify(&root_cache, &session_id, file_path, use_html_engine, filtered.clone());
+            let classified = stop_baseline::classify(
+                &root_cache,
+                &session_id,
+                file_path,
+                use_html_engine,
+                filtered.clone(),
+            );
             pre_existing += classified.pre_existing;
             new_findings += classified.new;
             unknown += classified.unknown;
-            let fresh = dedupe_against_cache(&classified.findings, &mut root_cache, &session_id, file_path);
+            let fresh = dedupe_against_cache(
+                &classified.findings,
+                &mut root_cache,
+                &session_id,
+                file_path,
+            );
             // JS: sync to the live scan, including empty. Remembering only
             // `fresh` (or skipping the write on a clean Stop) left stale keys in
             // place, so a finding that was fixed and later reintroduced never
@@ -872,7 +960,14 @@ pub fn run_stop_hook(rt: &Runtime, stdin: &str) -> RunResult {
                 });
             }
         }
-        passes.push(RootPass { cwd: root.clone(), config: root_config, cache: root_cache, groups, scans, dirty });
+        passes.push(RootPass {
+            cwd: root.clone(),
+            config: root_config,
+            cache: root_cache,
+            groups,
+            scans,
+            dirty,
+        });
     }
     if passes.is_empty() {
         // Every root fell out at a gate: report the first, as a single root did.
@@ -888,7 +983,9 @@ pub fn run_stop_hook(rt: &Runtime, stdin: &str) -> RunResult {
     audit.insert("preExistingFindings".into(), Value::from(pre_existing));
     audit.insert("newFindings".into(), Value::from(new_findings));
     audit.insert("unknownFindings".into(), Value::from(unknown));
-    let emitting: Vec<usize> = (0..passes.len()).filter(|&i| !passes[i].groups.is_empty()).collect();
+    let emitting: Vec<usize> = (0..passes.len())
+        .filter(|&i| !passes[i].groups.is_empty())
+        .collect();
     if emitting.is_empty() {
         for pass in passes.iter().filter(|p| p.dirty) {
             persist_cache(rt, &pass.cwd, &pass.cache);
@@ -907,12 +1004,21 @@ pub fn run_stop_hook(rt: &Runtime, stdin: &str) -> RunResult {
     // from several roots render as one grouped list, root by root, with paths
     // relative to the session cwd so each names its project.
     let lead = emitting[0];
-    let fresh_groups: Vec<Group> = emitting.iter().flat_map(|&i| std::mem::take(&mut passes[i].groups)).collect();
-    let display_cwd = if emitting.len() == 1 { passes[lead].cwd.clone() } else { session_cwd.clone() };
+    let fresh_groups: Vec<Group> = emitting
+        .iter()
+        .flat_map(|&i| std::mem::take(&mut passes[i].groups))
+        .collect();
+    let display_cwd = if emitting.len() == 1 {
+        passes[lead].cwd.clone()
+    } else {
+        session_cwd.clone()
+    };
     let config = passes[lead].config.clone();
     let scan = passes[lead].scans[&fresh_groups[0].file_path].clone();
     let short = footer_mode_short(&mut passes[lead].cache, &session_id);
-    let first_unknown = fresh_groups.iter().flat_map(|group| &group.findings)
+    let first_unknown = fresh_groups
+        .iter()
+        .flat_map(|group| &group.findings)
         .position(|f| f.name.starts_with("[attribution unknown]"));
     let mut attribution_note = if first_unknown.is_some() {
         format!("{ENVELOPE_PREFIX} {}", stop_baseline::UNKNOWN_NOTE)
@@ -921,20 +1027,29 @@ pub fn run_stop_hook(rt: &Runtime, stdin: &str) -> RunResult {
     };
     // Findings and attribution take priority. Append the lower-priority stale
     // DESIGN.md notice only if it fits, without consuming its session flag.
-    let render = |note: &str, render_config: &HookConfig| render_grouped_template(
-        rt,
-        &fresh_groups,
-        render_config,
-        &RenderOpts {
-            cwd: Some(display_cwd.clone()),
-            short_footer: short,
-            reserve_chars: if note.is_empty() { 0.0 } else { (utf16_len(note) + 2) as f64 },
-        },
-    );
+    let render = |note: &str, render_config: &HookConfig| {
+        render_grouped_template(
+            rt,
+            &fresh_groups,
+            render_config,
+            &RenderOpts {
+                cwd: Some(display_cwd.clone()),
+                short_footer: short,
+                reserve_chars: if note.is_empty() {
+                    0.0
+                } else {
+                    (utf16_len(note) + 2) as f64
+                },
+            },
+        )
+    };
     let mut rendered = render(&attribution_note, &config);
-    if !attribution_note.is_empty() && !rendered.lines().any(|line| {
-        line.starts_with("- ") && (line.contains("[attribution unknown]") || line.contains("[new]"))
-    }) {
+    if !attribution_note.is_empty()
+        && !rendered.lines().any(|line| {
+            line.starts_with("- ")
+                && (line.contains("[attribution unknown]") || line.contains("[new]"))
+        })
+    {
         // At the minimum budget, a grouped header and policy footer may crowd
         // out even the first finding. Shorten the notice before losing it.
         attribution_note = format!("{ENVELOPE_PREFIX} {}", stop_baseline::COMPACT_UNKNOWN_NOTE);
@@ -942,9 +1057,9 @@ pub fn run_stop_hook(rt: &Runtime, stdin: &str) -> RunResult {
     }
     // maxFindings / maxChars may also remove all unknown findings. Do not
     // attach their guidance to an output that only shows confirmed new debt.
-    let shows_unknown = rendered.lines().any(|line| {
-        line.starts_with("- ") && line.contains("[attribution unknown]")
-    });
+    let shows_unknown = rendered
+        .lines()
+        .any(|line| line.starts_with("- ") && line.contains("[attribution unknown]"));
     if !shows_unknown {
         if let Some(prefix @ 1..) = first_unknown {
             // Reclaim the unused notice budget for the known-new prefix.
@@ -955,19 +1070,41 @@ pub fn run_stop_hook(rt: &Runtime, stdin: &str) -> RunResult {
             rendered = render("", &visible_config);
         }
     }
-    let text = if shows_unknown { format!("{attribution_note}\n\n{rendered}") } else { rendered };
-    let text =
-        append_design_system_note_once(rt, &text, &scan, &mut passes[lead].cache, &session_id, &config);
+    let text = if shows_unknown {
+        format!("{attribution_note}\n\n{rendered}")
+    } else {
+        rendered
+    };
+    let text = append_design_system_note_once(
+        rt,
+        &text,
+        &scan,
+        &mut passes[lead].cache,
+        &session_id,
+        &config,
+    );
     // Findings shown over a comp build already recorded as shipped: a fix voids
     // that finish, so say so with the findings, not after the agent stops.
     let note = match passes.iter().position(|p| p.cwd == session_cwd) {
         Some(i) => {
             passes[i].dirty = true;
-            crate::build_completion::finished_build_note(rt, &session_cwd, &session_id, &mut passes[i].cache)
+            crate::build_completion::finished_build_note(
+                rt,
+                &session_cwd,
+                &session_id,
+                &mut passes[i].cache,
+            )
         }
         None => {
-            let note = crate::build_completion::finished_build_note(rt, &session_cwd, &session_id, &mut cache);
-            if note.is_some() { persist_cache(rt, &session_cwd, &cache); }
+            let note = crate::build_completion::finished_build_note(
+                rt,
+                &session_cwd,
+                &session_id,
+                &mut cache,
+            );
+            if note.is_some() {
+                persist_cache(rt, &session_cwd, &cache);
+            }
             note
         }
     };
@@ -1013,19 +1150,26 @@ fn is_stop_event(stdin: &str) -> bool {
 pub fn run(rt: &Runtime, stdin: &str, io: &mut impeccable_common::Io) -> i32 {
     if let Ok(Value::Object(event)) = serde_json::from_str::<Value>(stdin) {
         if event.get("hook_event_name").and_then(Value::as_str) == Some("BeforeTool")
-            && resolve_harness(rt, Some(&event)) == "gemini" {
+            && resolve_harness(rt, Some(&event)) == "gemini"
+        {
             // String checks first: this fires before every Gemini shell call.
             if let Some(output) = crate::build_completion::gemini_shell_identity(rt, &event) {
-                if !truthy(rt.env("IMPECCABLE_HOOK_DISABLED")) && read_config(&rt.proc_cwd).enabled {
+                if !truthy(rt.env("IMPECCABLE_HOOK_DISABLED")) && read_config(&rt.proc_cwd).enabled
+                {
                     io.out(&format!("{output}\n"));
                 }
             }
             return 0;
         }
         if event.get("hook_event_name").and_then(Value::as_str) == Some("SessionStart") {
-            let cwd = rt.resolve(&[event.get("cwd").and_then(Value::as_str).unwrap_or(&rt.proc_cwd)]);
-            if !truthy(rt.env("IMPECCABLE_HOOK_DISABLED")) && resolve_harness(rt, Some(&event)) == "claude"
-                && read_config(&cwd).enabled {
+            let cwd = rt.resolve(&[event
+                .get("cwd")
+                .and_then(Value::as_str)
+                .unwrap_or(&rt.proc_cwd)]);
+            if !truthy(rt.env("IMPECCABLE_HOOK_DISABLED"))
+                && resolve_harness(rt, Some(&event)) == "claude"
+                && read_config(&cwd).enabled
+            {
                 if let Some(session) = event.get("session_id").and_then(Value::as_str) {
                     crate::build_completion::persist_session_identity(rt, session);
                 }

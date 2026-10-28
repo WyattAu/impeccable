@@ -11,7 +11,8 @@ use impeccable_core::browser::page_checks::check_heading_rhythm_dom;
 use impeccable_core::browser::ElId;
 
 const W: f64 = 800.0;
-const LONG: &str = "A closing paragraph of the previous block of content that runs well past eighty characters.";
+const LONG: &str =
+    "A closing paragraph of the previous block of content that runs well past eighty characters.";
 
 struct Page {
     d: FakeDom,
@@ -27,7 +28,14 @@ impl Page {
     }
 
     /// An element in normal flow with neutral styles, then `styles` on top.
-    fn el(&mut self, parent: ElId, tag: &str, rect: (f64, f64, f64, f64), styles: &[(&str, &str)], text: &str) -> ElId {
+    fn el(
+        &mut self,
+        parent: ElId,
+        tag: &str,
+        rect: (f64, f64, f64, f64),
+        styles: &[(&str, &str)],
+        text: &str,
+    ) -> ElId {
         let el = self.d.add(Some(parent), tag);
         self.d.set_styles(
             el,
@@ -57,7 +65,13 @@ impl Page {
     fn case(&mut self, height: f64) -> (ElId, f64) {
         let y = self.y;
         let body = self.body;
-        let sec = self.el(body, "section", (0.0, y, W, height), &[("borderTopWidth", "1px")], "");
+        let sec = self.el(
+            body,
+            "section",
+            (0.0, y, W, height),
+            &[("borderTopWidth", "1px")],
+            "",
+        );
         self.y += height + 48.0;
         (sec, y + 24.0)
     }
@@ -66,7 +80,13 @@ impl Page {
     fn crowded(&mut self, title: &str) {
         let (sec, y) = self.case(196.0);
         self.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
-        self.el(sec, "h2", (0.0, y + 48.0, W, 36.0), &[("fontSize", "28px")], title);
+        self.el(
+            sec,
+            "h2",
+            (0.0, y + 48.0, W, 36.0),
+            &[("fontSize", "28px")],
+            title,
+        );
         self.el(sec, "p", (0.0, y + 124.0, W, 48.0), &[], LONG);
     }
 
@@ -81,7 +101,10 @@ impl Page {
 fn assert_only_crowded(p: &Page) {
     let flagged = p.flagged();
     assert_eq!(flagged.len(), 2, "{flagged:#?}");
-    assert!(flagged.iter().all(|s| s.contains("Crowded")), "{flagged:#?}");
+    assert!(
+        flagged.iter().all(|s| s.contains("Crowded")),
+        "{flagged:#?}"
+    );
 }
 
 /// The two crowded headings plus one more, the one `needle` names.
@@ -106,15 +129,35 @@ fn a_crowded_title_in_flush_wrappers_still_flags() {
     // does not span the block, ten pixels above the title.
     let carousel = p.el(sec, "div", (0.0, y, W, 200.0), &[], "");
     p.el(carousel, "div", (0.0, y, W, 176.0), &[], "");
-    p.el(carousel, "a", (340.0, y + 176.0, 120.0, 24.0), &[("borderBottomWidth", "1px")], "More");
+    p.el(
+        carousel,
+        "a",
+        (340.0, y + 176.0, 120.0, 24.0),
+        &[("borderBottomWidth", "1px")],
+        "More",
+    );
     let outer = p.el(sec, "div", (0.0, y + 210.0, W, 36.0), &[], "");
     let inner = p.el(outer, "div", (0.0, y + 210.0, W, 36.0), &[], "");
-    p.el(inner, "h2", (0.0, y + 210.0, W, 36.0), &[("fontSize", "28px")], "Wrapped Section Title");
-    p.el(sec, "div", (0.0, y + 286.0, W, 120.0), &[], "Tiles the title introduces");
+    p.el(
+        inner,
+        "h2",
+        (0.0, y + 210.0, W, 36.0),
+        &[("fontSize", "28px")],
+        "Wrapped Section Title",
+    );
+    p.el(
+        sec,
+        "div",
+        (0.0, y + 286.0, W, 120.0),
+        &[],
+        "Tiles the title introduces",
+    );
     let flagged = p.flagged();
     assert_eq!(flagged.len(), 3, "{flagged:#?}");
     assert!(
-        flagged.iter().any(|s| s.contains("\"Wrapped Section Title\" has 10px above vs 40px below")),
+        flagged
+            .iter()
+            .any(|s| s.contains("\"Wrapped Section Title\" has 10px above vs 40px below")),
         "{flagged:#?}"
     );
 }
@@ -125,9 +168,21 @@ fn an_eyebrow_in_a_wrapper_of_its_own_folds_into_the_heading() {
     let (sec, y) = p.case(260.0);
     p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
     let eyebrow_wrap = p.el(sec, "div", (0.0, y + 120.0, W, 16.0), &[], "");
-    p.el(eyebrow_wrap, "p", (0.0, y + 120.0, W, 16.0), &[("fontSize", "12px")], "Introducing");
+    p.el(
+        eyebrow_wrap,
+        "p",
+        (0.0, y + 120.0, W, 16.0),
+        &[("fontSize", "12px")],
+        "Introducing",
+    );
     let title_wrap = p.el(sec, "div", (0.0, y + 160.0, W, 36.0), &[], "");
-    p.el(title_wrap, "h2", (0.0, y + 160.0, W, 36.0), &[("fontSize", "28px")], "Eyebrow In Wrapper");
+    p.el(
+        title_wrap,
+        "h2",
+        (0.0, y + 160.0, W, 36.0),
+        &[("fontSize", "28px")],
+        "Eyebrow In Wrapper",
+    );
     p.el(sec, "p", (0.0, y + 244.0, W, 48.0), &[], LONG);
     assert_only_crowded(&p);
 
@@ -136,10 +191,28 @@ fn an_eyebrow_in_a_wrapper_of_its_own_folds_into_the_heading() {
     let (sec, y) = p.case(260.0);
     p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
     let eyebrow_wrap = p.el(sec, "div", (0.0, y + 120.0, W, 16.0), &[], "");
-    p.el(eyebrow_wrap, "p", (0.0, y + 120.0, W, 16.0), &[("fontSize", "12px")], "Introducing");
-    let contents = p.el(sec, "div", (0.0, 0.0, 0.0, 0.0), &[("display", "contents")], "");
+    p.el(
+        eyebrow_wrap,
+        "p",
+        (0.0, y + 120.0, W, 16.0),
+        &[("fontSize", "12px")],
+        "Introducing",
+    );
+    let contents = p.el(
+        sec,
+        "div",
+        (0.0, 0.0, 0.0, 0.0),
+        &[("display", "contents")],
+        "",
+    );
     let title_wrap = p.el(contents, "div", (0.0, y + 160.0, W, 36.0), &[], "");
-    p.el(title_wrap, "h2", (0.0, y + 160.0, W, 36.0), &[("fontSize", "28px")], "Eyebrow Behind Contents");
+    p.el(
+        title_wrap,
+        "h2",
+        (0.0, y + 160.0, W, 36.0),
+        &[("fontSize", "28px")],
+        "Eyebrow Behind Contents",
+    );
     p.el(sec, "p", (0.0, y + 244.0, W, 48.0), &[], LONG);
     assert_only_crowded(&p);
 }
@@ -158,8 +231,20 @@ fn a_heading_that_ends_its_row_has_nothing_below_to_introduce() {
     .enumerate()
     {
         let top = y + i as f64 * 72.0;
-        let row = p.el(sec, "div", (0.0, top, W, 48.0), &[("paddingBottom", "24px")], "");
-        p.el(row, "h4", (0.0, top, W, 24.0), &[("fontSize", "18px")], title);
+        let row = p.el(
+            sec,
+            "div",
+            (0.0, top, W, 48.0),
+            &[("paddingBottom", "24px")],
+            "",
+        );
+        p.el(
+            row,
+            "h4",
+            (0.0, top, W, 24.0),
+            &[("fontSize", "18px")],
+            title,
+        );
     }
     assert_only_crowded(&p);
 
@@ -169,11 +254,26 @@ fn a_heading_that_ends_its_row_has_nothing_below_to_introduce() {
     let (sec, y) = p.case(320.0);
     p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
     let row = p.el(sec, "div", (0.0, y + 48.0, W, 156.0), &[], "");
-    for (i, title) in ["Card Headline On The Right", "Card Headline On The Left"].iter().enumerate() {
+    for (i, title) in ["Card Headline On The Right", "Card Headline On The Left"]
+        .iter()
+        .enumerate()
+    {
         let x = i as f64 * 420.0;
         let col = p.el(row, "div", (x, y + 48.0, 380.0, 156.0), &[], "");
-        p.el(col, "div", (x, y + 48.0, 380.0, 20.0), &[("fontSize", "12px")], "Culture");
-        p.el(col, "h4", (x, y + 80.0, 380.0, 100.0), &[("fontSize", "18px"), ("marginBottom", "24px")], title);
+        p.el(
+            col,
+            "div",
+            (x, y + 48.0, 380.0, 20.0),
+            &[("fontSize", "12px")],
+            "Culture",
+        );
+        p.el(
+            col,
+            "h4",
+            (x, y + 80.0, 380.0, 100.0),
+            &[("fontSize", "18px"), ("marginBottom", "24px")],
+            title,
+        );
     }
     p.el(sec, "div", (0.0, y + 228.0, W, 60.0), &[], "Next section");
     assert_only_crowded(&p);
@@ -184,8 +284,20 @@ fn a_rule_a_photo_or_a_heading_above_is_not_content_the_heading_captions() {
     // The block above ends in a rule across its width.
     let mut p = crowded_pair();
     let (sec, y) = p.case(200.0);
-    p.el(sec, "div", (0.0, y, W, 49.0), &[("borderBottomWidth", "1px")], LONG);
-    p.el(sec, "h3", (0.0, y + 73.0, W, 28.0), &[("fontSize", "20px")], "Divider Above");
+    p.el(
+        sec,
+        "div",
+        (0.0, y, W, 49.0),
+        &[("borderBottomWidth", "1px")],
+        LONG,
+    );
+    p.el(
+        sec,
+        "h3",
+        (0.0, y + 73.0, W, 28.0),
+        &[("fontSize", "20px")],
+        "Divider Above",
+    );
     p.el(sec, "p", (0.0, y + 149.0, W, 48.0), &[], LONG);
     assert_only_crowded(&p);
 
@@ -194,7 +306,13 @@ fn a_rule_a_photo_or_a_heading_above_is_not_content_the_heading_captions() {
     let (sec, y) = p.case(200.0);
     p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
     p.el(sec, "hr", (0.0, y + 72.0, W, 1.0), &[], "");
-    p.el(sec, "h3", (0.0, y + 85.0, W, 28.0), &[("fontSize", "20px")], "Rule Above");
+    p.el(
+        sec,
+        "h3",
+        (0.0, y + 85.0, W, 28.0),
+        &[("fontSize", "20px")],
+        "Rule Above",
+    );
     p.el(sec, "p", (0.0, y + 153.0, W, 48.0), &[], LONG);
     assert_only_crowded(&p);
 
@@ -203,7 +321,13 @@ fn a_rule_a_photo_or_a_heading_above_is_not_content_the_heading_captions() {
     let (sec, y) = p.case(220.0);
     let card = p.el(sec, "div", (0.0, y, 240.0, 204.0), &[], "");
     p.el(card, "img", (0.0, y, 240.0, 120.0), &[], "");
-    p.el(card, "h3", (0.0, y + 124.0, 240.0, 28.0), &[("fontSize", "20px")], "Caption Under Photo");
+    p.el(
+        card,
+        "h3",
+        (0.0, y + 124.0, 240.0, 28.0),
+        &[("fontSize", "20px")],
+        "Caption Under Photo",
+    );
     p.el(card, "p", (0.0, y + 176.0, 240.0, 28.0), &[], LONG);
     assert_only_crowded(&p);
 
@@ -211,8 +335,20 @@ fn a_rule_a_photo_or_a_heading_above_is_not_content_the_heading_captions() {
     let mut p = crowded_pair();
     let (sec, y) = p.case(200.0);
     p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
-    p.el(sec, "h3", (0.0, y + 72.0, W, 30.0), &[("fontSize", "26px")], "A Columnist With A Long Byline Name");
-    p.el(sec, "h3", (0.0, y + 102.0, W, 30.0), &[("fontSize", "26px")], "Stacked Title");
+    p.el(
+        sec,
+        "h3",
+        (0.0, y + 72.0, W, 30.0),
+        &[("fontSize", "26px")],
+        "A Columnist With A Long Byline Name",
+    );
+    p.el(
+        sec,
+        "h3",
+        (0.0, y + 102.0, W, 30.0),
+        &[("fontSize", "26px")],
+        "Stacked Title",
+    );
     p.el(sec, "p", (0.0, y + 172.0, W, 24.0), &[], LONG);
     assert_only_crowded(&p);
 }
@@ -226,7 +362,11 @@ fn a_heading_that_draws_its_own_rule_is_separated_by_it() {
         sec,
         "h2",
         (0.0, y + 48.0, W, 53.0),
-        &[("fontSize", "25px"), ("borderTopWidth", "1px"), ("borderBottomWidth", "1px")],
+        &[
+            ("fontSize", "25px"),
+            ("borderTopWidth", "1px"),
+            ("borderBottomWidth", "1px"),
+        ],
         "Banded Title",
     );
     p.el(sec, "p", (0.0, y + 122.0, W, 48.0), &[], LONG);
@@ -240,7 +380,13 @@ fn space_held_open_by_padding_or_a_spacer_counts_as_space_above() {
     let (sec, y) = p.case(240.0);
     p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
     p.el(sec, "div", (0.0, y + 48.0, W, 80.0), &[], "");
-    p.el(sec, "h2", (0.0, y + 128.0, W, 36.0), &[("fontSize", "28px")], "Heading After A Spacer");
+    p.el(
+        sec,
+        "h2",
+        (0.0, y + 128.0, W, 36.0),
+        &[("fontSize", "28px")],
+        "Heading After A Spacer",
+    );
     p.el(sec, "p", (0.0, y + 188.0, W, 48.0), &[], LONG);
     assert_only_crowded(&p);
 
@@ -248,9 +394,30 @@ fn space_held_open_by_padding_or_a_spacer_counts_as_space_above() {
     // pixels before the panel's box does.
     let mut p = crowded_pair();
     let (sec, y) = p.case(420.0);
-    let panel = p.el(sec, "div", (0.0, y, W, 266.0), &[("paddingBottom", "50px")], "");
-    p.el(panel, "div", (22.0, y, 345.0, 216.0), &[("backgroundColor", "rgb(19, 23, 27)"), ("borderBottomWidth", "1px")], "");
-    p.el(sec, "h3", (0.0, y + 266.0, W, 28.0), &[("fontSize", "24px")], "Heading Under A Padded Panel");
+    let panel = p.el(
+        sec,
+        "div",
+        (0.0, y, W, 266.0),
+        &[("paddingBottom", "50px")],
+        "",
+    );
+    p.el(
+        panel,
+        "div",
+        (22.0, y, 345.0, 216.0),
+        &[
+            ("backgroundColor", "rgb(19, 23, 27)"),
+            ("borderBottomWidth", "1px"),
+        ],
+        "",
+    );
+    p.el(
+        sec,
+        "h3",
+        (0.0, y + 266.0, W, 28.0),
+        &[("fontSize", "24px")],
+        "Heading Under A Padded Panel",
+    );
     p.el(sec, "p", (0.0, y + 306.0, W, 48.0), &[], LONG);
     assert_only_crowded(&p);
 
@@ -258,8 +425,20 @@ fn space_held_open_by_padding_or_a_spacer_counts_as_space_above() {
     let mut p = crowded_pair();
     let (sec, y) = p.case(200.0);
     p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
-    p.el(sec, "h2", (0.0, y + 48.0, W, 56.0), &[("fontSize", "15px"), ("paddingTop", "36px")], "Footer Group Heading");
-    p.el(sec, "ul", (0.0, y + 116.0, W, 48.0), &[], "Links under the footer heading");
+    p.el(
+        sec,
+        "h2",
+        (0.0, y + 48.0, W, 56.0),
+        &[("fontSize", "15px"), ("paddingTop", "36px")],
+        "Footer Group Heading",
+    );
+    p.el(
+        sec,
+        "ul",
+        (0.0, y + 116.0, W, 48.0),
+        &[],
+        "Links under the footer heading",
+    );
     assert_only_crowded(&p);
 }
 
@@ -272,7 +451,13 @@ fn short_spacers_are_never_folded_in_as_an_eyebrow() {
     p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
     p.el(sec, "div", (0.0, y + 48.0, W, 48.0), &[], "");
     p.el(sec, "div", (0.0, y + 96.0, W, 48.0), &[], "");
-    p.el(sec, "h2", (0.0, y + 144.0, W, 36.0), &[("fontSize", "28px")], "Heading After Short Spacers");
+    p.el(
+        sec,
+        "h2",
+        (0.0, y + 144.0, W, 36.0),
+        &[("fontSize", "28px")],
+        "Heading After Short Spacers",
+    );
     p.el(sec, "p", (0.0, y + 204.0, W, 48.0), &[], LONG);
     assert_only_crowded(&p);
 }
@@ -281,9 +466,21 @@ fn short_spacers_are_never_folded_in_as_an_eyebrow() {
 fn an_icon_badge_above_is_a_picture_the_heading_captions() {
     let mut p = crowded_pair();
     let (sec, y) = p.case(200.0);
-    let badge = p.el(sec, "div", (368.0, y, 64.0, 64.0), &[("backgroundColor", "rgba(20, 160, 90, 0.1)")], "");
+    let badge = p.el(
+        sec,
+        "div",
+        (368.0, y, 64.0, 64.0),
+        &[("backgroundColor", "rgba(20, 160, 90, 0.1)")],
+        "",
+    );
     p.el(badge, "svg", (384.0, y + 16.0, 32.0, 32.0), &[], "");
-    p.el(sec, "h3", (0.0, y + 80.0, W, 28.0), &[("fontSize", "18px")], "Feature Under Its Icon");
+    p.el(
+        sec,
+        "h3",
+        (0.0, y + 80.0, W, 28.0),
+        &[("fontSize", "18px")],
+        "Feature Under Its Icon",
+    );
     p.el(sec, "p", (0.0, y + 148.0, W, 48.0), &[], LONG);
     assert_only_crowded(&p);
 }
@@ -294,8 +491,20 @@ fn the_nearest_blocks_are_measured_whatever_the_source_order() {
     let mut p = crowded_pair();
     let (sec, y) = p.case(300.0);
     p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
-    p.el(sec, "h2", (0.0, y + 68.0, W, 36.0), &[("fontSize", "28px")], "Heading In A Flex Column");
-    p.el(sec, "div", (300.0, y + 254.0, 200.0, 44.0), &[], "Read more");
+    p.el(
+        sec,
+        "h2",
+        (0.0, y + 68.0, W, 36.0),
+        &[("fontSize", "28px")],
+        "Heading In A Flex Column",
+    );
+    p.el(
+        sec,
+        "div",
+        (300.0, y + 254.0, 200.0, 44.0),
+        &[],
+        "Read more",
+    );
     p.el(sec, "div", (0.0, y + 128.0, W, 108.0), &[], LONG);
     assert_only_crowded(&p);
 
@@ -303,9 +512,27 @@ fn the_nearest_blocks_are_measured_whatever_the_source_order() {
     // measured from the paragraph, where the run's block ends.
     let mut p = crowded_pair();
     let (sec, y) = p.case(260.0);
-    let stat = p.el(sec, "p", (0.0, y + 18.0, W, 82.0), &[("fontSize", "90px")], "");
-    p.el(stat, "span", (50.0, y, 80.0, 117.0), &[("display", "inline")], "60% reduction");
-    p.el(sec, "h3", (0.0, y + 119.0, W, 40.0), &[("fontSize", "38px")], "Heading Under A Stat");
+    let stat = p.el(
+        sec,
+        "p",
+        (0.0, y + 18.0, W, 82.0),
+        &[("fontSize", "90px")],
+        "",
+    );
+    p.el(
+        stat,
+        "span",
+        (50.0, y, 80.0, 117.0),
+        &[("display", "inline")],
+        "60% reduction",
+    );
+    p.el(
+        sec,
+        "h3",
+        (0.0, y + 119.0, W, 40.0),
+        &[("fontSize", "38px")],
+        "Heading Under A Stat",
+    );
     p.el(sec, "p", (0.0, y + 175.0, W, 74.0), &[], LONG);
     assert_only_crowded(&p);
 }
@@ -315,9 +542,27 @@ fn a_standfirst_behind_display_contents_is_what_sits_below() {
     let mut p = crowded_pair();
     let (sec, y) = p.case(260.0);
     p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
-    p.el(sec, "h2", (0.0, y + 58.0, W, 36.0), &[("fontSize", "28px")], "Standfirst Behind Contents");
-    let contents = p.el(sec, "div", (0.0, 0.0, 0.0, 0.0), &[("display", "contents")], "");
-    p.el(contents, "p", (0.0, y + 106.0, W, 24.0), &[], "A short standfirst under the heading.");
+    p.el(
+        sec,
+        "h2",
+        (0.0, y + 58.0, W, 36.0),
+        &[("fontSize", "28px")],
+        "Standfirst Behind Contents",
+    );
+    let contents = p.el(
+        sec,
+        "div",
+        (0.0, 0.0, 0.0, 0.0),
+        &[("display", "contents")],
+        "",
+    );
+    p.el(
+        contents,
+        "p",
+        (0.0, y + 106.0, W, 24.0),
+        &[],
+        "A short standfirst under the heading.",
+    );
     p.el(sec, "div", (0.0, y + 178.0, W, 60.0), &[], "Plans");
     assert_only_crowded(&p);
 }
@@ -336,7 +581,13 @@ fn a_title_whose_wrapper_holds_the_spacing_measures_past_the_wrapper() {
         &[("paddingTop", "16px"), ("paddingBottom", "48px")],
         "",
     );
-    p.el(header, "h2", (0.0, y + 64.0, W, 40.0), &[("fontSize", "32px")], "Header Padding");
+    p.el(
+        header,
+        "h2",
+        (0.0, y + 64.0, W, 40.0),
+        &[("fontSize", "32px")],
+        "Header Padding",
+    );
     p.el(sec, "p", (0.0, y + 152.0, W, 48.0), &[], LONG);
     assert_flags(&p, "\"Header Padding\" has 16px above vs 48px below");
 
@@ -351,7 +602,13 @@ fn a_title_whose_wrapper_holds_the_spacing_measures_past_the_wrapper() {
         &[("paddingBottom", "6px"), ("marginBottom", "42px")],
         "",
     );
-    p.el(wrap, "h2", (0.0, y + 64.0, W, 40.0), &[("fontSize", "32px")], "Small Padding");
+    p.el(
+        wrap,
+        "h2",
+        (0.0, y + 64.0, W, 40.0),
+        &[("fontSize", "32px")],
+        "Small Padding",
+    );
     p.el(sec, "p", (0.0, y + 152.0, W, 48.0), &[], LONG);
     assert_flags(&p, "\"Small Padding\" has 16px above vs 48px below");
 }
@@ -361,18 +618,54 @@ fn a_title_row_stretched_by_an_icon_or_a_button_measures_past_the_row() {
     let mut p = crowded_pair();
     let (sec, y) = p.case(240.0);
     p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
-    let row = p.el(sec, "div", (0.0, y + 64.0, W, 48.0), &[("display", "flex"), ("marginBottom", "48px")], "");
-    p.el(row, "span", (0.0, y + 64.0, 48.0, 48.0), &[("backgroundColor", "rgb(228, 224, 245)")], "");
-    p.el(row, "h2", (60.0, y + 68.0, 740.0, 40.0), &[("fontSize", "32px")], "Icon Beside Heading");
+    let row = p.el(
+        sec,
+        "div",
+        (0.0, y + 64.0, W, 48.0),
+        &[("display", "flex"), ("marginBottom", "48px")],
+        "",
+    );
+    p.el(
+        row,
+        "span",
+        (0.0, y + 64.0, 48.0, 48.0),
+        &[("backgroundColor", "rgb(228, 224, 245)")],
+        "",
+    );
+    p.el(
+        row,
+        "h2",
+        (60.0, y + 68.0, 740.0, 40.0),
+        &[("fontSize", "32px")],
+        "Icon Beside Heading",
+    );
     p.el(sec, "p", (0.0, y + 160.0, W, 48.0), &[], LONG);
     assert_flags(&p, "\"Icon Beside Heading\" has 20px above vs 52px below");
 
     let mut p = crowded_pair();
     let (sec, y) = p.case(240.0);
     p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
-    let row = p.el(sec, "div", (0.0, y + 64.0, W, 56.0), &[("display", "flex"), ("marginBottom", "48px")], "");
-    p.el(row, "h2", (0.0, y + 72.0, 560.0, 40.0), &[("fontSize", "32px")], "Pricing Title Row");
-    p.el(row, "a", (600.0, y + 64.0, 200.0, 56.0), &[("backgroundColor", "rgb(34, 34, 34)")], "View all plans");
+    let row = p.el(
+        sec,
+        "div",
+        (0.0, y + 64.0, W, 56.0),
+        &[("display", "flex"), ("marginBottom", "48px")],
+        "",
+    );
+    p.el(
+        row,
+        "h2",
+        (0.0, y + 72.0, 560.0, 40.0),
+        &[("fontSize", "32px")],
+        "Pricing Title Row",
+    );
+    p.el(
+        row,
+        "a",
+        (600.0, y + 64.0, 200.0, 56.0),
+        &[("backgroundColor", "rgb(34, 34, 34)")],
+        "View all plans",
+    );
     p.el(sec, "p", (0.0, y + 168.0, W, 48.0), &[], LONG);
     assert_flags(&p, "\"Pricing Title Row\" has 24px above vs 56px below");
 }
@@ -381,10 +674,22 @@ fn a_title_row_stretched_by_an_icon_or_a_button_measures_past_the_row() {
 fn a_heading_last_in_one_column_measures_to_the_content_under_the_row() {
     let mut p = crowded_pair();
     let (sec, y) = p.case(260.0);
-    let grid = p.el(sec, "div", (0.0, y, W, 136.0), &[("display", "grid"), ("marginBottom", "48px")], "");
+    let grid = p.el(
+        sec,
+        "div",
+        (0.0, y, W, 136.0),
+        &[("display", "grid"), ("marginBottom", "48px")],
+        "",
+    );
     let left = p.el(grid, "div", (0.0, y, 380.0, 136.0), &[], "");
     p.el(left, "p", (0.0, y, 380.0, 96.0), &[], LONG);
-    p.el(left, "h3", (0.0, y + 108.0, 380.0, 28.0), &[("fontSize", "22px")], "Column Heading");
+    p.el(
+        left,
+        "h3",
+        (0.0, y + 108.0, 380.0, 28.0),
+        &[("fontSize", "22px")],
+        "Column Heading",
+    );
     let right = p.el(grid, "div", (420.0, y, 380.0, 96.0), &[], "");
     p.el(right, "p", (420.0, y, 380.0, 96.0), &[], LONG);
     p.el(sec, "p", (0.0, y + 184.0, W, 48.0), &[], LONG);
@@ -396,7 +701,13 @@ fn spacer_boxes_below_count_as_space_below() {
     let mut p = crowded_pair();
     let (sec, y) = p.case(240.0);
     p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
-    p.el(sec, "h2", (0.0, y + 56.0, W, 40.0), &[("fontSize", "32px")], "Heading Over A Spacer");
+    p.el(
+        sec,
+        "h2",
+        (0.0, y + 56.0, W, 40.0),
+        &[("fontSize", "32px")],
+        "Heading Over A Spacer",
+    );
     p.el(sec, "div", (0.0, y + 96.0, W, 48.0), &[], "");
     p.el(sec, "p", (0.0, y + 144.0, W, 48.0), &[], LONG);
     assert_flags(&p, "\"Heading Over A Spacer\" has 8px above vs 48px below");
@@ -408,7 +719,13 @@ fn spacer_boxes_below_count_as_space_below() {
     p.el(above, "p", (0.0, y, W, 48.0), &[], LONG);
     p.el(sec, "div", (0.0, y + 48.0, W, 16.0), &[], "");
     let title = p.el(sec, "div", (0.0, y + 64.0, W, 40.0), &[], "");
-    p.el(title, "h2", (0.0, y + 64.0, W, 40.0), &[("fontSize", "32px")], "Stack Heading");
+    p.el(
+        title,
+        "h2",
+        (0.0, y + 64.0, W, 40.0),
+        &[("fontSize", "32px")],
+        "Stack Heading",
+    );
     p.el(sec, "div", (0.0, y + 104.0, W, 48.0), &[], "");
     let below = p.el(sec, "div", (0.0, y + 152.0, W, 48.0), &[], "");
     p.el(below, "p", (0.0, y + 152.0, W, 48.0), &[], LONG);
@@ -423,9 +740,21 @@ fn only_a_line_set_as_a_label_folds_into_the_heading() {
     let (sec, y) = p.case(300.0);
     p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
     let line = p.el(sec, "div", (0.0, y + 120.0, W, 24.0), &[], "");
-    p.el(line, "p", (0.0, y + 120.0, W, 24.0), &[], "Updated March 2026");
+    p.el(
+        line,
+        "p",
+        (0.0, y + 120.0, W, 24.0),
+        &[],
+        "Updated March 2026",
+    );
     let title = p.el(sec, "div", (0.0, y + 154.0, W, 40.0), &[], "");
-    p.el(title, "h2", (0.0, y + 154.0, W, 40.0), &[("fontSize", "32px")], "Wrapped Title");
+    p.el(
+        title,
+        "h2",
+        (0.0, y + 154.0, W, 40.0),
+        &[("fontSize", "32px")],
+        "Wrapped Title",
+    );
     p.el(sec, "p", (0.0, y + 242.0, W, 48.0), &[], LONG);
     assert_flags(&p, "\"Wrapped Title\" has 10px above vs 48px below");
 
@@ -442,7 +771,13 @@ fn only_a_line_set_as_a_label_folds_into_the_heading() {
         "Introducing",
     );
     let title = p.el(sec, "div", (0.0, y + 154.0, W, 40.0), &[], "");
-    p.el(title, "h2", (0.0, y + 154.0, W, 40.0), &[("fontSize", "32px")], "Labelled Title");
+    p.el(
+        title,
+        "h2",
+        (0.0, y + 154.0, W, 40.0),
+        &[("fontSize", "32px")],
+        "Labelled Title",
+    );
     p.el(sec, "p", (0.0, y + 242.0, W, 48.0), &[], LONG);
     assert_only_crowded(&p);
 }
@@ -460,7 +795,13 @@ fn a_heading_that_ends_a_box_with_a_visible_edge_has_nothing_below() {
         &[("borderBottomWidth", "1px"), ("paddingBottom", "31px")],
         "",
     );
-    p.el(boxed, "h3", (0.0, y + 56.0, W, 40.0), &[("fontSize", "24px")], "Heading Ending A Ruled Box");
+    p.el(
+        boxed,
+        "h3",
+        (0.0, y + 56.0, W, 40.0),
+        &[("fontSize", "24px")],
+        "Heading Ending A Ruled Box",
+    );
     p.el(sec, "p", (0.0, y + 152.0, W, 48.0), &[], LONG);
     assert_only_crowded(&p);
 
@@ -476,13 +817,22 @@ fn a_heading_that_ends_a_box_with_a_visible_edge_has_nothing_below() {
             "",
         );
         p.el(band, "p", (0.0, y, W, 200.0), &[], LONG);
-        p.el(band, "h3", (0.0, y + 208.0, W, 40.0), &[("fontSize", "24px")], "Heading Ending A Band");
+        p.el(
+            band,
+            "h3",
+            (0.0, y + 208.0, W, 40.0),
+            &[("fontSize", "24px")],
+            "Heading Ending A Band",
+        );
         p.el(sec, "p", (0.0, y + 300.0, W, 48.0), &[], LONG);
         p
     };
     assert_only_crowded(&band("rgb(236, 236, 236)"));
     // A white box on the white page draws no edge, so its padding is space.
-    assert_flags(&band("rgb(255, 255, 255)"), "\"Heading Ending A Band\" has 8px above vs 52px below");
+    assert_flags(
+        &band("rgb(255, 255, 255)"),
+        "\"Heading Ending A Band\" has 8px above vs 52px below",
+    );
 }
 
 #[test]
@@ -491,8 +841,20 @@ fn a_box_framed_on_its_other_sides_above_is_content_not_a_rule() {
         let mut p = crowded_pair();
         let (sec, y) = p.case(240.0);
         p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
-        p.el(sec, "pre", (0.0, y + 48.0, W, 54.0), styles, "npx impeccable detect src/");
-        p.el(sec, "h2", (0.0, y + 114.0, W, 32.0), &[("fontSize", "24px")], "Heading Under A Framed Block");
+        p.el(
+            sec,
+            "pre",
+            (0.0, y + 48.0, W, 54.0),
+            styles,
+            "npx impeccable detect src/",
+        );
+        p.el(
+            sec,
+            "h2",
+            (0.0, y + 114.0, W, 32.0),
+            &[("fontSize", "24px")],
+            "Heading Under A Framed Block",
+        );
         p.el(sec, "p", (0.0, y + 182.0, W, 48.0), &[], LONG);
         p
     };
@@ -504,10 +866,16 @@ fn a_box_framed_on_its_other_sides_above_is_content_not_a_rule() {
         ("backgroundColor", "rgb(246, 248, 250)"),
     ];
     // A code block bordered on every side.
-    assert_flags(&block_above(&framed), "\"Heading Under A Framed Block\" has 12px above vs 36px below");
+    assert_flags(
+        &block_above(&framed),
+        "\"Heading Under A Framed Block\" has 12px above vs 36px below",
+    );
     // A callout with a left border only.
     assert_flags(
-        &block_above(&[("borderLeftWidth", "4px"), ("backgroundColor", "rgb(238, 246, 255)")]),
+        &block_above(&[
+            ("borderLeftWidth", "4px"),
+            ("backgroundColor", "rgb(238, 246, 255)"),
+        ]),
         "\"Heading Under A Framed Block\" has 12px above vs 36px below",
     );
     // The same block drawing only its bottom edge is a rule.
@@ -519,8 +887,20 @@ fn a_box_framed_on_its_other_sides_above_is_content_not_a_rule() {
     let (sec, y) = p.case(240.0);
     p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
     let panel = p.el(sec, "div", (0.0, y + 48.0, W, 54.0), &framed, "");
-    p.el(panel, "div", (1.0, y + 49.0, W - 2.0, 52.0), &[("borderBottomWidth", "1px")], "Last settings row");
-    p.el(sec, "h2", (0.0, y + 114.0, W, 32.0), &[("fontSize", "24px")], "Heading Under A Panel");
+    p.el(
+        panel,
+        "div",
+        (1.0, y + 49.0, W - 2.0, 52.0),
+        &[("borderBottomWidth", "1px")],
+        "Last settings row",
+    );
+    p.el(
+        sec,
+        "h2",
+        (0.0, y + 114.0, W, 32.0),
+        &[("fontSize", "24px")],
+        "Heading Under A Panel",
+    );
     p.el(sec, "p", (0.0, y + 182.0, W, 48.0), &[], LONG);
     assert_flags(&p, "\"Heading Under A Panel\" has 12px above vs 36px below");
 }
@@ -536,19 +916,43 @@ fn a_layout_row_that_shares_a_class_but_holds_other_content_does_not_repeat() {
     let col = p.el(row, "div", (0.0, y, W, 48.0), &[], "");
     p.d.set_attr(col, "class", "col-12");
     p.el(col, "p", (0.0, y, W, 48.0), &[], LONG);
-    let row = p.el(sec, "div", (0.0, y + 48.0, W, 102.0), &[("display", "flex")], "");
+    let row = p.el(
+        sec,
+        "div",
+        (0.0, y + 48.0, W, 102.0),
+        &[("display", "flex")],
+        "",
+    );
     p.d.set_attr(row, "class", "row");
     let col = p.el(row, "div", (0.0, y + 48.0, W, 102.0), &[], "");
     p.d.set_attr(col, "class", "col-12");
-    let title = p.el(col, "h2", (0.0, y + 64.0, W, 38.0), &[("fontSize", "32px")], "Title Alone In A Row");
+    let title = p.el(
+        col,
+        "h2",
+        (0.0, y + 64.0, W, 38.0),
+        &[("fontSize", "32px")],
+        "Title Alone In A Row",
+    );
     p.d.set_attr(title, "class", "mt-3 mb-5");
-    let row = p.el(sec, "div", (0.0, y + 150.0, W, 100.0), &[("display", "flex")], "");
+    let row = p.el(
+        sec,
+        "div",
+        (0.0, y + 150.0, W, 100.0),
+        &[("display", "flex")],
+        "",
+    );
     p.d.set_attr(row, "class", "row");
     for i in 0..3 {
         let x = i as f64 * 267.0;
         let col = p.el(row, "div", (x, y + 150.0, 266.0, 100.0), &[], "");
         p.d.set_attr(col, "class", "col-md-4");
-        p.el(col, "h3", (x, y + 150.0, 266.0, 29.0), &[("fontSize", "24px")], "Feature");
+        p.el(
+            col,
+            "h3",
+            (x, y + 150.0, 266.0, 29.0),
+            &[("fontSize", "24px")],
+            "Feature",
+        );
         p.el(col, "p", (x, y + 179.0, 266.0, 71.0), &[], LONG);
     }
     assert_flags(&p, "\"Title Alone In A Row\" has 16px above vs 48px below");
@@ -563,12 +967,35 @@ fn a_layout_row_that_shares_a_class_but_holds_other_content_does_not_repeat() {
         g
     };
     let above = group(&mut p, y, 76.0, &[]);
-    p.el(above, "h3", (0.0, y, W, 28.0), &[("fontSize", "20px")], "Sub");
+    p.el(
+        above,
+        "h3",
+        (0.0, y, W, 28.0),
+        &[("fontSize", "20px")],
+        "Sub",
+    );
     p.el(above, "p", (0.0, y + 28.0, W, 48.0), &[], LONG);
-    let title = group(&mut p, y + 76.0, 102.0, &[("paddingTop", "16px"), ("paddingBottom", "48px")]);
-    p.el(title, "h2", (0.0, y + 92.0, W, 38.0), &[("fontSize", "30px")], "Group Title");
+    let title = group(
+        &mut p,
+        y + 76.0,
+        102.0,
+        &[("paddingTop", "16px"), ("paddingBottom", "48px")],
+    );
+    p.el(
+        title,
+        "h2",
+        (0.0, y + 92.0, W, 38.0),
+        &[("fontSize", "30px")],
+        "Group Title",
+    );
     let below = group(&mut p, y + 178.0, 76.0, &[]);
-    p.el(below, "h3", (0.0, y + 178.0, W, 28.0), &[("fontSize", "20px")], "Detail");
+    p.el(
+        below,
+        "h3",
+        (0.0, y + 178.0, W, 28.0),
+        &[("fontSize", "20px")],
+        "Detail",
+    );
     p.el(below, "p", (0.0, y + 206.0, W, 48.0), &[], LONG);
     assert_flags(&p, "\"Group Title\" has 16px above vs 48px below");
 }
@@ -584,12 +1011,36 @@ fn cards_that_repeat_the_headline_in_the_same_place_still_repeat() {
     let row = p.el(sec, "div", (0.0, y + 48.0, W, 156.0), &[], "");
     let card = p.el(row, "div", (0.0, y + 48.0, 380.0, 156.0), &[], "");
     p.d.set_attr(card, "class", "card");
-    p.el(card, "div", (0.0, y + 48.0, 380.0, 20.0), &[("fontSize", "12px")], "Culture");
-    let title = p.el(card, "h4", (0.0, y + 80.0, 380.0, 100.0), &[("fontSize", "18px"), ("marginBottom", "24px")], "Labelled Card Headline");
+    p.el(
+        card,
+        "div",
+        (0.0, y + 48.0, 380.0, 20.0),
+        &[("fontSize", "12px")],
+        "Culture",
+    );
+    let title = p.el(
+        card,
+        "h4",
+        (0.0, y + 80.0, 380.0, 100.0),
+        &[("fontSize", "18px"), ("marginBottom", "24px")],
+        "Labelled Card Headline",
+    );
     p.d.set_attr(title, "class", "card-title");
-    let card = p.el(row, "div", (420.0, y + 48.0, 380.0, 156.0), &[("paddingTop", "32px")], "");
+    let card = p.el(
+        row,
+        "div",
+        (420.0, y + 48.0, 380.0, 156.0),
+        &[("paddingTop", "32px")],
+        "",
+    );
     p.d.set_attr(card, "class", "card");
-    let title = p.el(card, "h4", (420.0, y + 80.0, 380.0, 100.0), &[("fontSize", "18px"), ("marginBottom", "24px")], "Unlabelled Card Headline");
+    let title = p.el(
+        card,
+        "h4",
+        (420.0, y + 80.0, 380.0, 100.0),
+        &[("fontSize", "18px"), ("marginBottom", "24px")],
+        "Unlabelled Card Headline",
+    );
     p.d.set_attr(title, "class", "card-title");
     p.el(sec, "div", (0.0, y + 228.0, W, 60.0), &[], "Next section");
     assert_only_crowded(&p);
@@ -602,7 +1053,13 @@ fn a_date_set_smaller_than_the_body_text_folds_into_a_card_title() {
     // the pair sits under the card's own picture.
     let mut p = crowded_pair();
     let (sec, y) = p.case(420.0);
-    let card = p.el(sec, "article", (0.0, y, 266.0, 380.0), &[("borderBottomWidth", "1px")], "");
+    let card = p.el(
+        sec,
+        "article",
+        (0.0, y, 266.0, 380.0),
+        &[("borderBottomWidth", "1px")],
+        "",
+    );
     let thumb = p.el(card, "div", (0.0, y, 266.0, 150.0), &[], "");
     p.el(thumb, "img", (0.0, y, 266.0, 150.0), &[], "");
     let text = p.el(
@@ -612,17 +1069,51 @@ fn a_date_set_smaller_than_the_body_text_folds_into_a_card_title() {
         &[("paddingTop", "16px"), ("paddingBottom", "16px")],
         "",
     );
-    p.el(text, "time", (0.0, y + 166.0, 266.0, 18.0), &[("fontSize", "12px")], "August 27, 2026");
-    p.el(text, "h3", (0.0, y + 188.0, 266.0, 103.0), &[("fontSize", "18px")], "A News Card Title Under Its Date");
+    p.el(
+        text,
+        "time",
+        (0.0, y + 166.0, 266.0, 18.0),
+        &[("fontSize", "12px")],
+        "August 27, 2026",
+    );
+    p.el(
+        text,
+        "h3",
+        (0.0, y + 188.0, 266.0, 103.0),
+        &[("fontSize", "18px")],
+        "A News Card Title Under Its Date",
+    );
     let tags = p.el(card, "ul", (0.0, y + 336.0, 266.0, 36.0), &[], "");
-    p.el(tags, "li", (0.0, y + 336.0, 80.0, 24.0), &[("fontSize", "12px")], "Raytheon");
+    p.el(
+        tags,
+        "li",
+        (0.0, y + 336.0, 80.0, 24.0),
+        &[("fontSize", "12px")],
+        "Raytheon",
+    );
     assert_only_crowded(&p);
 }
 
 /// A paragraph of `lines` rendered lines, 24px apart, across `width`.
-fn prose(p: &mut Page, parent: ElId, y: f64, width: f64, lines: usize, styles: &[(&str, &str)], text: &str) -> ElId {
-    let el = p.el(parent, "p", (0.0, y, width, 24.0 * lines as f64), styles, text);
-    let rows: Vec<(f64, f64, f64, f64)> = (0..lines).map(|i| (0.0, y + 24.0 * i as f64, width - 40.0, 20.0)).collect();
+fn prose(
+    p: &mut Page,
+    parent: ElId,
+    y: f64,
+    width: f64,
+    lines: usize,
+    styles: &[(&str, &str)],
+    text: &str,
+) -> ElId {
+    let el = p.el(
+        parent,
+        "p",
+        (0.0, y, width, 24.0 * lines as f64),
+        styles,
+        text,
+    );
+    let rows: Vec<(f64, f64, f64, f64)> = (0..lines)
+        .map(|i| (0.0, y + 24.0 * i as f64, width - 40.0, 20.0))
+        .collect();
     p.d.set_text_lines(el, &rows);
     el
 }
@@ -636,7 +1127,13 @@ fn an_even_gap_under_running_prose_flags() {
     let mut p = crowded_pair();
     let (sec, y) = p.case(240.0);
     prose(&mut p, sec, y, W, 2, &[], LONG);
-    p.el(sec, "h2", (0.0, y + 78.0, W, 36.0), &[("fontSize", "28px")], "Even Under Prose");
+    p.el(
+        sec,
+        "h2",
+        (0.0, y + 78.0, W, 36.0),
+        &[("fontSize", "28px")],
+        "Even Under Prose",
+    );
     p.el(sec, "p", (0.0, y + 144.0, W, 48.0), &[], LONG);
     assert_flags(&p, "\"Even Under Prose\" has 30px above vs 30px below");
 
@@ -644,16 +1141,31 @@ fn an_even_gap_under_running_prose_flags() {
     let mut p = crowded_pair();
     let (sec, y) = p.case(240.0);
     prose(&mut p, sec, y, W, 2, &[], LONG);
-    p.el(sec, "h2", (0.0, y + 72.0, W, 36.0), &[("fontSize", "28px")], "Slightly Closer Under Prose");
+    p.el(
+        sec,
+        "h2",
+        (0.0, y + 72.0, W, 36.0),
+        &[("fontSize", "28px")],
+        "Slightly Closer Under Prose",
+    );
     p.el(sec, "p", (0.0, y + 144.0, W, 48.0), &[], LONG);
-    assert_flags(&p, "\"Slightly Closer Under Prose\" has 24px above vs 36px below");
+    assert_flags(
+        &p,
+        "\"Slightly Closer Under Prose\" has 24px above vs 36px below",
+    );
 
     // Two even headings meet the page minimum on their own.
     let mut p = Page::new();
     for title in ["Even One", "Even Two"] {
         let (sec, y) = p.case(240.0);
         prose(&mut p, sec, y, W, 3, &[], LONG);
-        p.el(sec, "h2", (0.0, y + 102.0, W, 36.0), &[("fontSize", "28px")], title);
+        p.el(
+            sec,
+            "h2",
+            (0.0, y + 102.0, W, 36.0),
+            &[("fontSize", "28px")],
+            title,
+        );
         p.el(sec, "p", (0.0, y + 168.0, W, 48.0), &[], LONG);
     }
     assert_eq!(p.flagged().len(), 2, "{:#?}", p.flagged());
@@ -664,48 +1176,81 @@ fn an_even_gap_under_anything_but_running_prose_passes() {
     // Each shape puts the heading 30px under the block above and 30px over
     // its own content; only the block above changes.
     let shapes: Vec<(&str, Box<dyn Fn(&mut Page, ElId, f64) -> f64>)> = vec![
-        ("one line", Box::new(|p, sec, y| {
-            prose(p, sec, y, W, 1, &[], LONG);
-            y + 24.0
-        })),
-        ("a short closing sentence", Box::new(|p, sec, y| {
-            prose(p, sec, y, W, 2, &[], "A short closing sentence.");
-            y + 48.0
-        })),
-        ("a pull statement set large", Box::new(|p, sec, y| {
-            prose(p, sec, y, W, 2, &[("fontSize", "24px")], LONG);
-            y + 48.0
-        })),
-        ("the caption of a column a third as wide", Box::new(|p, sec, y| {
-            let row = p.el(sec, "div", (0.0, y, W, 48.0), &[], "");
-            for i in 0..3 {
-                let x = i as f64 * 270.0;
-                let col = p.el(row, "div", (x, y, 260.0, 48.0), &[], "");
-                let el = p.el(col, "p", (x, y, 260.0, 48.0), &[], LONG);
-                p.d.set_text_lines(el, &[(x, y, 250.0, 20.0), (x, y + 24.0, 250.0, 20.0)]);
-            }
-            y + 48.0
-        })),
-        ("a painted panel", Box::new(|p, sec, y| {
-            let panel = p.el(sec, "div", (0.0, y, W, 80.0), &[("backgroundColor", "rgb(240, 240, 240)")], "");
-            prose(p, panel, y + 16.0, W, 2, &[], LONG);
-            y + 80.0
-        })),
-        ("a capture without line boxes", Box::new(|p, sec, y| {
-            p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
-            y + 48.0
-        })),
-        ("more space above", Box::new(|p, sec, y| {
-            // 34px above, 30px below.
-            prose(p, sec, y, W, 2, &[], LONG);
-            y + 52.0
-        })),
+        (
+            "one line",
+            Box::new(|p, sec, y| {
+                prose(p, sec, y, W, 1, &[], LONG);
+                y + 24.0
+            }),
+        ),
+        (
+            "a short closing sentence",
+            Box::new(|p, sec, y| {
+                prose(p, sec, y, W, 2, &[], "A short closing sentence.");
+                y + 48.0
+            }),
+        ),
+        (
+            "a pull statement set large",
+            Box::new(|p, sec, y| {
+                prose(p, sec, y, W, 2, &[("fontSize", "24px")], LONG);
+                y + 48.0
+            }),
+        ),
+        (
+            "the caption of a column a third as wide",
+            Box::new(|p, sec, y| {
+                let row = p.el(sec, "div", (0.0, y, W, 48.0), &[], "");
+                for i in 0..3 {
+                    let x = i as f64 * 270.0;
+                    let col = p.el(row, "div", (x, y, 260.0, 48.0), &[], "");
+                    let el = p.el(col, "p", (x, y, 260.0, 48.0), &[], LONG);
+                    p.d.set_text_lines(el, &[(x, y, 250.0, 20.0), (x, y + 24.0, 250.0, 20.0)]);
+                }
+                y + 48.0
+            }),
+        ),
+        (
+            "a painted panel",
+            Box::new(|p, sec, y| {
+                let panel = p.el(
+                    sec,
+                    "div",
+                    (0.0, y, W, 80.0),
+                    &[("backgroundColor", "rgb(240, 240, 240)")],
+                    "",
+                );
+                prose(p, panel, y + 16.0, W, 2, &[], LONG);
+                y + 80.0
+            }),
+        ),
+        (
+            "a capture without line boxes",
+            Box::new(|p, sec, y| {
+                p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
+                y + 48.0
+            }),
+        ),
+        (
+            "more space above",
+            Box::new(|p, sec, y| {
+                // 34px above, 30px below.
+                prose(p, sec, y, W, 2, &[], LONG);
+                y + 52.0
+            }),
+        ),
     ];
     for (name, above) in shapes {
         let mut p = crowded_pair();
         let (sec, y) = p.case(260.0);
         let bottom = above(&mut p, sec, y);
-        p.el(sec, "h2", (0.0, bottom + 30.0, W, 36.0), &[("fontSize", "28px")], "Even Heading");
+        p.el(
+            sec,
+            "h2",
+            (0.0, bottom + 30.0, W, 36.0),
+            &[("fontSize", "28px")],
+            "Even Heading",
+        );
         p.el(sec, "p", (0.0, bottom + 96.0, W, 48.0), &[], LONG);
         let flagged = p.flagged();
         assert_eq!(flagged.len(), 2, "{name}: {flagged:#?}");
@@ -721,7 +1266,13 @@ fn a_shadow_host_that_draws_content_is_a_block() {
         let mut p = crowded_pair();
         let (sec, y) = p.case(420.0);
         p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
-        p.el(sec, "h2", (0.0, y + 58.0, W, 36.0), &[("fontSize", "28px")], "Above A Carousel");
+        p.el(
+            sec,
+            "h2",
+            (0.0, y + 58.0, W, 36.0),
+            &[("fontSize", "28px")],
+            "Above A Carousel",
+        );
         let host = p.el(sec, "x-carousel", (0.0, y + 134.0, W, 120.0), &[], "");
         shadow(&mut p, host, y + 134.0);
         p.el(sec, "p", (0.0, y + 340.0, W, 48.0), &[], LONG);
@@ -729,7 +1280,15 @@ fn a_shadow_host_that_draws_content_is_a_block() {
     };
     let shadow_box = |p: &mut Page, host: ElId, y: f64, text: &str| -> ElId {
         let el = p.d.add_shadow_child(host, "div");
-        p.d.set_styles(el, &[("display", "block"), ("visibility", "visible"), ("opacity", "1"), ("position", "static")]);
+        p.d.set_styles(
+            el,
+            &[
+                ("display", "block"),
+                ("visibility", "visible"),
+                ("opacity", "1"),
+                ("position", "static"),
+            ],
+        );
         p.d.set_rect(el, 0.0, y, W, 120.0);
         if !text.is_empty() {
             p.d.add_text(el, text);
@@ -740,7 +1299,12 @@ fn a_shadow_host_that_draws_content_is_a_block() {
         shadow_box(p, host, y, "Slide one");
     });
     assert_eq!(flagged.len(), 3, "{flagged:#?}");
-    assert!(flagged.iter().any(|s| s.contains("\"Above A Carousel\" has 10px above vs 40px below")), "{flagged:#?}");
+    assert!(
+        flagged
+            .iter()
+            .any(|s| s.contains("\"Above A Carousel\" has 10px above vs 40px below")),
+        "{flagged:#?}"
+    );
     // Pictures alone are content too.
     let flagged = build(&|p, host, y| {
         let track = shadow_box(p, host, y, "");
@@ -768,25 +1332,71 @@ fn a_wrapper_painted_like_its_backdrop_does_not_stop_the_walk_above() {
         let mut p = crowded_pair();
         let (sec, y) = p.case(240.0);
         p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
-        let module = p.el(sec, "div", (0.0, y + 58.0, W, 150.0), &[("backgroundColor", fill)], "");
-        p.el(module, "h2", (0.0, y + 58.0, W, 36.0), &[("fontSize", "28px")], "Module Title");
+        let module = p.el(
+            sec,
+            "div",
+            (0.0, y + 58.0, W, 150.0),
+            &[("backgroundColor", fill)],
+            "",
+        );
+        p.el(
+            module,
+            "h2",
+            (0.0, y + 58.0, W, 36.0),
+            &[("fontSize", "28px")],
+            "Module Title",
+        );
         p.el(module, "p", (0.0, y + 134.0, W, 48.0), &[], LONG);
         p.flagged()
     };
     let flagged = build("rgb(255, 255, 255)");
     assert_eq!(flagged.len(), 3, "{flagged:#?}");
-    assert!(flagged.iter().any(|s| s.contains("\"Module Title\" has 10px above vs 40px below")), "{flagged:#?}");
-    assert_eq!(build("rgb(240, 240, 240)").len(), 2, "a band of its own colour starts a region");
+    assert!(
+        flagged
+            .iter()
+            .any(|s| s.contains("\"Module Title\" has 10px above vs 40px below")),
+        "{flagged:#?}"
+    );
+    assert_eq!(
+        build("rgb(240, 240, 240)").len(),
+        2,
+        "a band of its own colour starts a region"
+    );
 
     // haraj.com.sa: listing rows alternate grey and white. A white row is
     // still a card in a run of like cards, and the walk stops at it.
     let mut p = crowded_pair();
     let (sec, y) = p.case(420.0);
-    for (i, fill) in ["rgb(244, 246, 248)", "rgb(255, 255, 255)", "rgb(244, 246, 248)"].iter().enumerate() {
+    for (i, fill) in [
+        "rgb(244, 246, 248)",
+        "rgb(255, 255, 255)",
+        "rgb(244, 246, 248)",
+    ]
+    .iter()
+    .enumerate()
+    {
         let top = y + i as f64 * 120.0;
-        let row = p.el(sec, "div", (0.0, top, W, 110.0), &[("backgroundColor", fill)], "");
-        p.el(row, "h3", (0.0, top + 10.0, W, 28.0), &[("fontSize", "20px")], &format!("Listing Title {i}"));
-        p.el(row, "p", (0.0, top + 80.0, W, 20.0), &[], "Riyadh, an hour ago");
+        let row = p.el(
+            sec,
+            "div",
+            (0.0, top, W, 110.0),
+            &[("backgroundColor", fill)],
+            "",
+        );
+        p.el(
+            row,
+            "h3",
+            (0.0, top + 10.0, W, 28.0),
+            &[("fontSize", "20px")],
+            &format!("Listing Title {i}"),
+        );
+        p.el(
+            row,
+            "p",
+            (0.0, top + 80.0, W, 20.0),
+            &[],
+            "Riyadh, an hour ago",
+        );
     }
     assert_only_crowded(&p);
 }
@@ -799,9 +1409,21 @@ fn a_spacer_between_an_eyebrow_and_its_heading_keeps_the_fold() {
     let mut p = crowded_pair();
     let (sec, y) = p.case(260.0);
     p.el(sec, "p", (0.0, y, W, 48.0), &[], LONG);
-    p.el(sec, "p", (0.0, y + 120.0, W, 16.0), &[("fontSize", "12px")], "Introducing");
+    p.el(
+        sec,
+        "p",
+        (0.0, y + 120.0, W, 16.0),
+        &[("fontSize", "12px")],
+        "Introducing",
+    );
     p.el(sec, "div", (0.0, y + 136.0, W, 12.0), &[], "");
-    p.el(sec, "h2", (0.0, y + 148.0, W, 36.0), &[("fontSize", "28px")], "Eyebrow Over A Spacer");
+    p.el(
+        sec,
+        "h2",
+        (0.0, y + 148.0, W, 36.0),
+        &[("fontSize", "28px")],
+        "Eyebrow Over A Spacer",
+    );
     p.el(sec, "p", (0.0, y + 232.0, W, 48.0), &[], LONG);
     assert_only_crowded(&p);
 }
@@ -817,11 +1439,21 @@ fn a_zero_shadow_is_not_an_edge() {
             sec,
             "div",
             (0.0, y, W, 280.0),
-            &[("backgroundColor", "rgb(255, 255, 255)"), ("paddingBottom", "32px"), ("boxShadow", shadow)],
+            &[
+                ("backgroundColor", "rgb(255, 255, 255)"),
+                ("paddingBottom", "32px"),
+                ("boxShadow", shadow),
+            ],
             "",
         );
         p.el(band, "p", (0.0, y, W, 200.0), &[], LONG);
-        p.el(band, "h3", (0.0, y + 208.0, W, 40.0), &[("fontSize", "24px")], "Heading Ending A Band");
+        p.el(
+            band,
+            "h3",
+            (0.0, y + 208.0, W, 40.0),
+            &[("fontSize", "24px")],
+            "Heading Ending A Band",
+        );
         p.el(sec, "p", (0.0, y + 300.0, W, 48.0), &[], LONG);
         p
     };

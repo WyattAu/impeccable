@@ -21,7 +21,14 @@ fn claude_bundle_manifest() -> Value {
 /// The launcher path a hook command points at, joined with the host's path
 /// semantics the way `rewrite_hook_commands_for_platform` joins it.
 fn skill_launcher(root: &str, provider: &str) -> String {
-    jsp::join(&[root, provider, "skills", "impeccable", "scripts", "impeccable"])
+    jsp::join(&[
+        root,
+        provider,
+        "skills",
+        "impeccable",
+        "scripts",
+        "impeccable",
+    ])
 }
 
 fn commands(v: &Value) -> Vec<String> {
@@ -47,7 +54,13 @@ fn commands(v: &Value) -> Vec<String> {
 
 #[test]
 fn project_scope_keeps_claude_project_dir_token_and_guard() {
-    let out = rewrite_hook_commands_for_platform(&claude_bundle_manifest(), ".claude", "/proj", false, false);
+    let out = rewrite_hook_commands_for_platform(
+        &claude_bundle_manifest(),
+        ".claude",
+        "/proj",
+        false,
+        false,
+    );
     let cmds = commands(&out);
     assert_eq!(cmds.len(), 2);
     for c in &cmds {
@@ -68,12 +81,16 @@ fn project_scope_keeps_claude_project_dir_token_and_guard() {
 #[test]
 fn absolute_path_is_single_quoted_and_inert_under_sh() {
     let root = "/tmp/imp-hook-$(touch pwned)-x";
-    let out = rewrite_hook_commands_for_platform(&claude_bundle_manifest(), ".claude", root, true, false);
+    let out =
+        rewrite_hook_commands_for_platform(&claude_bundle_manifest(), ".claude", root, true, false);
     for c in commands(&out) {
         // The launcher path is joined with the host's path semantics, so the
         // expectation is joined the same way (backslashes on Windows).
         let expected_path = skill_launcher(root, ".claude");
-        assert_eq!(c, format!("command=[ ! -f '{expected_path}' ] || '{expected_path}' hook"));
+        assert_eq!(
+            c,
+            format!("command=[ ! -f '{expected_path}' ] || '{expected_path}' hook")
+        );
         assert!(!c.contains("${CLAUDE_PROJECT_DIR}"));
         assert!(!c.contains(&format!("\"{root}")));
     }
@@ -85,7 +102,12 @@ fn absolute_path_is_single_quoted_and_inert_under_sh() {
         std::fs::create_dir_all(&dir).unwrap();
         for c in commands(&out) {
             let cmd = c.trim_start_matches("command=");
-            let status = std::process::Command::new("/bin/sh").arg("-c").arg(cmd).current_dir(&dir).status().unwrap();
+            let status = std::process::Command::new("/bin/sh")
+                .arg("-c")
+                .arg(cmd)
+                .current_dir(&dir)
+                .status()
+                .unwrap();
             assert!(status.success());
         }
         assert!(!dir.join("pwned").exists());
@@ -96,7 +118,8 @@ fn absolute_path_is_single_quoted_and_inert_under_sh() {
 #[test]
 fn windows_form_keeps_double_quoted_absolute_path() {
     let root = "/home/u";
-    let out = rewrite_hook_commands_for_platform(&claude_bundle_manifest(), ".claude", root, true, true);
+    let out =
+        rewrite_hook_commands_for_platform(&claude_bundle_manifest(), ".claude", root, true, true);
     for c in commands(&out) {
         let p = skill_launcher(root, ".claude");
         // The Windows form is the JSON-quoted path, so a host path's
@@ -127,7 +150,10 @@ fn codex_gets_command_windows_sibling_pointing_at_cmd_shim() {
     assert_eq!(keys, ["type", "command", "timeout", "commandWindows"]);
     // Windows host: Codex keeps the POSIX command; the sibling handles cmd.exe.
     let win = rewrite_hook_commands_for_platform(&bundle, ".agents", "/proj", false, true);
-    assert_eq!(win["hooks"]["PostToolUse"][0]["hooks"][0]["command"], entry["command"]);
+    assert_eq!(
+        win["hooks"]["PostToolUse"][0]["hooks"][0]["command"],
+        entry["command"]
+    );
     assert!(value_has_impeccable_hook_marker(&out));
 }
 
@@ -136,7 +162,9 @@ fn cursor_runs_the_post_edit_hook() {
     let bundle = json!({ "version": 1, "hooks": { "postToolUse": [{ "command": "[ ! -f \".cursor/skills/impeccable/scripts/impeccable\" ] || \".cursor/skills/impeccable/scripts/impeccable\" hook", "matcher": "^Write$", "timeout": 5 }] } });
     let out = rewrite_hook_commands_for_platform(&bundle, ".cursor", "/proj", false, false);
     assert_eq!(out, bundle);
-    assert!(out["hooks"]["postToolUse"][0].get("commandWindows").is_none());
+    assert!(out["hooks"]["postToolUse"][0]
+        .get("commandWindows")
+        .is_none());
 }
 
 const CURSOR_POST_EDIT: &str = "[ ! -f \".cursor/skills/impeccable/scripts/impeccable\" ] || \".cursor/skills/impeccable/scripts/impeccable\" hook";
@@ -183,10 +211,14 @@ fn install_from_an_older_bundle_never_runs_the_post_edit_verb_before_the_edit() 
 
     copy_provider_hooks(&sys, &bundle, &project, &[".cursor"], false, None, None).unwrap();
 
-    let after: Value = serde_json::from_str(&read(&jsp::join(&[&project, ".cursor", "hooks.json"]))).unwrap();
-    assert_eq!(after, json!({ "version": 1, "hooks": {
+    let after: Value =
+        serde_json::from_str(&read(&jsp::join(&[&project, ".cursor", "hooks.json"]))).unwrap();
+    assert_eq!(
+        after,
+        json!({ "version": 1, "hooks": {
         "postToolUse": [{ "command": CURSOR_POST_EDIT, "matcher": "^Write$", "timeout": 5 }],
-    } }));
+    } })
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -200,7 +232,10 @@ fn github_bundle_manifest() -> Value {
 fn github_project_manifest_stays_portable_and_global_install_uses_home() {
     // Project installs keep the committed `$(git rev-parse ...)` form.
     let bundle = json!({ "version": 1, "hooks": { "postToolUse": [{ "type": "command", "bash": "[ ! -f \"$(git rev-parse --show-toplevel)/.github/skills/impeccable/scripts/impeccable\" ] || \"$(git rev-parse --show-toplevel)/.github/skills/impeccable/scripts/impeccable\" hook" }] } });
-    assert_eq!(rewrite_hook_commands_for_platform(&bundle, ".github", "/proj", false, false), bundle);
+    assert_eq!(
+        rewrite_hook_commands_for_platform(&bundle, ".github", "/proj", false, false),
+        bundle
+    );
     // A global install still writes the manifest into the project, so its
     // launcher must resolve from the user profile instead of the repository.
     let global = rewrite_hook_commands_for_platform(&bundle, ".github", "/home/u", true, false);
@@ -213,7 +248,10 @@ fn github_project_manifest_stays_portable_and_global_install_uses_home() {
         windows["hooks"]["postToolUse"][0]["bash"],
         "[ ! -f 'C:/Users/u/.github/skills/impeccable/scripts/impeccable' ] || 'C:/Users/u/.github/skills/impeccable/scripts/impeccable' hook"
     );
-    assert!(!windows["hooks"]["postToolUse"][0]["bash"].as_str().unwrap().contains("$HOME"));
+    assert!(!windows["hooks"]["postToolUse"][0]["bash"]
+        .as_str()
+        .unwrap()
+        .contains("$HOME"));
     assert!(value_has_impeccable_hook_marker(&bundle));
 }
 
@@ -235,7 +273,9 @@ fn grok_manifest_is_rewritten() {
         serde_json::Value::String(format!("[ ! -f '{p}' ] || '{p}' hook"))
     );
     // Grok is not Codex: no commandWindows sibling is added.
-    assert!(rel["hooks"]["PostToolUse"][0]["hooks"][0].get("commandWindows").is_none());
+    assert!(rel["hooks"]["PostToolUse"][0]["hooks"][0]
+        .get("commandWindows")
+        .is_none());
     // Grok has no per-OS field and runs `command` in the session shell
     // (PowerShell by default on Windows), so a Windows install writes the
     // `cmd /c` form into `command` itself (#859).
@@ -244,7 +284,9 @@ fn grok_manifest_is_rewritten() {
         win_rel["hooks"]["PostToolUse"][0]["hooks"][0]["command"],
         r#"cmd /c if exist ".grok\skills\impeccable\scripts\impeccable.cmd" ".grok\skills\impeccable\scripts\impeccable.cmd" hook"#
     );
-    assert!(win_rel["hooks"]["PostToolUse"][0]["hooks"][0].get("commandWindows").is_none());
+    assert!(win_rel["hooks"]["PostToolUse"][0]["hooks"][0]
+        .get("commandWindows")
+        .is_none());
     assert!(value_has_impeccable_hook_marker(&win_rel));
     let win_abs = rewrite_hook_commands_for_platform(&grok, ".grok", "/home/u", true, true);
     let w = format!("{}.cmd", p.replace('/', "\\"));
@@ -283,13 +325,25 @@ fn windows_form_runs_the_shim_in_each_harness_shell() {
     }
     let shells = [
         // `-Command` reports any native failure as 1.
-        Shell { name: "powershell", spawn: |line| powershell("powershell.exe", line), optional: false, exit: Some(1) },
-        Shell { name: "pwsh", spawn: |line| powershell("pwsh", line), optional: true, exit: Some(1) },
+        Shell {
+            name: "powershell",
+            spawn: |line| powershell("powershell.exe", line),
+            optional: false,
+            exit: Some(1),
+        },
+        Shell {
+            name: "pwsh",
+            spawn: |line| powershell("pwsh", line),
+            optional: true,
+            exit: Some(1),
+        },
         Shell {
             name: "git-bash",
             spawn: |line| {
                 let mut c = Command::new("C:\\Program Files\\Git\\bin\\bash.exe");
-                c.args(["-c", line]).env("MSYS_NO_PATHCONV", "1").env("MSYS2_ARG_CONV_EXCL", "*");
+                c.args(["-c", line])
+                    .env("MSYS_NO_PATHCONV", "1")
+                    .env("MSYS2_ARG_CONV_EXCL", "*");
                 c
             },
             optional: true,
@@ -321,22 +375,46 @@ fn windows_form_runs_the_shim_in_each_harness_shell() {
 
     // A space in the install root, which the absolute form has to survive.
     let root = std::env::temp_dir().join(format!("imp hook {}", std::process::id()));
-    let scripts = root.join(".grok").join("skills").join("impeccable").join("scripts");
+    let scripts = root
+        .join(".grok")
+        .join("skills")
+        .join("impeccable")
+        .join("scripts");
     let seen = scripts.join("seen-hook.txt");
     std::fs::create_dir_all(&root).unwrap();
     let bundle = json!({ "hooks": { "Stop": [{ "hooks": [{ "type": "command", "command": "\".grok/skills/impeccable/scripts/impeccable\" hook" }] }] } });
     for present in [false, true] {
         if present {
             std::fs::create_dir_all(&scripts).unwrap();
-            std::fs::write(scripts.join("impeccable.cmd"), "@echo off\r\nfindstr \"^\" > \"%~dp0seen-%1.txt\"\r\nexit /b 3\r\n").unwrap();
+            std::fs::write(
+                scripts.join("impeccable.cmd"),
+                "@echo off\r\nfindstr \"^\" > \"%~dp0seen-%1.txt\"\r\nexit /b 3\r\n",
+            )
+            .unwrap();
         }
         for absolute in [false, true] {
-            let out = rewrite_hook_commands_for_platform(&bundle, ".grok", root.to_str().unwrap(), absolute, true);
-            let line = out["hooks"]["Stop"][0]["hooks"][0]["command"].as_str().unwrap();
+            let out = rewrite_hook_commands_for_platform(
+                &bundle,
+                ".grok",
+                root.to_str().unwrap(),
+                absolute,
+                true,
+            );
+            let line = out["hooks"]["Stop"][0]["hooks"][0]["command"]
+                .as_str()
+                .unwrap();
             for shell in &shells {
                 let _ = std::fs::remove_file(&seen);
-                let at = format!("{} absolute={absolute} present={present}: {line}", shell.name);
-                let spawned = (shell.spawn)(line).current_dir(&root).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
+                let at = format!(
+                    "{} absolute={absolute} present={present}: {line}",
+                    shell.name
+                );
+                let spawned = (shell.spawn)(line)
+                    .current_dir(&root)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn();
                 let mut child = match spawned {
                     Ok(child) => child,
                     Err(_) if shell.optional && std::env::var_os("CI").is_none() => continue,
@@ -358,7 +436,11 @@ fn windows_form_runs_the_shim_in_each_harness_shell() {
                     std::thread::sleep(std::time::Duration::from_millis(50));
                 };
                 if present && shell.exit.is_some() {
-                    assert_eq!(std::fs::read_to_string(&seen).unwrap_or_default().trim(), "{\"probe\":1}", "{at}");
+                    assert_eq!(
+                        std::fs::read_to_string(&seen).unwrap_or_default().trim(),
+                        "{\"probe\":1}",
+                        "{at}"
+                    );
                     assert_eq!(code, shell.exit, "{at}");
                 } else {
                     assert!(!seen.exists(), "{at}");
@@ -384,7 +466,13 @@ fn merge_refreshes_ours_and_preserves_third_party_hooks() {
             "Stop": [{ "hooks": [{ "type": "command", "command": "\".claude/skills/impeccable/scripts/impeccable\" hook" }] }]
         }
     });
-    let fresh = rewrite_hook_commands_for_platform(&claude_bundle_manifest(), ".claude", "/proj", false, false);
+    let fresh = rewrite_hook_commands_for_platform(
+        &claude_bundle_manifest(),
+        ".claude",
+        "/proj",
+        false,
+        false,
+    );
     let merged = merge_hook_manifests(&existing, &fresh);
     let keys: Vec<&String> = merged.as_object().unwrap().keys().collect();
     assert_eq!(keys, ["permissions", "description", "hooks"]);
@@ -392,10 +480,16 @@ fn merge_refreshes_ours_and_preserves_third_party_hooks() {
     let post = merged["hooks"]["PostToolUse"].as_array().unwrap();
     assert_eq!(post.len(), 2);
     assert_eq!(post[0]["matcher"], "Bash");
-    assert!(post[1]["hooks"][0]["command"].as_str().unwrap().contains("scripts/impeccable\" hook"));
+    assert!(post[1]["hooks"][0]["command"]
+        .as_str()
+        .unwrap()
+        .contains("scripts/impeccable\" hook"));
     let stop = merged["hooks"]["Stop"].as_array().unwrap();
     assert_eq!(stop.len(), 1);
-    assert!(stop[0]["hooks"][0]["command"].as_str().unwrap().starts_with("[ ! -f "));
+    assert!(stop[0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap()
+        .starts_with("[ ! -f "));
 }
 
 #[test]
@@ -414,7 +508,11 @@ fn prune_removes_only_ours_and_drops_empty_scaffolding() {
     assert_eq!(after, json!({ "other": 1 }));
     assert!(!prune_impeccable_hook_from_manifest(&p).unwrap());
     // A permissions entry naming the hook path is not a hook.
-    std::fs::write(&path, r#"{"permissions":{"allow":["Bash(.claude/skills/impeccable/scripts/impeccable hook)"]}}"#).unwrap();
+    std::fs::write(
+        &path,
+        r#"{"permissions":{"allow":["Bash(.claude/skills/impeccable/scripts/impeccable hook)"]}}"#,
+    )
+    .unwrap();
     assert!(!file_has_impeccable_hook_marker(&p));
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -432,7 +530,10 @@ fn read(path: &str) -> String {
 }
 
 fn tmp_dir(name: &str) -> std::path::PathBuf {
-    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
     let dir = std::env::temp_dir().join(format!("imp-{name}-{}-{nanos}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     dir
@@ -541,21 +642,35 @@ fn repair_leaves_dirs_without_an_impeccable_marker_alone() {
 
 #[test]
 fn hook_artifacts_map_providers_to_manifest_files() {
-    let dests = expected_hook_dests("/p", &[".claude", ".agents", ".cursor", ".github", ".grok", ".gemini"]);
+    let dests = expected_hook_dests(
+        "/p",
+        &[
+            ".claude", ".agents", ".cursor", ".github", ".grok", ".gemini",
+        ],
+    );
     // Manifest destinations are joined with the host's path semantics, so the
     // expectations are joined the same way (backslashes on Windows).
-    assert_eq!(dests, [
-        jsp::join(&["/p", ".claude", "settings.local.json"]),
-        jsp::join(&["/p", ".codex", "hooks.json"]),
-        jsp::join(&["/p", ".cursor", "hooks.json"]),
-        jsp::join(&["/p", ".github", "hooks", "impeccable.json"]),
-        jsp::join(&["/p", ".grok", "hooks", "impeccable.json"]),
-        jsp::join(&["/p", ".gemini", "settings.json"]),
-    ]);
+    assert_eq!(
+        dests,
+        [
+            jsp::join(&["/p", ".claude", "settings.local.json"]),
+            jsp::join(&["/p", ".codex", "hooks.json"]),
+            jsp::join(&["/p", ".cursor", "hooks.json"]),
+            jsp::join(&["/p", ".github", "hooks", "impeccable.json"]),
+            jsp::join(&["/p", ".grok", "hooks", "impeccable.json"]),
+            jsp::join(&["/p", ".gemini", "settings.json"]),
+        ]
+    );
     let a = hook_artifacts_for_provider("/b", "/p", ".claude");
     assert_eq!(a[0].src, jsp::join(&["/b", ".claude", "settings.json"]));
-    assert_eq!(a[0].dest, jsp::join(&["/p", ".claude", "settings.local.json"]));
-    assert_eq!(a[0].shared_dest.as_deref(), Some(jsp::join(&["/p", ".claude", "settings.json"]).as_str()));
+    assert_eq!(
+        a[0].dest,
+        jsp::join(&["/p", ".claude", "settings.local.json"])
+    );
+    assert_eq!(
+        a[0].shared_dest.as_deref(),
+        Some(jsp::join(&["/p", ".claude", "settings.json"]).as_str())
+    );
     let c = hook_artifacts_for_provider("/b", "/p", ".agents");
     assert_eq!(c[0].src, jsp::join(&["/b", ".codex", "hooks.json"]));
     assert_eq!(c[0].dest, jsp::join(&["/p", ".codex", "hooks.json"]));
@@ -571,12 +686,9 @@ fn windows_user_scope_hook_command() -> String {
 #[test]
 fn merge_json_escaped_windows_launcher_is_idempotent() {
     let cmd = windows_user_scope_hook_command();
-    let hook_entry = |cmd: String| {
-        json!({ "matcher": "Edit", "hooks": [{ "type": "command", "command": cmd }] })
-    };
-    let stop_entry = |cmd: String| {
-        json!({ "hooks": [{ "type": "command", "command": cmd, "timeout": 30 }] })
-    };
+    let hook_entry = |cmd: String| json!({ "matcher": "Edit", "hooks": [{ "type": "command", "command": cmd }] });
+    let stop_entry =
+        |cmd: String| json!({ "hooks": [{ "type": "command", "command": cmd, "timeout": 30 }] });
     let existing = json!({
         "hooks": {
             "PostToolUse": [hook_entry(cmd.clone())],
@@ -601,7 +713,8 @@ fn merge_json_escaped_windows_launcher_is_idempotent() {
 #[test]
 fn merge_heals_triplicated_stop_groups() {
     let cmd = windows_user_scope_hook_command();
-    let stop_entry = json!({ "hooks": [{ "type": "command", "command": cmd.clone(), "timeout": 30 }] });
+    let stop_entry =
+        json!({ "hooks": [{ "type": "command", "command": cmd.clone(), "timeout": 30 }] });
     let existing = json!({
         "hooks": {
             "Stop": [stop_entry.clone(), stop_entry.clone(), stop_entry]
@@ -620,20 +733,48 @@ fn merge_heals_triplicated_stop_groups() {
 fn gemini_manifest_installs_and_rewrites_both_events() {
     let artifacts = hook_artifacts_for_provider("/bundle", "/project", ".gemini");
     assert_eq!(artifacts.len(), 1);
-    assert_eq!(artifacts[0].src, jsp::join(&["/bundle", ".gemini", "settings.json"]));
-    assert_eq!(artifacts[0].dest, jsp::join(&["/project", ".gemini", "settings.json"]));
+    assert_eq!(
+        artifacts[0].src,
+        jsp::join(&["/bundle", ".gemini", "settings.json"])
+    );
+    assert_eq!(
+        artifacts[0].dest,
+        jsp::join(&["/project", ".gemini", "settings.json"])
+    );
     let manifest = json!({"hooks": {
         "BeforeTool": [{"matcher": "^run_shell_command$", "hooks": [{"type": "command", "command": "[ ! -f \"$GEMINI_PROJECT_DIR/.gemini/skills/impeccable/scripts/impeccable\" ] || \"$GEMINI_PROJECT_DIR/.gemini/skills/impeccable/scripts/impeccable\" hook", "timeout": 5000}]}],
         "AfterAgent": [{"hooks": [{"type": "command", "command": "\"$GEMINI_PROJECT_DIR/.gemini/skills/impeccable/scripts/impeccable\" hook", "timeout": 30000}]}]
     }});
     for absolute in [false, true] {
-        let rewritten = rewrite_hook_commands_for_platform(&manifest, ".gemini", "/installed", absolute, false);
+        let rewritten =
+            rewrite_hook_commands_for_platform(&manifest, ".gemini", "/installed", absolute, false);
         // Gemini substitutes `$GEMINI_PROJECT_DIR` textually with a
         // shell-escaped path before the shell runs, so the token stays bare.
-        let expected = if absolute { format!("'{}'", jsp::join(&["/installed", ".gemini", "skills", "impeccable", "scripts", "impeccable"])) }
-            else { "$GEMINI_PROJECT_DIR/.gemini/skills/impeccable/scripts/impeccable".to_string() };
-        for command in commands(&rewritten) { assert_eq!(command, format!("command=[ ! -f {expected} ] || {expected} hook")); }
-        assert_eq!(rewritten["hooks"]["AfterAgent"][0]["hooks"][0]["timeout"], 30000);
+        let expected = if absolute {
+            format!(
+                "'{}'",
+                jsp::join(&[
+                    "/installed",
+                    ".gemini",
+                    "skills",
+                    "impeccable",
+                    "scripts",
+                    "impeccable"
+                ])
+            )
+        } else {
+            "$GEMINI_PROJECT_DIR/.gemini/skills/impeccable/scripts/impeccable".to_string()
+        };
+        for command in commands(&rewritten) {
+            assert_eq!(
+                command,
+                format!("command=[ ! -f {expected} ] || {expected} hook")
+            );
+        }
+        assert_eq!(
+            rewritten["hooks"]["AfterAgent"][0]["hooks"][0]["timeout"],
+            30000
+        );
         assert!(rewritten["hooks"].get("AfterTool").is_none());
     }
 }
@@ -646,13 +787,29 @@ fn gemini_windows_command_is_powershell() {
     let manifest = json!({"hooks": {"AfterAgent": [{"hooks": [{"type": "command",
         "command": "\"$GEMINI_PROJECT_DIR/.gemini/skills/impeccable/scripts/impeccable\" hook"}]}]}});
     let rel = rewrite_hook_commands_for_platform(&manifest, ".gemini", "C:/p", false, true);
-    let cmd = rel["hooks"]["AfterAgent"][0]["hooks"][0]["command"].as_str().unwrap().to_string();
+    let cmd = rel["hooks"]["AfterAgent"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap()
+        .to_string();
     assert_eq!(cmd, "if (Test-Path -LiteralPath \"$env:GEMINI_PROJECT_DIR/.gemini/skills/impeccable/scripts/impeccable.cmd\") { & \"$env:GEMINI_PROJECT_DIR/.gemini/skills/impeccable/scripts/impeccable.cmd\" hook }");
     assert!(value_has_launcher_hook_marker(&Value::String(cmd)));
     let abs = rewrite_hook_commands_for_platform(&manifest, ".gemini", "C:/Users/o'k", true, true);
-    let cmd = abs["hooks"]["AfterAgent"][0]["hooks"][0]["command"].as_str().unwrap().to_string();
-    let shim = jsp::join(&["C:/Users/o''k", ".gemini", "skills", "impeccable", "scripts", "impeccable.cmd"]);
-    assert_eq!(cmd, format!("if (Test-Path -LiteralPath '{shim}') {{ & '{shim}' hook }}"));
+    let cmd = abs["hooks"]["AfterAgent"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let shim = jsp::join(&[
+        "C:/Users/o''k",
+        ".gemini",
+        "skills",
+        "impeccable",
+        "scripts",
+        "impeccable.cmd",
+    ]);
+    assert_eq!(
+        cmd,
+        format!("if (Test-Path -LiteralPath '{shim}') {{ & '{shim}' hook }}")
+    );
     assert!(value_has_launcher_hook_marker(&Value::String(cmd)));
 }
 
@@ -724,7 +881,10 @@ fn github_user_scope_install_points_the_project_hook_at_the_home_skill() {
     let bundle = jsp::join(&[&root, "bundle"]);
     let home = jsp::join(&[&root, "home"]);
     let project = jsp::join(&[&root, "project"]);
-    write(&jsp::join(&[&bundle, ".github", "hooks", "impeccable.json"]), &github_bundle_manifest().to_string());
+    write(
+        &jsp::join(&[&bundle, ".github", "hooks", "impeccable.json"]),
+        &github_bundle_manifest().to_string(),
+    );
     write(&skill_launcher(&home, ".github"), "#!/bin/sh\n");
     std::fs::create_dir_all(&project).unwrap();
     let sys = sys_with_home(&home);
@@ -733,10 +893,23 @@ fn github_user_scope_install_points_the_project_hook_at_the_home_skill() {
     // An older global install left the portable form behind: not installed.
     write(&manifest, &github_bundle_manifest().to_string());
     assert!(hook_installed_for_provider(&project, ".github"));
-    assert!(!hook_installed_for_provider_at_scope(&project, ".github", true));
-    assert!(hook_installed_for_provider_at_scope(&project, ".github", false));
+    assert!(!hook_installed_for_provider_at_scope(
+        &project, ".github", true
+    ));
+    assert!(hook_installed_for_provider_at_scope(
+        &project, ".github", false
+    ));
 
-    let written = copy_provider_hooks(&sys, &bundle, &project, &[".github"], false, Some(&home), Some(&project)).unwrap();
+    let written = copy_provider_hooks(
+        &sys,
+        &bundle,
+        &project,
+        &[".github"],
+        false,
+        Some(&home),
+        Some(&project),
+    )
+    .unwrap();
     assert_eq!(written, [".github"]);
     let after: Value = serde_json::from_str(&read(&manifest)).unwrap();
     let gp = skill_launcher(&home, ".github");
@@ -747,15 +920,31 @@ fn github_user_scope_install_points_the_project_hook_at_the_home_skill() {
         "[ ! -f \"$HOME/.github/skills/impeccable/scripts/impeccable\" ] || \"$HOME/.github/skills/impeccable/scripts/impeccable\" hook".to_string()
     };
     assert_eq!(after["hooks"]["postToolUse"].as_array().unwrap().len(), 1);
-    assert_eq!(after["hooks"]["postToolUse"][0]["bash"], Value::String(expected));
-    assert!(hook_installed_for_provider_at_scope(&project, ".github", true));
+    assert_eq!(
+        after["hooks"]["postToolUse"][0]["bash"],
+        Value::String(expected)
+    );
+    assert!(hook_installed_for_provider_at_scope(
+        &project, ".github", true
+    ));
 
     // A project that ships its own Copilot skill keeps the committed,
     // portable manifest even when the user installs globally.
     write(&skill_launcher(&project, ".github"), "#!/bin/sh\n");
     write(&manifest, &github_bundle_manifest().to_string());
-    assert!(hook_installed_for_provider_at_scope(&project, ".github", true));
-    copy_provider_hooks(&sys, &bundle, &project, &[".github"], false, Some(&home), Some(&project)).unwrap();
+    assert!(hook_installed_for_provider_at_scope(
+        &project, ".github", true
+    ));
+    copy_provider_hooks(
+        &sys,
+        &bundle,
+        &project,
+        &[".github"],
+        false,
+        Some(&home),
+        Some(&project),
+    )
+    .unwrap();
     let kept: Value = serde_json::from_str(&read(&manifest)).unwrap();
     assert_eq!(kept["hooks"]["postToolUse"].as_array().unwrap().len(), 1);
     assert_eq!(kept["hooks"]["postToolUse"][0]["bash"], GITHUB_PORTABLE);

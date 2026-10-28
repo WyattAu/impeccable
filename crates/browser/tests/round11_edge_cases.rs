@@ -58,13 +58,22 @@ fn engine() -> Option<BrowserEngine> {
     Some(BrowserEngine::new(env))
 }
 
-fn scan(engine: &BrowserEngine, port: u16, fixture: &str) -> Vec<impeccable_core::findings::Finding> {
+fn scan(
+    engine: &BrowserEngine,
+    port: u16,
+    fixture: &str,
+) -> Vec<impeccable_core::findings::Finding> {
     let url = format!("http://127.0.0.1:{port}/{fixture}");
-    engine.detect_url(&url, &ScanOptions::default()).expect("scan")
+    engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan")
 }
 
 fn selector(f: &impeccable_core::findings::Finding) -> &str {
-    f.extras.get("selector").and_then(|v| v.as_str()).unwrap_or("")
+    f.extras
+        .get("selector")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
 }
 
 /// A glow or halo inside an `@media` block no 1280px viewport matches, on
@@ -74,13 +83,23 @@ fn pattern_candidates_in_inactive_at_rules_are_passed_over() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let findings = scan(&engine, port, "pattern-walk-inactive-at-rules.html");
-    let rows: Vec<(&str, &str, &str)> =
-        findings.iter().map(|f| (f.antipattern.as_str(), selector(f), f.snippet.as_str())).collect();
+    let rows: Vec<(&str, &str, &str)> = findings
+        .iter()
+        .map(|f| (f.antipattern.as_str(), selector(f), f.snippet.as_str()))
+        .collect();
     eprintln!("{rows:#?}");
     for rule in ["dark-glow", "radial-halo", "codex-grid-background"] {
-        assert!(rows.iter().any(|(r, ..)| *r == rule), "{rule} reports: {rows:#?}");
+        assert!(
+            rows.iter().any(|(r, ..)| *r == rule),
+            "{rule} reports: {rows:#?}"
+        );
     }
-    assert!(!rows.iter().any(|(_, s, d)| s.contains("pass-") || d.contains("#ff00ff")), "{rows:#?}");
+    assert!(
+        !rows
+            .iter()
+            .any(|(_, s, d)| s.contains("pass-") || d.contains("#ff00ff")),
+        "{rows:#?}"
+    );
 }
 
 /// Code in a full-width page shell at `overflow: auto` that runs past the
@@ -90,9 +109,17 @@ fn code_in_a_scrolling_page_shell_is_read() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let findings = scan(&engine, port, "text-overflow-code-page-shell.html");
-    let rows: Vec<&str> = findings.iter().filter(|f| f.antipattern == "text-overflow").map(selector).collect();
+    let rows: Vec<&str> = findings
+        .iter()
+        .filter(|f| f.antipattern == "text-overflow")
+        .map(selector)
+        .collect();
     eprintln!("{rows:#?}");
-    assert!(rows.iter().any(|s| s.contains("flag-code-in-a-scrolling-shell")), "{rows:#?}");
+    assert!(
+        rows.iter()
+            .any(|s| s.contains("flag-code-in-a-scrolling-shell")),
+        "{rows:#?}"
+    );
     assert!(!rows.iter().any(|s| s.contains("pass-")), "{rows:#?}");
 }
 
@@ -109,9 +136,21 @@ fn only_the_part_that_names_the_site_is_a_wordmark() {
         .map(|f| (selector(f), f.severity.as_str()))
         .collect();
     eprintln!("{low:#?}");
-    let severity = |id: &str| low.iter().find(|(s, _)| s.contains(id)).map(|(_, sev)| *sev);
-    assert_eq!(severity("flag-faint-page-name"), Some("warning"), "{low:#?}");
-    assert_eq!(severity("advisory-faint-site-name"), Some("advisory"), "{low:#?}");
+    let severity = |id: &str| {
+        low.iter()
+            .find(|(s, _)| s.contains(id))
+            .map(|(_, sev)| *sev)
+    };
+    assert_eq!(
+        severity("flag-faint-page-name"),
+        Some("warning"),
+        "{low:#?}"
+    );
+    assert_eq!(
+        severity("advisory-faint-site-name"),
+        Some("advisory"),
+        "{low:#?}"
+    );
 }
 
 /// A label set at 1px under `scale: 16` draws 16px letters, so laid over a
@@ -127,6 +166,15 @@ fn scaled_1px_text_is_read_at_its_drawn_size() {
         .map(|f| (selector(f), f.snippet.as_str()))
         .collect();
     eprintln!("{rows:#?}");
-    assert!(rows.iter().any(|(s, d)| s.contains("flag-") || d.contains("flag-")), "{rows:#?}");
-    assert!(!rows.iter().any(|(s, d)| s.contains("pass-") || d.contains("pass-")), "{rows:#?}");
+    assert!(
+        rows.iter()
+            .any(|(s, d)| s.contains("flag-") || d.contains("flag-")),
+        "{rows:#?}"
+    );
+    assert!(
+        !rows
+            .iter()
+            .any(|(s, d)| s.contains("pass-") || d.contains("pass-")),
+        "{rows:#?}"
+    );
 }

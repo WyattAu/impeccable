@@ -72,7 +72,11 @@ fn run(args: &[String], io: &mut Io) -> i32 {
         "telemetry" => impeccable_context::run_telemetry(rest, io),
         "generate-image" => impeccable_context::run_generate_image(rest, io),
         "serve-question" => impeccable_context::run_serve_question(rest, io),
-        "component-review" => impeccable_context::component_review::run_with_capturer(rest, io, Some(&mut impeccable::component_capture::NativeComponentCapturer)),
+        "component-review" => impeccable_context::component_review::run_with_capturer(
+            rest,
+            io,
+            Some(&mut impeccable::component_capture::NativeComponentCapturer),
+        ),
         // comp-fidelity verbs (crates/comp-verbs over crates/comp)
         "comp-spec" => impeccable_comp_verbs::run_comp_spec(rest, io),
         "comp-diff" => impeccable_comp_verbs::run_comp_diff(rest, io),
@@ -80,9 +84,13 @@ fn run(args: &[String], io: &mut Io) -> i32 {
             let mut renderer = font_render::CdpFontRenderer::from_process_env();
             impeccable_comp_verbs::run_font_match(rest, io, &mut renderer)
         }
-        "capture-server" => {
-            match impeccable::capture_service::serve(rest) { Ok(()) => 0, Err(e) => { io.err(&format!("Native capture service: {e}\n")); 1 } }
-        }
+        "capture-server" => match impeccable::capture_service::serve(rest) {
+            Ok(()) => 0,
+            Err(e) => {
+                io.err(&format!("Native capture service: {e}\n"));
+                1
+            }
+        },
         "build-phase" => {
             // Inject the organic-clip-path CSS scanner (a rule that lives in the
             // closed `core` crate) so comp-verbs stays core-free.
@@ -93,9 +101,28 @@ fn run(args: &[String], io: &mut Io) -> i32 {
                     .collect()
             };
             match impeccable::capture_service::RemoteEntryRenderer::from_env(&io.env) {
-                Ok(Some(renderer)) => impeccable_comp_verbs::build_phase::run_with_renderer(rest, io, &organic, Some(&renderer)),
-                Ok(None) => { let renderer=impeccable::reviewed_entry::ReviewedEntryRenderer::local(&io.cwd,io.home().as_deref()); impeccable_comp_verbs::build_phase::run_with_renderer(rest, io, &organic, Some(&renderer)) },
-                Err(e) => { io.err(&format!("Native capture service: {e}\n")); 1 }
+                Ok(Some(renderer)) => impeccable_comp_verbs::build_phase::run_with_renderer(
+                    rest,
+                    io,
+                    &organic,
+                    Some(&renderer),
+                ),
+                Ok(None) => {
+                    let renderer = impeccable::reviewed_entry::ReviewedEntryRenderer::local(
+                        &io.cwd,
+                        io.home().as_deref(),
+                    );
+                    impeccable_comp_verbs::build_phase::run_with_renderer(
+                        rest,
+                        io,
+                        &organic,
+                        Some(&renderer),
+                    )
+                }
+                Err(e) => {
+                    io.err(&format!("Native capture service: {e}\n"));
+                    1
+                }
             }
         }
         "hook" => impeccable_hook::run_hook(rest, io, engines().html),

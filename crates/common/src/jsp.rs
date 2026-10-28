@@ -215,9 +215,7 @@ pub mod posix {
             i += 1;
         }
         let mut out: Vec<&str> = Vec::new();
-        for _ in i..f.len() {
-            out.push("..");
-        }
+        out.extend(core::iter::repeat_n("..", f.len() - i));
         for seg in &t[i..] {
             out.push(seg);
         }

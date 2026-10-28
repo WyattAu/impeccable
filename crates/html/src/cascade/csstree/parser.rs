@@ -745,11 +745,9 @@ impl Parser {
 
     fn combinator(&mut self) -> PResult<Node> {
         let start = self.ts.token_start;
-        let name;
-        match self.ts.token_type {
-            WHITESPACE => {
-                name = " ".to_string();
-            }
+
+        let name = match self.ts.token_type {
+            WHITESPACE => " ".to_string(),
             DELIM => {
                 match self.ts.char_code_at(self.ts.token_start) {
                     GREATERTHANSIGN | PLUSSIGN | TILDE => {
@@ -762,14 +760,14 @@ impl Parser {
                     }
                     _ => return self.error(),
                 }
-                name = self.ts.substr_to_cursor(start);
+                self.ts.substr_to_cursor(start)
             }
             _ => {
                 // JS: `name` stays undefined; unreachable from the selector
                 // recognizer, which only calls this for the delims above.
-                name = String::new();
+                String::new()
             }
-        }
+        };
         Ok(Node::Combinator { name })
     }
 

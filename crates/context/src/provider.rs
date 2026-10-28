@@ -87,11 +87,17 @@ fn provider_from_skill_dir(skill_dir: &str) -> Option<&'static str> {
 }
 
 pub fn detect(env: &Env, cwd: &str) -> Provider {
-    let skill_dir = match env.get("IMPECCABLE_SKILL_DIR").filter(|v| !v.trim().is_empty()) {
+    let skill_dir = match env
+        .get("IMPECCABLE_SKILL_DIR")
+        .filter(|v| !v.trim().is_empty())
+    {
         Some(v) => Some(jsp::resolve(cwd, &[v.trim()])),
         None => exe_path().and_then(|p| find_skill_dir_from(&jsp::dirname(&p))),
     };
-    let id = match env.get("IMPECCABLE_PROVIDER_ID").filter(|v| !v.trim().is_empty()) {
+    let id = match env
+        .get("IMPECCABLE_PROVIDER_ID")
+        .filter(|v| !v.trim().is_empty())
+    {
         Some(v) => v.trim().to_string(),
         None => skill_dir
             .as_deref()
@@ -106,13 +112,22 @@ pub fn detect(env: &Env, cwd: &str) -> Provider {
         None => exe_path().unwrap_or_else(|| "impeccable".to_string()),
     };
     let self_cmd = impeccable_common::launcher::spell_self(&self_raw);
-    Provider { id, command_prefix, command, skill_dir, self_cmd, self_raw }
+    Provider {
+        id,
+        command_prefix,
+        command,
+        skill_dir,
+        self_cmd,
+        self_raw,
+    }
 }
 
 impl Provider {
     /// `<skill>/reference/<name>.md`
     pub fn reference_path(&self, name: &str) -> Option<String> {
-        self.skill_dir.as_ref().map(|d| jsp::join(&[d, "reference", &format!("{}.md", name)]))
+        self.skill_dir
+            .as_ref()
+            .map(|d| jsp::join(&[d, "reference", &format!("{}.md", name)]))
     }
     /// `<skill>/SKILL.md`
     pub fn skill_md_path(&self) -> Option<String> {
@@ -130,7 +145,9 @@ mod tests {
     use super::*;
 
     fn with_self(value: &str) -> Provider {
-        let env: Env = [("IMPECCABLE_SELF".to_string(), value.to_string())].into_iter().collect();
+        let env: Env = [("IMPECCABLE_SELF".to_string(), value.to_string())]
+            .into_iter()
+            .collect();
         detect(&env, "/project")
     }
 
@@ -140,13 +157,20 @@ mod tests {
         // path; `& "<path>" <verb>` runs (#744). The raw path stays available
         // for callers that quote it themselves.
         let p = with_self(r"C:\Users\A B\skill\scripts\impeccable.cmd");
-        assert_eq!(p.verb_cmd("context"), r"& 'C:\Users\A B\skill\scripts\impeccable.cmd' context");
+        assert_eq!(
+            p.verb_cmd("context"),
+            r"& 'C:\Users\A B\skill\scripts\impeccable.cmd' context"
+        );
         assert_eq!(p.self_raw, r"C:\Users\A B\skill\scripts\impeccable.cmd");
     }
 
     #[test]
     fn other_spellings_are_unchanged() {
-        for value in [r"C:\skill\scripts\impeccable.cmd", "/Users/a b/skill/scripts/impeccable", "npx impeccable"] {
+        for value in [
+            r"C:\skill\scripts\impeccable.cmd",
+            "/Users/a b/skill/scripts/impeccable",
+            "npx impeccable",
+        ] {
             let p = with_self(value);
             assert_eq!(p.self_cmd, value);
             assert_eq!(p.self_raw, value);

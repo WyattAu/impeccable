@@ -71,7 +71,9 @@ fn engine() -> Option<BrowserEngine> {
 
 fn scan(engine: &BrowserEngine, port: u16, fixture: &str) -> Vec<Finding> {
     let url = format!("http://127.0.0.1:{port}/{fixture}");
-    engine.detect_url(&url, &ScanOptions::default()).expect("scan")
+    engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan")
 }
 
 fn of<'a>(findings: &'a [Finding], rule: &str) -> Vec<&'a Finding> {
@@ -92,7 +94,10 @@ fn closed_interface_is_left_out_of_the_hidden_share() {
     // its tab marks selected whose reveal failed: one finding, counting that
     // text alone and quoting it.
     let stalled = scan(&engine, port, "content-hidden-at-rest.html");
-    let hidden: Vec<&str> = of(&stalled, "content-hidden-at-rest").iter().map(|f| f.snippet.as_str()).collect();
+    let hidden: Vec<&str> = of(&stalled, "content-hidden-at-rest")
+        .iter()
+        .map(|f| f.snippet.as_str())
+        .collect();
     assert_eq!(
         hidden,
         vec!["52% of page text (629 of 1216 chars) stays at opacity 0 / visibility hidden after reveal handlers ran (e.g. \"Hours of work, done in minutes\")"]
@@ -107,11 +112,23 @@ fn recoverable_hydration_errors_are_advisory_and_other_errors_fail() {
     let errors = of(&findings, "script-error");
     assert_eq!(errors.len(), 4, "{errors:#?}");
     let severity = |needle: &str| {
-        let f = errors.iter().find(|f| f.snippet.contains(needle)).unwrap_or_else(|| panic!("no {needle}: {errors:#?}"));
+        let f = errors
+            .iter()
+            .find(|f| f.snippet.contains(needle))
+            .unwrap_or_else(|| panic!("no {needle}: {errors:#?}"));
         (f.severity.as_str(), f.advisory)
     };
-    assert_eq!(severity("Minified React error #418: Hydration failed"), ("advisory", Some(true)));
-    assert_eq!(severity("Minified React error #423: There was an error while hydrating."), ("advisory", Some(true)));
-    assert_eq!(severity("Minified React error #185: Maximum update depth exceeded."), ("error", None));
+    assert_eq!(
+        severity("Minified React error #418: Hydration failed"),
+        ("advisory", Some(true))
+    );
+    assert_eq!(
+        severity("Minified React error #423: There was an error while hydrating."),
+        ("advisory", Some(true))
+    );
+    assert_eq!(
+        severity("Minified React error #185: Maximum update depth exceeded."),
+        ("error", None)
+    );
     assert_eq!(severity("evo.article is not a function"), ("error", None));
 }

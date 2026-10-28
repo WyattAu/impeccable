@@ -54,7 +54,11 @@ pub fn page_targets(targets: &[Value]) -> Vec<PageTarget> {
         .filter(|t| t.get("type").and_then(Value::as_str) == Some("page"))
         .map(|t| {
             let s = |k: &str| t.get(k).and_then(Value::as_str).unwrap_or("").to_string();
-            PageTarget { id: s("targetId"), url: s("url"), title: s("title") }
+            PageTarget {
+                id: s("targetId"),
+                url: s("url"),
+                title: s("title"),
+            }
         })
         .filter(|t| !t.url.starts_with("devtools://"))
         .collect()
@@ -75,7 +79,12 @@ pub fn pick_target(
             .iter()
             .find(|p| p.id.eq_ignore_ascii_case(id))
             .cloned()
-            .ok_or_else(|| format!("no page with id {id} is open on {authority}.{}", listing(pages)));
+            .ok_or_else(|| {
+                format!(
+                    "no page with id {id} is open on {authority}.{}",
+                    listing(pages)
+                )
+            });
     }
     if pages.is_empty() {
         return Err(format!("no pages are open on {authority} to scan."));
@@ -117,15 +126,26 @@ fn listing(pages: &[PageTarget]) -> String {
     if pages.is_empty() {
         return " No pages are open.".to_string();
     }
-    format!(" Open pages:{}", listing_of(&pages.iter().collect::<Vec<_>>()))
+    format!(
+        " Open pages:{}",
+        listing_of(&pages.iter().collect::<Vec<_>>())
+    )
 }
 
 fn listing_of(pages: &[&PageTarget]) -> String {
     pages
         .iter()
         .map(|p| {
-            let title = if p.title.is_empty() { String::new() } else { format!("  \"{}\"", p.title) };
-            format!("\n  {}{title}  (id {})", if p.url.is_empty() { "(no URL)" } else { &p.url }, p.id)
+            let title = if p.title.is_empty() {
+                String::new()
+            } else {
+                format!("  \"{}\"", p.title)
+            };
+            format!(
+                "\n  {}{title}  (id {})",
+                if p.url.is_empty() { "(no URL)" } else { &p.url },
+                p.id
+            )
         })
         .collect()
 }
@@ -141,7 +161,10 @@ fn launch_hint(port: u16) -> String {
 /// checked the spelling; this checks where `localhost` actually points.
 fn ensure_loopback(endpoint: &CdpEndpoint) -> Result<(), String> {
     if !is_loopback_host(&endpoint.host) {
-        return Err(format!("--cdp only attaches to this machine, not {}", endpoint.host));
+        return Err(format!(
+            "--cdp only attaches to this machine, not {}",
+            endpoint.host
+        ));
     }
     if let Ok(addrs) = endpoint.authority().to_socket_addrs() {
         if let Some(addr) = addrs.into_iter().find(|a| !a.ip().is_loopback()) {
@@ -216,12 +239,19 @@ pub fn browser_ws_url(endpoint: &CdpEndpoint) -> Result<String, String> {
         return Ok(format!("ws://{authority}{path}"));
     }
     let (status, body) = http_get(&authority, "/json/version").map_err(|e| {
-        format!("could not reach a DevTools endpoint at {authority} ({e}). {}", launch_hint(endpoint.port))
+        format!(
+            "could not reach a DevTools endpoint at {authority} ({e}). {}",
+            launch_hint(endpoint.port)
+        )
     })?;
     let not_devtools = || {
         format!(
             "{authority} answered, but not as a DevTools endpoint (GET /json/version: {}). {}",
-            if status == 200 { "no webSocketDebuggerUrl".to_string() } else { format!("HTTP {status}") },
+            if status == 200 {
+                "no webSocketDebuggerUrl".to_string()
+            } else {
+                format!("HTTP {status}")
+            },
             launch_hint(endpoint.port)
         )
     };
@@ -230,7 +260,11 @@ pub fn browser_ws_url(endpoint: &CdpEndpoint) -> Result<String, String> {
     }
     let ws = serde_json::from_str::<Value>(&body)
         .ok()
-        .and_then(|v| v.get("webSocketDebuggerUrl").and_then(Value::as_str).map(String::from))
+        .and_then(|v| {
+            v.get("webSocketDebuggerUrl")
+                .and_then(Value::as_str)
+                .map(String::from)
+        })
         .ok_or_else(not_devtools)?;
     let path = ws
         .strip_prefix("ws://")
@@ -388,24 +422,36 @@ pub fn detect_cdp(
 ) -> Result<UrlScan, EngineError> {
     ensure_loopback(endpoint).map_err(EngineError::new)?;
     let ws = browser_ws_url(endpoint).map_err(EngineError::new)?;
-    let mut browser = Browser::connect(&ws).map_err(|e| {
-        EngineError::new(format!("{}. {}", e.message, launch_hint(endpoint.port)))
-    })?;
+    let mut browser = Browser::connect(&ws)
+        .map_err(|e| EngineError::new(format!("{}. {}", e.message, launch_hint(endpoint.port))))?;
     let outcome = browser
         .targets()
         .map_err(super::cdp_err)
         .and_then(|targets| {
-            pick_target(&page_targets(&targets), filter, endpoint.page_id.as_deref(), &endpoint.authority())
-                .map_err(EngineError::new)
+            pick_target(
+                &page_targets(&targets),
+                filter,
+                endpoint.page_id.as_deref(),
+                &endpoint.authority(),
+            )
+            .map_err(EngineError::new)
         })
         .and_then(|target| scan_target(&mut browser, &target, options));
     browser.close();
     outcome
 }
 
-fn scan_target(browser: &mut Browser, target: &PageTarget, options: &ScanOptions) -> Result<UrlScan, EngineError> {
+fn scan_target(
+    browser: &mut Browser,
+    target: &PageTarget,
+    options: &ScanOptions,
+) -> Result<UrlScan, EngineError> {
     let mut page = browser.attach_page(&target.id).map_err(super::cdp_err)?;
-    let url = if target.url.is_empty() { format!("cdp-target:{}", target.id) } else { target.url.clone() };
+    let url = if target.url.is_empty() {
+        format!("cdp-target:{}", target.id)
+    } else {
+        target.url.clone()
+    };
     let scanned = page
         .evaluate_value(PREPARE_JS)
         .map_err(super::cdp_err)
@@ -415,7 +461,9 @@ fn scan_target(browser: &mut Browser, target: &PageTarget, options: &ScanOptions
     let scan = scanned?;
     // Leaving the page as found is part of the contract: a scan that could
     // not put it back fails, so automation sees it.
-    let restored_ok = restored.as_ref().is_ok_and(|v| v.get("restored").and_then(Value::as_bool) == Some(true));
+    let restored_ok = restored
+        .as_ref()
+        .is_ok_and(|v| v.get("restored").and_then(Value::as_bool) == Some(true));
     if !restored_ok {
         let why = match restored {
             Err(e) => e.message,
@@ -430,10 +478,21 @@ fn scan_target(browser: &mut Browser, target: &PageTarget, options: &ScanOptions
 
 /// [`super::scan_loaded`] over an attached page: its own viewport, consent and
 /// overlay hiding off.
-fn scan_attached(page: &mut Page<'_>, url: &str, options: &ScanOptions) -> Result<UrlScan, EngineError> {
+fn scan_attached(
+    page: &mut Page<'_>,
+    url: &str,
+    options: &ScanOptions,
+) -> Result<UrlScan, EngineError> {
     let (_, (width, height)) = page.viewport_metrics().map_err(super::cdp_err)?;
-    let viewport = Viewport { width: width.round().max(1.0) as u32, height: height.round().max(1.0) as u32 };
-    let options = ScanOptions { keep_consent_banners: true, keep_overlays: true, ..options.clone() };
+    let viewport = Viewport {
+        width: width.round().max(1.0) as u32,
+        height: height.round().max(1.0) as u32,
+    };
+    let options = ScanOptions {
+        keep_consent_banners: true,
+        keep_overlays: true,
+        ..options.clone()
+    };
     let mut consent = ConsentReport::default();
     let mut overlays = OverlayReport::default();
     let mut notes = Vec::new();
@@ -457,7 +516,11 @@ mod tests {
     use super::*;
 
     fn page(id: &str, url: &str, title: &str) -> PageTarget {
-        PageTarget { id: id.into(), url: url.into(), title: title.into() }
+        PageTarget {
+            id: id.into(),
+            url: url.into(),
+            title: title.into(),
+        }
     }
 
     #[test]
@@ -470,25 +533,63 @@ mod tests {
         ]);
         let pages = page_targets(targets.as_array().unwrap());
         assert_eq!(pages, vec![page("A", "http://127.0.0.1:5173/", "App")]);
-        assert_eq!(pick_target(&pages, None, None, "127.0.0.1:9222").unwrap().id, "A");
+        assert_eq!(
+            pick_target(&pages, None, None, "127.0.0.1:9222")
+                .unwrap()
+                .id,
+            "A"
+        );
     }
 
     #[test]
     fn several_pages_need_a_target() {
-        let pages = vec![page("A1", "app://main/index.html", "Inbox"), page("B2", "app://main/settings.html", "Settings")];
+        let pages = vec![
+            page("A1", "app://main/index.html", "Inbox"),
+            page("B2", "app://main/settings.html", "Settings"),
+        ];
         let err = pick_target(&pages, None, None, "127.0.0.1:9222").unwrap_err();
-        assert!(err.starts_with("2 pages are open on 127.0.0.1:9222. Rerun with --target"), "{err}");
-        assert!(err.contains("\n  app://main/index.html  \"Inbox\"  (id A1)"), "{err}");
-        assert!(err.contains("\n  app://main/settings.html  \"Settings\"  (id B2)"), "{err}");
-        assert_eq!(pick_target(&pages, Some("settings"), None, "x").unwrap().id, "B2");
-        assert_eq!(pick_target(&pages, Some("INBOX"), None, "x").unwrap().id, "A1");
+        assert!(
+            err.starts_with("2 pages are open on 127.0.0.1:9222. Rerun with --target"),
+            "{err}"
+        );
+        assert!(
+            err.contains("\n  app://main/index.html  \"Inbox\"  (id A1)"),
+            "{err}"
+        );
+        assert!(
+            err.contains("\n  app://main/settings.html  \"Settings\"  (id B2)"),
+            "{err}"
+        );
+        assert_eq!(
+            pick_target(&pages, Some("settings"), None, "x").unwrap().id,
+            "B2"
+        );
+        assert_eq!(
+            pick_target(&pages, Some("INBOX"), None, "x").unwrap().id,
+            "A1"
+        );
         assert_eq!(pick_target(&pages, Some("b2"), None, "x").unwrap().id, "B2");
         let none = pick_target(&pages, Some("billing"), None, "127.0.0.1:9222").unwrap_err();
-        assert!(none.starts_with("no page on 127.0.0.1:9222 has a URL or title containing \"billing\". Open pages:"), "{none}");
+        assert!(
+            none.starts_with(
+                "no page on 127.0.0.1:9222 has a URL or title containing \"billing\". Open pages:"
+            ),
+            "{none}"
+        );
         let many = pick_target(&pages, Some("app://main"), None, "127.0.0.1:9222").unwrap_err();
-        assert!(many.starts_with("2 pages on 127.0.0.1:9222 match \"app://main\""), "{many}");
-        assert_eq!(pick_target(&pages, Some("ignored"), Some("a1"), "x").unwrap().id, "A1");
-        assert!(pick_target(&[], None, None, "h:1").unwrap_err().starts_with("no pages are open on h:1"));
+        assert!(
+            many.starts_with("2 pages on 127.0.0.1:9222 match \"app://main\""),
+            "{many}"
+        );
+        assert_eq!(
+            pick_target(&pages, Some("ignored"), Some("a1"), "x")
+                .unwrap()
+                .id,
+            "A1"
+        );
+        assert!(pick_target(&[], None, None, "h:1")
+            .unwrap_err()
+            .starts_with("no pages are open on h:1"));
     }
 
     #[test]
@@ -499,6 +600,9 @@ mod tests {
             browser_path: Some("/devtools/browser/abc".into()),
             page_id: None,
         };
-        assert_eq!(browser_ws_url(&endpoint).unwrap(), "ws://127.0.0.1:9222/devtools/browser/abc");
+        assert_eq!(
+            browser_ws_url(&endpoint).unwrap(),
+            "ws://127.0.0.1:9222/devtools/browser/abc"
+        );
     }
 }

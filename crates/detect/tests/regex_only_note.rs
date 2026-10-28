@@ -6,8 +6,8 @@
 use std::collections::HashMap;
 
 use impeccable_common::Io;
-use impeccable_detect::cli::run_detect;
 use impeccable_core::findings::Finding;
+use impeccable_detect::cli::run_detect;
 use impeccable_detect::engines::EngineError;
 use impeccable_detect::{Engines, HtmlEngine, MissingHtmlEngine, ScanOptions};
 
@@ -63,7 +63,9 @@ fn zero_finding_source_scan_says_it_was_regex_only() {
     std::fs::remove_file(dir.join("b.jsx")).unwrap();
     assert_eq!(
         run(&dir, &[]).2,
-        format!("\n1 file scanned with regex matching only (.astro).\n{RULES}{NO_PORT}{ASTRO_OPT_IN}")
+        format!(
+            "\n1 file scanned with regex matching only (.astro).\n{RULES}{NO_PORT}{ASTRO_OPT_IN}"
+        )
     );
 
     std::fs::remove_dir_all(&dir).unwrap();
@@ -96,20 +98,29 @@ fn framework_directory_spells_the_dev_server_scan() {
 
 #[test]
 fn two_framework_directories_get_one_url_each() {
-    let root = std::env::temp_dir().join(format!("impeccable-regex-note-two-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("impeccable-regex-note-two-{}", std::process::id()));
     let vite = root.join("vite-app");
     let next = root.join("next-app");
     std::fs::create_dir_all(&vite).unwrap();
     std::fs::create_dir_all(&next).unwrap();
     std::fs::write(vite.join("vite.config.js"), "export default {};\n").unwrap();
-    std::fs::write(vite.join("App.tsx"), "export const App = () => <p>vite</p>;\n").unwrap();
+    std::fs::write(
+        vite.join("App.tsx"),
+        "export const App = () => <p>vite</p>;\n",
+    )
+    .unwrap();
     std::fs::write(next.join("next.config.js"), "module.exports = {};\n").unwrap();
     std::fs::write(next.join("page.tsx"), "export default () => <p>next</p>;\n").unwrap();
 
     let args: Vec<String> = ["--no-config", "--no-design-system"]
         .iter()
         .map(|s| s.to_string())
-        .chain([vite, next].iter().map(|d| d.to_string_lossy().into_owned()))
+        .chain(
+            [vite, next]
+                .iter()
+                .map(|d| d.to_string_lossy().into_owned()),
+        )
         .collect();
     let (mut io, cap) = Io::captured("", root.clone(), HashMap::new());
     let engines = Engines {
@@ -146,7 +157,8 @@ impl HtmlEngine for CleanHtmlEngine {
 
 #[test]
 fn configured_html_engine_extension_is_not_counted() {
-    let dir = std::env::temp_dir().join(format!("impeccable-regex-note-ext-{}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("impeccable-regex-note-ext-{}", std::process::id()));
     std::fs::create_dir_all(dir.join(".impeccable")).unwrap();
     std::fs::write(
         dir.join(".impeccable/config.json"),
@@ -172,7 +184,10 @@ fn configured_html_engine_extension_is_not_counted() {
     // and JSX gets no opt-in line.
     assert_eq!(
         run_cfg(&dir),
-        (0, format!("\n1 file scanned with regex matching only (.jsx).\n{RULES}{NO_PORT}"))
+        (
+            0,
+            format!("\n1 file scanned with regex matching only (.jsx).\n{RULES}{NO_PORT}")
+        )
     );
 
     // A bare-string entry also means the HTML engine.

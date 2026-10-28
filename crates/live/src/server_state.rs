@@ -730,9 +730,17 @@ impl ServerState {
         if before != self.sse_clients.len() {
             let still_connected = agent_client_id
                 .as_deref()
-                .map(|cid| self.sse_clients.iter().any(|c| c.agent_client_id.as_deref() == Some(cid)))
+                .map(|cid| {
+                    self.sse_clients
+                        .iter()
+                        .any(|c| c.agent_client_id.as_deref() == Some(cid))
+                })
                 .unwrap_or(false);
-            self.drop_agent_target_client(if still_connected { None } else { agent_client_id.as_deref() });
+            self.drop_agent_target_client(if still_connected {
+                None
+            } else {
+                agent_client_id.as_deref()
+            });
             if self.sse_clients.is_empty() {
                 self.clear_exit_timer();
                 self.arm_exit_timer();
@@ -744,10 +752,12 @@ impl ServerState {
     /// while any connection sent none (an older overlay build): that
     /// overlay cannot be told apart from the id in hand.
     fn overlay_connected(&self, client_id: &str) -> bool {
-        self.sse_clients.iter().any(|c| match c.agent_client_id.as_deref() {
-            Some(cid) => cid == client_id,
-            None => true,
-        })
+        self.sse_clients
+            .iter()
+            .any(|c| match c.agent_client_id.as_deref() {
+                Some(cid) => cid == client_id,
+                None => true,
+            })
     }
 
     /// Connected overlays for a roll call: one per distinct clientId, plus
@@ -812,7 +822,10 @@ impl ServerState {
 
     /// Hold a new agent target: mint its id, broadcast the push, arm the
     /// timeout. Returns the id and the receiver the route blocks on.
-    pub fn register_agent_target(&mut self, mut payload: Map<String, Value>) -> (String, Receiver<Value>) {
+    pub fn register_agent_target(
+        &mut self,
+        mut payload: Map<String, Value>,
+    ) -> (String, Receiver<Value>) {
         let target_id = crate::random::random_id8();
         payload.insert("targetId".into(), json!(target_id));
         // JS spread order: type, targetId, then the request fields.
@@ -952,7 +965,11 @@ impl ServerState {
                 // held it last may still land its Go.
                 None => pending.last_holder.as_deref() == Some(client_id) && !client_id.is_empty(),
             };
-            return if is_holder { None } else { Some(AgentTargetRefusal { session_id: None }) };
+            return if is_holder {
+                None
+            } else {
+                Some(AgentTargetRefusal { session_id: None })
+            };
         }
         let Some((_, answered_by)) = self
             .resolved_agent_targets
@@ -984,8 +1001,15 @@ impl ServerState {
                 if p.owner.is_some() || p.reports.is_empty() || p.reports.len() < connected {
                     return None;
                 }
-                let all_no_match = p.reports.iter().all(|r| r.reason.as_str() == Some("no_match"));
-                if all_no_match && p.resolve_grace_until.map(|until| now < until).unwrap_or(false) {
+                let all_no_match = p
+                    .reports
+                    .iter()
+                    .all(|r| r.reason.as_str() == Some("no_match"));
+                if all_no_match
+                    && p.resolve_grace_until
+                        .map(|until| now < until)
+                        .unwrap_or(false)
+                {
                     // Every page says no_match, but one may still be
                     // watching a late mount: the grace timer re-runs this
                     // check when it lapses.
@@ -1014,7 +1038,11 @@ impl ServerState {
             return;
         };
         let until = now_i64() + grace_ms;
-        if pending.resolve_grace_until.map(|u| u >= until).unwrap_or(false) {
+        if pending
+            .resolve_grace_until
+            .map(|u| u >= until)
+            .unwrap_or(false)
+        {
             return;
         }
         pending.resolve_grace_until = Some(until);
@@ -1040,7 +1068,11 @@ impl ServerState {
             .collect();
         for id in ids {
             if let Some(cid) = client_id {
-                if let Some((_, p)) = self.pending_agent_targets.iter_mut().find(|(k, _)| *k == id) {
+                if let Some((_, p)) = self
+                    .pending_agent_targets
+                    .iter_mut()
+                    .find(|(k, _)| *k == id)
+                {
                     p.reports.retain(|r| r.client_id != cid);
                     if p.owner.as_deref() == Some(cid) {
                         p.owner = None;
@@ -1122,7 +1154,10 @@ impl ServerState {
             // for a change of its word (an element that mounts late, a
             // session that ends); false once the roll call or a result
             // resolved the request.
-            let still_pending = self.pending_agent_targets.iter().any(|(k, _)| k == target_id);
+            let still_pending = self
+                .pending_agent_targets
+                .iter()
+                .any(|(k, _)| k == target_id);
             return json!({ "ok": true, "granted": false, "pending": still_pending });
         }
         // An eligible claim is the client's latest word: drop any earlier
@@ -1609,8 +1644,7 @@ pub fn run_generation_preflight(
     let line = stdout
         .trim()
         .split('\n')
-        .filter(|l| !l.is_empty())
-        .last()
+        .rfind(|l| !l.is_empty())
         .map(String::from);
     let Some(line) = line else {
         return PreflightOutcome::Err {

@@ -199,8 +199,14 @@ pub fn recapture_geometry(page: &mut Page<'_>, base: &SnapshotDom) -> CdpResult<
     let out = page.evaluate_value(expr)?;
     let mut snap = base.snap.clone();
     if out.is_object() {
-        snap.scroll_x = out.get("scrollX").and_then(Value::as_f64).unwrap_or(snap.scroll_x);
-        snap.scroll_y = out.get("scrollY").and_then(Value::as_f64).unwrap_or(snap.scroll_y);
+        snap.scroll_x = out
+            .get("scrollX")
+            .and_then(Value::as_f64)
+            .unwrap_or(snap.scroll_x);
+        snap.scroll_y = out
+            .get("scrollY")
+            .and_then(Value::as_f64)
+            .unwrap_or(snap.scroll_y);
         let rects = out.get("rects").and_then(Value::as_array);
         let dtrs = out.get("dtrs").and_then(Value::as_array);
         let rect4 = |v: Option<&Value>| -> Option<[f64; 4]> {
@@ -208,7 +214,12 @@ pub fn recapture_geometry(page: &mut Page<'_>, base: &SnapshotDom) -> CdpResult<
             if a.len() < 4 {
                 return None;
             }
-            Some([a[0].as_f64()?, a[1].as_f64()?, a[2].as_f64()?, a[3].as_f64()?])
+            Some([
+                a[0].as_f64()?,
+                a[1].as_f64()?,
+                a[2].as_f64()?,
+                a[3].as_f64()?,
+            ])
         };
         for (i, node) in snap.els.iter_mut().enumerate() {
             if let Some(rects) = rects {
@@ -358,13 +369,20 @@ fn live_scroll(page: &mut Page<'_>) -> CdpResult<(f64, f64)> {
 }
 
 fn scroll_to(page: &mut Page<'_>, x: f64, y: f64) -> CdpResult<()> {
-    let expr = format!("(function(){{ window.scrollTo({}, {}); }})()", json!(x), json!(y));
+    let expr = format!(
+        "(function(){{ window.scrollTo({}, {}); }})()",
+        json!(x),
+        json!(y)
+    );
     page.evaluate_value(&expr)?;
     Ok(())
 }
 
 fn scroll_into_view(page: &mut Page<'_>, candidate: &Value) -> CdpResult<bool> {
-    let selector = candidate.get("selector").and_then(Value::as_str).unwrap_or("");
+    let selector = candidate
+        .get("selector")
+        .and_then(Value::as_str)
+        .unwrap_or("");
     let identity = candidate.get("match").cloned().unwrap_or(Value::Null);
     // Every ancestor's offset is kept before the scroll, so an element scroller
     // it moves (a page that scrolls inside its body or an app shell's main) can
@@ -485,10 +503,11 @@ fn sample_image_element(
     py: f64,
 ) -> CdpResult<Value> {
     let intrinsic = intrinsic_img(dom, node);
-    let (painted, source) = match visual::img_source_point(dom, node, intrinsic.0, intrinsic.1, px, py) {
-        Err(sample) => return Ok(sample),
-        Ok(v) => v,
-    };
+    let (painted, source) =
+        match visual::img_source_point(dom, node, intrinsic.0, intrinsic.1, px, py) {
+            Err(sample) => return Ok(sample),
+            Ok(v) => v,
+        };
     let node_ref = json!(node);
     let sample = sample_drawable_pixel(page, &node_ref, intrinsic, source.0, source.1)?;
     let finished = visual::img_finish(sample.clone());
@@ -498,7 +517,9 @@ fn sample_image_element(
     let src = img_src(dom, node);
     if !src.is_empty() {
         if let Some(loaded) = load_image(page, &src)? {
-            if let Some(point) = visual::img_loaded_source_point(&painted, loaded.w, loaded.h, px, py) {
+            if let Some(point) =
+                visual::img_loaded_source_point(&painted, loaded.w, loaded.h, px, py)
+            {
                 let pixel = sample_drawable_pixel(
                     page,
                     &loaded.reference,
@@ -530,11 +551,17 @@ fn sample_css_background(
 ) -> CdpResult<Value> {
     match visual::css_plan(dom, node, Some(text_color)) {
         CssPlan::Sample { sample } => Ok(sample),
-        CssPlan::Url { url, size, position } => {
+        CssPlan::Url {
+            url,
+            size,
+            position,
+        } => {
             let Some(img) = load_image(page, &url)? else {
                 return Ok(visual::css_url_no_image(dom, node, el, &size, &position));
             };
-            match visual::css_url_source_point(dom, node, el, img.w, img.h, &size, &position, px, py) {
+            match visual::css_url_source_point(
+                dom, node, el, img.w, img.h, &size, &position, px, py,
+            ) {
                 Err(sample) => Ok(sample),
                 Ok(source) => {
                     let pixel = sample_drawable_pixel(
@@ -560,7 +587,11 @@ fn analyze_candidate(
     let prepared = resolve_needs(dom, page, |d| visual::prepare_analysis(d, candidate))?;
     let (el, points, text_color) = match prepared {
         Prepared::Early { early } => return Ok(early),
-        Prepared::Ready { el, points, text_color } => (el, points, text_color),
+        Prepared::Ready {
+            el,
+            points,
+            text_color,
+        } => (el, points, text_color),
     };
     let mut samples: Vec<Value> = Vec::with_capacity(points.len());
     for point in &points {
@@ -568,7 +599,12 @@ fn analyze_candidate(
         let py = point.get("y").and_then(Value::as_f64).unwrap_or(0.0);
         samples.push(sample_background(page, dom, el, px, py, &text_color)?);
     }
-    Ok(visual::finish_analysis(candidate, &text_color, &samples, points.len()))
+    Ok(visual::finish_analysis(
+        candidate,
+        &text_color,
+        &samples,
+        points.len(),
+    ))
 }
 
 /// The stack walk with the candidate's text color carried explicitly (the css
@@ -606,7 +642,12 @@ fn sample_background_impl(
     let mut pending: Vec<Value> = Vec::new();
     for StackNode { el: node, kind } in nodes {
         let sample = match kind.as_str() {
-            "img" => visual::media_sample(dom, node, el, sample_image_element(page, dom, node, px, py)?),
+            "img" => visual::media_sample(
+                dom,
+                node,
+                el,
+                sample_image_element(page, dom, node, px, py)?,
+            ),
             "raster" => {
                 let intrinsic = intrinsic_raster(dom, node);
                 match visual::raster_source_point(dom, node, intrinsic.0, intrinsic.1, px, py) {
@@ -674,15 +715,16 @@ pub fn analyze_visual_contrast(
             }
         }
         let mut result = analyze_candidate(page, base, candidate)?;
-        if scroll_offscreen && visual::needs_scroll_retry(&result) {
-            if scroll_into_view(page, candidate)? {
-                retried = true;
-                wait_for_paint(page)?;
-                // Only geometry changed (the page scrolled); patch it onto the
-                // base snapshot rather than re-capturing the whole page.
-                let scrolled = recapture_geometry(page, base)?;
-                result = analyze_candidate(page, &scrolled, candidate)?;
-            }
+        if scroll_offscreen
+            && visual::needs_scroll_retry(&result)
+            && scroll_into_view(page, candidate)?
+        {
+            retried = true;
+            wait_for_paint(page)?;
+            // Only geometry changed (the page scrolled); patch it onto the
+            // base snapshot rather than re-capturing the whole page.
+            let scrolled = recapture_geometry(page, base)?;
+            result = analyze_candidate(page, &scrolled, candidate)?;
         }
         results.push(result);
     }

@@ -23,8 +23,14 @@ macro_rules! re {
 // `/^currentcolor$/i`: ASCII case folding (`ci`) and the JS `\s` set (`WS`).
 re!(GRADIENT_RE, js::ci("gradient"));
 re!(URL_RE, format!("{}{}*\\(", js::ci("url"), js::WS));
-re!(GRADIENT_PAREN_RE, format!("{}{}*\\(", js::ci("gradient"), js::WS));
-re!(URL_LEADING_RE, format!("^{}*{}{}*\\(", js::WS, js::ci("url"), js::WS));
+re!(
+    GRADIENT_PAREN_RE,
+    format!("{}{}*\\(", js::ci("gradient"), js::WS)
+);
+re!(
+    URL_LEADING_RE,
+    format!("^{}*{}{}*\\(", js::WS, js::ci("url"), js::WS)
+);
 re!(CURRENTCOLOR_RE, format!("^{}$", js::ci("currentcolor")));
 
 /// JS `{ color, unresolved }` from resolveBackgroundInfo.
@@ -188,7 +194,7 @@ fn walk_surface(dom: &dyn Dom, el: ElId, q: &Query<'_>) -> TextSurface {
         let mut bg = read_cascade_background_color(dom, cur);
 
         let bg_color_raw = dom.style(cur, "backgroundColor");
-        if (bg.is_none() || bg.map_or(false, |b| b.alpha_or_one() < 0.1))
+        if (bg.is_none() || bg.is_some_and(|b| b.alpha_or_one() < 0.1))
             && CURRENTCOLOR_RE.is_match(js::trim(&bg_color_raw))
         {
             // JS: `bg.a < 0.1` with `a` undefined is false; alpha_or_one keeps
@@ -199,7 +205,7 @@ fn walk_surface(dom: &dyn Dom, el: ElId, q: &Query<'_>) -> TextSurface {
 
         match bg {
             Some(b) if alpha_gt(&b, q.min_fill_alpha) => {
-                if b.a.map_or(false, |a| a >= 0.99) {
+                if b.a.is_some_and(|a| a >= 0.99) {
                     // A gradient on the same box paints over its fill, so
                     // the fill is the surface only where the gradient lets
                     // it show.
@@ -256,9 +262,7 @@ fn walk_surface(dom: &dyn Dom, el: ElId, q: &Query<'_>) -> TextSurface {
                 .iter()
                 .find(|layer| GRADIENT_PAREN_RE.is_match(layer) || URL_RE.is_match(layer));
             let gradient_on_top = match top_paint_layer {
-                Some(layer) => {
-                    GRADIENT_PAREN_RE.is_match(layer) && !URL_LEADING_RE.is_match(layer)
-                }
+                Some(layer) => GRADIENT_PAREN_RE.is_match(layer) && !URL_LEADING_RE.is_match(layer),
                 None => false,
             };
             if !gradient_on_top {
@@ -317,12 +321,21 @@ const OWN_GRADIENT_MIN_CHANNEL_DELTA: f64 = 12.0;
 /// paints under the text, where the geometry cannot be read, and where the
 /// gradient leaves the fill within [`OWN_GRADIENT_MIN_CHANNEL_DELTA`] at
 /// every point under the text.
-fn own_gradient_over_fill(dom: &dyn Dom, node: ElId, bg_image: &str, fill: &Rgba, q: &Query<'_>) -> Option<Vec<Rgba>> {
+fn own_gradient_over_fill(
+    dom: &dyn Dom,
+    node: ElId,
+    bg_image: &str,
+    fill: &Rgba,
+    q: &Query<'_>,
+) -> Option<Vec<Rgba>> {
     q.text?;
     let UnderText::Paint(samples) = gradient_under_text(dom, node, bg_image, q)? else {
         return None;
     };
-    let painted: Vec<Rgba> = samples.iter().map(|s| composite_color_over(s, fill)).collect();
+    let painted: Vec<Rgba> = samples
+        .iter()
+        .map(|s| composite_color_over(s, fill))
+        .collect();
     let moved = |c: &Rgba| {
         (c.r - fill.r).abs() >= OWN_GRADIENT_MIN_CHANNEL_DELTA
             || (c.g - fill.g).abs() >= OWN_GRADIENT_MIN_CHANNEL_DELTA
@@ -334,7 +347,12 @@ fn own_gradient_over_fill(dom: &dyn Dom, node: ElId, bg_image: &str, fill: &Rgba
 /// The surface of a box whose gradient was read over its own opaque fill
 /// ([`own_gradient_over_fill`]): the samples, under the fills above them.
 fn gradient_over_fill_surface(mut out: TextSurface, host: ElId, painted: Vec<Rgba>) -> TextSurface {
-    out.samples = Some(painted.into_iter().map(|c| flatten(&out.overlays, c)).collect());
+    out.samples = Some(
+        painted
+            .into_iter()
+            .map(|c| flatten(&out.overlays, c))
+            .collect(),
+    );
     out.gradient_host = Some(host);
     out.host = Some(host);
     out.info = BackgroundInfo {
@@ -346,7 +364,12 @@ fn gradient_over_fill_surface(mut out: TextSurface, host: ElId, painted: Vec<Rgb
 
 /// What a box's gradient layers paint under the queried text, when the query
 /// carries a text box or a font size and the layers are gradients alone.
-fn gradient_under_text(dom: &dyn Dom, node: ElId, bg_image: &str, q: &Query<'_>) -> Option<UnderText> {
+fn gradient_under_text(
+    dom: &dyn Dom,
+    node: ElId,
+    bg_image: &str,
+    q: &Query<'_>,
+) -> Option<UnderText> {
     if q.text.is_none() && q.font_size.is_none() {
         return None;
     }
@@ -366,7 +389,12 @@ fn gradient_under_text(dom: &dyn Dom, node: ElId, bg_image: &str, q: &Query<'_>)
                 px("borderBottomWidth"),
                 px("borderLeftWidth"),
             ],
-            padding: [px("paddingTop"), px("paddingRight"), px("paddingBottom"), px("paddingLeft")],
+            padding: [
+                px("paddingTop"),
+                px("paddingRight"),
+                px("paddingBottom"),
+                px("paddingLeft"),
+            ],
         };
         let layers = BackgroundLayers {
             image: bg_image,
@@ -435,7 +463,11 @@ fn flatten_samples(
     if host_fill.is_some() {
         out.overlays.pop();
     }
-    Some(flat.into_iter().map(|c| flatten(&out.overlays, c)).collect())
+    Some(
+        flat.into_iter()
+            .map(|c| flatten(&out.overlays, c))
+            .collect(),
+    )
 }
 
 /// JS: checks.mjs#resolveBackground(el, win, customPropMap)
@@ -518,9 +550,17 @@ fn layered_gradient_stops(bg_image: &str, ground: Option<Rgba>) -> Option<Vec<Rg
     let mut visible: Vec<Rgba> = Vec::new();
     for (i, stops) in layers.iter().enumerate().rev() {
         let bottom = i == layers.len() - 1;
-        let below: Vec<Rgba> = if bottom { ground.into_iter().collect() } else { visible.clone() };
+        let below: Vec<Rgba> = if bottom {
+            ground.into_iter().collect()
+        } else {
+            visible.clone()
+        };
         let opaque_layer = stops.iter().all(|s| s.alpha_or_one() >= 0.99);
-        let mut next: Vec<Rgba> = if opaque_layer { visible.clone() } else { Vec::new() };
+        let mut next: Vec<Rgba> = if opaque_layer {
+            visible.clone()
+        } else {
+            Vec::new()
+        };
         for s in stops {
             if s.alpha_or_one() >= 0.99 {
                 push(&mut next, *s);
@@ -557,7 +597,11 @@ pub fn resolve_gradient_stops(dom: &dyn Dom, el: ElId) -> Option<Vec<Rgba>> {
 /// Every stop of the gradient a contrast surface walk stopped on, for text
 /// whose position on it could not be read: the stops walk with the contrast
 /// walk's fill threshold, reading the gradients it skipped as absent.
-pub fn resolve_text_gradient_stops(dom: &dyn Dom, el: ElId, surface: &TextSurface) -> Option<Vec<Rgba>> {
+pub fn resolve_text_gradient_stops(
+    dom: &dyn Dom,
+    el: ElId,
+    surface: &TextSurface,
+) -> Option<Vec<Rgba>> {
     let skipped = |n: ElId| surface.skipped_images.contains(&n);
     let query = Query {
         skip_image: &skipped,
@@ -593,16 +637,23 @@ fn gradient_stops_walk(dom: &dyn Dom, el: ElId, q: &Query<'_>) -> Option<Vec<Rgb
         }
         if let Some(stops) = stops {
             let composited = composite_gradient_stops(dom, stops, &bg_image, cur, q);
-            let Some(composited) = composited else { return None };
+            let Some(composited) = composited else {
+                return None;
+            };
             if overlays.is_empty() {
                 return Some(composited);
             }
-            return Some(composited.into_iter().map(|stop| flatten(&overlays, stop)).collect());
+            return Some(
+                composited
+                    .into_iter()
+                    .map(|stop| flatten(&overlays, stop))
+                    .collect(),
+            );
         }
         let bg = read_cascade_background_color(dom, cur);
         if let Some(b) = bg {
             if alpha_gt(&b, q.min_fill_alpha) {
-                if b.a.map_or(false, |a| a >= 0.99) {
+                if b.a.is_some_and(|a| a >= 0.99) {
                     return None;
                 }
                 overlays.push((cur, b));
@@ -661,7 +712,10 @@ mod tests {
         let p = d.add(Some(body), "p");
         d.set_style(p, "backgroundColor", "rgba(0, 0, 0, 0)");
         d.set_style(p, "backgroundImage", "none");
-        assert_eq!(resolve_background(&d, p), Some(Rgba::new(255.0, 255.0, 255.0, 1.0)));
+        assert_eq!(
+            resolve_background(&d, p),
+            Some(Rgba::new(255.0, 255.0, 255.0, 1.0))
+        );
         d.set_style(body, "backgroundImage", "url(\"photo.png\")");
         let info = resolve_background_info(&d, p);
         assert!(info.unresolved && info.color.is_none());
@@ -674,7 +728,11 @@ mod tests {
         d.set_style(html, "backgroundColor", "rgba(0, 0, 0, 0)");
         d.set_style(html, "backgroundImage", "none");
         d.set_style(body, "backgroundColor", "rgba(0, 0, 0, 0)");
-        d.set_style(body, "backgroundImage", "linear-gradient(rgb(10, 20, 30), rgb(40, 50, 60))");
+        d.set_style(
+            body,
+            "backgroundImage",
+            "linear-gradient(rgb(10, 20, 30), rgb(40, 50, 60))",
+        );
         let p = d.add(Some(body), "p");
         d.set_style(p, "backgroundColor", "rgba(0, 0, 0, 0)");
         d.set_style(p, "backgroundImage", "none");
@@ -704,7 +762,10 @@ mod tests {
         d.set_style(chip, "backgroundColor", "currentcolor");
         d.set_style(chip, "backgroundImage", "none");
         d.set_style(chip, "color", "rgb(1, 2, 3)");
-        assert_eq!(resolve_background(&d, chip), Some(Rgba::new(1.0, 2.0, 3.0, 1.0)));
+        assert_eq!(
+            resolve_background(&d, chip),
+            Some(Rgba::new(1.0, 2.0, 3.0, 1.0))
+        );
     }
 
     fn clear(d: &mut FakeDom, el: ElId) {
@@ -722,7 +783,10 @@ mod tests {
         let chip = d.add(Some(body), "button");
         d.set_style(chip, "backgroundColor", "rgba(243, 123, 46, 0.1)");
         d.set_style(chip, "backgroundImage", "none");
-        assert_eq!(resolve_background(&d, chip), Some(Rgba::new(255.0, 255.0, 255.0, 1.0)));
+        assert_eq!(
+            resolve_background(&d, chip),
+            Some(Rgba::new(255.0, 255.0, 255.0, 1.0))
+        );
         let s = resolve_text_surface(&d, chip, &|_| false, Box2::new(0.0, 0.0, 40.0, 16.0), 14.0);
         assert_eq!(s.info.color, Some(Rgba::new(254.0, 242.0, 234.0, 1.0)));
         assert_eq!(s.host, Some(body));
@@ -750,14 +814,23 @@ mod tests {
         );
         d.set_rect(button, 0.0, 0.0, 100.0, 60.0);
         // Text in the lower half only ever sees the dark half.
-        let s = resolve_text_surface(&d, button, &|_| false, Box2::new(10.0, 36.0, 80.0, 18.0), 14.0);
+        let s = resolve_text_surface(
+            &d,
+            button,
+            &|_| false,
+            Box2::new(10.0, 36.0, 80.0, 18.0),
+            14.0,
+        );
         let samples = s.samples.expect("samples");
         assert!(samples.iter().all(|c| c.r < 110.0), "{samples:?}");
         assert_eq!(s.gradient_host, Some(button));
         // An empty text box keeps the worst-stop reading.
         let s = resolve_text_surface(&d, button, &|_| false, Box2::new(0.0, 0.0, 0.0, 0.0), 14.0);
         assert!(s.samples.is_none() && s.gradient_host == Some(button));
-        assert_eq!(resolve_text_gradient_stops(&d, button, &s).map(|v| v.len()), Some(2));
+        assert_eq!(
+            resolve_text_gradient_stops(&d, button, &s).map(|v| v.len()),
+            Some(2)
+        );
 
         let link = d.add(Some(body), "a");
         let rule = "linear-gradient(rgb(0, 0, 0), rgb(0, 0, 0))";
@@ -772,7 +845,13 @@ mod tests {
             ],
         );
         d.set_rect(link, 0.0, 100.0, 110.0, 31.0);
-        let s = resolve_text_surface(&d, link, &|_| false, Box2::new(10.0, 106.0, 90.0, 19.0), 14.0);
+        let s = resolve_text_surface(
+            &d,
+            link,
+            &|_| false,
+            Box2::new(10.0, 106.0, 90.0, 19.0),
+            14.0,
+        );
         assert_eq!(s.info.color, Some(Rgba::new(255.0, 255.0, 255.0, 1.0)));
         assert_eq!(s.skipped_images, vec![link]);
         // Without a text box the size alone says the same.
@@ -798,34 +877,69 @@ mod tests {
                     ("backgroundImage", image),
                     ("backgroundSize", "auto"),
                     ("backgroundPosition", "0% 0%"),
-                    ("background", &format!("{fill} {image} repeat scroll 0% 0% / auto padding-box border-box")),
+                    (
+                        "background",
+                        &format!(
+                            "{fill} {image} repeat scroll 0% 0% / auto padding-box border-box"
+                        ),
+                    ),
                 ],
             );
         };
         d.set_rect(button, 0.0, 0.0, 110.0, 40.0);
         let text = Box2::new(16.0, 10.0, 78.0, 20.0);
-        paint(&mut d, "rgb(196, 181, 253)", "linear-gradient(135deg, rgb(91, 33, 182) 0%, rgb(109, 40, 217) 100%)");
+        paint(
+            &mut d,
+            "rgb(196, 181, 253)",
+            "linear-gradient(135deg, rgb(91, 33, 182) 0%, rgb(109, 40, 217) 100%)",
+        );
         let s = resolve_text_surface(&d, button, &|_| false, text, 14.0);
         let samples = s.samples.expect("the gradient is sampled");
-        assert!(samples.iter().all(|c| c.r < 115.0 && c.alpha_or_one() == 1.0), "{samples:?}");
-        assert_eq!((s.gradient_host, s.host, s.info.color), (Some(button), Some(button), None));
+        assert!(
+            samples
+                .iter()
+                .all(|c| c.r < 115.0 && c.alpha_or_one() == 1.0),
+            "{samples:?}"
+        );
+        assert_eq!(
+            (s.gradient_host, s.host, s.info.color),
+            (Some(button), Some(button), None)
+        );
         // The walk every other rule shares still reads the fill.
-        assert_eq!(resolve_background(&d, button), Some(Rgba::new(196.0, 181.0, 253.0, 1.0)));
+        assert_eq!(
+            resolve_background(&d, button),
+            Some(Rgba::new(196.0, 181.0, 253.0, 1.0))
+        );
 
         // A translucent sheen is read over the fill, not over the page.
-        paint(&mut d, "rgb(30, 58, 138)", "linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.5))");
+        paint(
+            &mut d,
+            "rgb(30, 58, 138)",
+            "linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.5))",
+        );
         let s = resolve_text_surface(&d, button, &|_| false, text, 14.0);
-        assert_eq!(s.samples.as_deref().and_then(|v| v.first()).copied(), Some(Rgba::new(143.0, 157.0, 197.0, 1.0)));
+        assert_eq!(
+            s.samples.as_deref().and_then(|v| v.first()).copied(),
+            Some(Rgba::new(143.0, 157.0, 197.0, 1.0))
+        );
 
         // One that leaves the fill within a reader's tolerance keeps the
         // fill, named as it always was.
-        paint(&mut d, "rgb(30, 58, 138)", "linear-gradient(rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0))");
+        paint(
+            &mut d,
+            "rgb(30, 58, 138)",
+            "linear-gradient(rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0))",
+        );
         let s = resolve_text_surface(&d, button, &|_| false, text, 14.0);
         assert_eq!(s.info.color, Some(Rgba::new(30.0, 58.0, 138.0, 1.0)));
         assert!(s.samples.is_none() && s.gradient_host.is_none() && s.base.is_some());
 
         // So does one whose geometry cannot be read.
-        paint(&mut d, "rgb(196, 181, 253)", "conic-gradient(rgb(91, 33, 182), rgb(109, 40, 217))");
+        paint(
+            &mut d,
+            "rgb(196, 181, 253)",
+            "conic-gradient(rgb(91, 33, 182), rgb(109, 40, 217))",
+        );
         let s = resolve_text_surface(&d, button, &|_| false, text, 14.0);
         assert_eq!(s.info.color, Some(Rgba::new(196.0, 181.0, 253.0, 1.0)));
     }
@@ -855,9 +969,19 @@ mod tests {
         assert!(stops.iter().all(|c| c.g > 130.0), "{stops:?}");
 
         // One layer is composited over the ground behind the box, as before.
-        d.set_style(avatar, "backgroundImage", "linear-gradient(rgba(255, 255, 255, 0.5), rgba(0, 0, 0, 0))");
+        d.set_style(
+            avatar,
+            "backgroundImage",
+            "linear-gradient(rgba(255, 255, 255, 0.5), rgba(0, 0, 0, 0))",
+        );
         let stops = resolve_gradient_stops(&d, avatar).expect("stops");
-        assert_eq!(stops, vec![Rgba::new(137.0, 139.0, 149.0, 1.0), Rgba::new(19.0, 22.0, 42.0, 1.0)]);
+        assert_eq!(
+            stops,
+            vec![
+                Rgba::new(137.0, 139.0, 149.0, 1.0),
+                Rgba::new(19.0, 22.0, 42.0, 1.0)
+            ]
+        );
 
         // Opaque layers alone are pooled, as before.
         d.set_style(
@@ -890,15 +1014,28 @@ mod tests {
         d.set_style(body, "backgroundColor", "rgb(255, 255, 255)");
         d.set_style(body, "backgroundImage", "none");
         let root = d.add(Some(body), "div");
-        d.set_styles(root, &[("display", "contents"), ("backgroundColor", "rgb(0, 0, 0)"), ("backgroundImage", "none")]);
+        d.set_styles(
+            root,
+            &[
+                ("display", "contents"),
+                ("backgroundColor", "rgb(0, 0, 0)"),
+                ("backgroundImage", "none"),
+            ],
+        );
         let p = d.add(Some(root), "p");
         clear(&mut d, p);
         let s = resolve_text_surface(&d, p, &|_| false, Box2::new(0.0, 0.0, 200.0, 20.0), 16.0);
         assert_eq!(s.info.color, Some(Rgba::new(255.0, 255.0, 255.0, 1.0)));
         assert_eq!(s.host, Some(body));
-        assert_eq!(resolve_background(&d, p), Some(Rgba::new(255.0, 255.0, 255.0, 1.0)));
+        assert_eq!(
+            resolve_background(&d, p),
+            Some(Rgba::new(255.0, 255.0, 255.0, 1.0))
+        );
         d.set_style(root, "display", "block");
-        assert_eq!(resolve_background(&d, p), Some(Rgba::new(0.0, 0.0, 0.0, 1.0)));
+        assert_eq!(
+            resolve_background(&d, p),
+            Some(Rgba::new(0.0, 0.0, 0.0, 1.0))
+        );
     }
 
     #[test]
@@ -911,14 +1048,33 @@ mod tests {
         let host = d.add(Some(body), "tcg-promo");
         clear(&mut d, host);
         let band = d.add_shadow_child(host, "div");
-        d.set_styles(band, &[("backgroundColor", "rgb(11, 58, 102)"), ("backgroundImage", "none")]);
+        d.set_styles(
+            band,
+            &[
+                ("backgroundColor", "rgb(11, 58, 102)"),
+                ("backgroundImage", "none"),
+            ],
+        );
         let slot = d.add(Some(band), "slot");
-        d.set_styles(slot, &[("display", "contents"), ("backgroundColor", "rgba(0, 0, 0, 0)"), ("backgroundImage", "none")]);
+        d.set_styles(
+            slot,
+            &[
+                ("display", "contents"),
+                ("backgroundColor", "rgba(0, 0, 0, 0)"),
+                ("backgroundImage", "none"),
+            ],
+        );
         let h3 = d.add(Some(host), "h3");
         clear(&mut d, h3);
-        assert_eq!(resolve_background(&d, h3), Some(Rgba::new(255.0, 255.0, 255.0, 1.0)));
+        assert_eq!(
+            resolve_background(&d, h3),
+            Some(Rgba::new(255.0, 255.0, 255.0, 1.0))
+        );
         d.set_assigned_slot(h3, slot);
-        assert_eq!(resolve_background(&d, h3), Some(Rgba::new(11.0, 58.0, 102.0, 1.0)));
+        assert_eq!(
+            resolve_background(&d, h3),
+            Some(Rgba::new(11.0, 58.0, 102.0, 1.0))
+        );
         // Document queries never reach the shadow tree.
         assert!(!d.query_all(None, "*").unwrap().contains(&band));
     }

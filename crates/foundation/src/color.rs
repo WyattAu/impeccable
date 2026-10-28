@@ -5,8 +5,8 @@
 //! and present everywhere else, exactly as in the source.
 
 use crate::js::{
-    self, ci, math_cos, math_hypot, math_max, math_max3, math_min, math_min3, math_pow, math_round,
-    math_sin, number_to_string_radix, parse_float, parse_int, string_to_number, WS,
+    self, math_cos, math_hypot, math_max, math_max3, math_min, math_min3, math_pow, math_round,
+    math_sin, number_to_string_radix, parse_float, parse_int, string_to_number,
 };
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -49,7 +49,8 @@ impl Rgba {
 
 macro_rules! re {
     ($name:ident, $pat:expr) => {
-        static $name: Lazy<Regex> = Lazy::new(|| Regex::new(&$pat).expect(stringify!($name)));
+        static $name: Lazy<Regex> =
+            Lazy::new(|| Regex::new(r"^#([0-9a-fA-F]{3,8})$").expect(stringify!($name)));
     };
 }
 
@@ -242,7 +243,11 @@ pub fn contrast_ratio(c1: &Rgba, c2: &Rgba) -> f64 {
 /// decimal as they always did.
 pub fn ratio_label(ratio: f64, threshold: f64) -> String {
     let one = js::to_fixed(ratio, 1);
-    if !ratio.is_finite() || ratio < 0.0 || !(ratio < threshold) || string_to_number(&one) < threshold {
+    if !ratio.is_finite()
+        || ratio < 0.0
+        || !(ratio < threshold)
+        || string_to_number(&one) < threshold
+    {
         return one;
     }
     let two = js::to_fixed(ratio, 2);
@@ -569,8 +574,8 @@ pub fn lab_to_rgb(l: f64, a: f64, b: f64) -> Rgba {
     let z = invert(fz) * zn;
     linear_srgb_to_color(
         3.1341359569958707 * x - 1.6173863321612538 * y - 0.4906619460083532 * z,
-        -0.9787955029120890 * x + 1.9162545672595240 * y + 0.0334427311613195 * z,
-        0.0719553798841168 * x - 0.2289768264158322 * y + 1.4053860583241250 * z,
+        -0.978_795_502_912_089 * x + 1.916_254_567_259_524 * y + 0.0334427311613195 * z,
+        0.0719553798841168 * x - 0.2289768264158322 * y + 1.405_386_058_324_125 * z,
     )
 }
 
@@ -599,7 +604,7 @@ pub fn color_function_to_rgb(space: &str, c1: f64, c2: f64, c3: f64) -> Option<R
             Some(linear_srgb_to_color(
                 1.2249401762805587 * r - 0.2249404646817506 * g + 0.0000002884022551 * b,
                 -0.0420569547096138 * r + 1.0420571661298634 * g - 0.0000002113202247 * b,
-                -0.0196375587040044 * r - 0.0786360772174755 * g + 1.0982736359214800 * b,
+                -0.0196375587040044 * r - 0.0786360772174755 * g + 1.098_273_635_921_48 * b,
             ))
         }
         _ => None,
@@ -1139,7 +1144,10 @@ mod tests {
     #[test]
     fn a_failing_ratio_never_prints_as_its_bar() {
         // context.dev: #777778 on #070709 is 4.4992:1, printed `4.50:1 (need 4.5:1)`.
-        let near = contrast_ratio(&Rgba::new(119.0, 119.0, 120.0, 1.0), &Rgba::new(7.0, 7.0, 9.0, 1.0));
+        let near = contrast_ratio(
+            &Rgba::new(119.0, 119.0, 120.0, 1.0),
+            &Rgba::new(7.0, 7.0, 9.0, 1.0),
+        );
         assert!(near < 4.5 && near > 4.499);
         assert_eq!(ratio_label(near, 4.5), "4.49");
         // Two decimals already under the bar keep rounding, as they did.

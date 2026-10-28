@@ -169,7 +169,11 @@ pub trait Dom {
     /// children, which is the right order only when the element has one kind
     /// or the other; every DOM in this workspace overrides it.
     fn child_nodes(&self, el: ElId) -> Vec<DomChild> {
-        let mut out: Vec<DomChild> = self.direct_text_nodes(el).into_iter().map(DomChild::Text).collect();
+        let mut out: Vec<DomChild> = self
+            .direct_text_nodes(el)
+            .into_iter()
+            .map(DomChild::Text)
+            .collect();
         out.extend(self.children(el).into_iter().map(DomChild::Element));
         out
     }
@@ -389,7 +393,11 @@ pub fn merge_text_rects_into_lines(rects: Vec<Rect>) -> Vec<Rect> {
         a.top
             .partial_cmp(&b.top)
             .unwrap_or(std::cmp::Ordering::Equal)
-            .then(a.left.partial_cmp(&b.left).unwrap_or(std::cmp::Ordering::Equal))
+            .then(
+                a.left
+                    .partial_cmp(&b.left)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+            )
     });
     let mut lines: Vec<Rect> = Vec::new();
     // The band of the rect each row started with. Membership is tested

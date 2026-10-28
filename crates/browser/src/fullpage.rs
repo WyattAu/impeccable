@@ -126,16 +126,21 @@ pub struct Geometry {
 impl Geometry {
     fn from_value(v: &Value) -> Geometry {
         let num = |v: Option<&Value>, fallback: f64| {
-            v.and_then(Value::as_f64).filter(|n| n.is_finite()).unwrap_or(fallback)
+            v.and_then(Value::as_f64)
+                .filter(|n| n.is_finite())
+                .unwrap_or(fallback)
         };
         let viewport_width = num(v.get("vw"), 1280.0).max(1.0);
         let viewport_height = num(v.get("vh"), 800.0).max(1.0);
-        let scroller = v.get("scroller").filter(|s| s.is_object()).map(|s| Scroller {
-            top: num(s.get("top"), 0.0),
-            client_height: num(s.get("clientHeight"), 0.0),
-            scroll_height: num(s.get("scrollHeight"), 0.0),
-            scroll_top: num(s.get("scrollTop"), 0.0),
-        });
+        let scroller = v
+            .get("scroller")
+            .filter(|s| s.is_object())
+            .map(|s| Scroller {
+                top: num(s.get("top"), 0.0),
+                client_height: num(s.get("clientHeight"), 0.0),
+                scroll_height: num(s.get("scrollHeight"), 0.0),
+                scroll_top: num(s.get("scrollTop"), 0.0),
+            });
         Geometry {
             viewport_width,
             viewport_height,
@@ -602,10 +607,15 @@ const RESTORE_COVERS_JS: &str = r#"(() => {
 })()"#;
 
 /// Forget the last tile's covers ([`HIDE_COVERS_JS`]) once the shots are done.
-const FORGET_COVERS_JS: &str = "(() => { try { delete window.__impeccableShotTileCovers; } catch (e) {} })()";
+const FORGET_COVERS_JS: &str =
+    "(() => { try { delete window.__impeccableShotTileCovers; } catch (e) {} })()";
 
 /// Capture the page, cut at `max_height`. See the module docs for the method.
-pub fn capture_full_page(page: &mut Page<'_>, max_height: f64, quality: u32) -> CdpResult<Screenshot> {
+pub fn capture_full_page(
+    page: &mut Page<'_>,
+    max_height: f64,
+    quality: u32,
+) -> CdpResult<Screenshot> {
     let geometry = Geometry::from_value(&page.evaluate_value(GEOMETRY_JS)?);
     let shot = capture_with(page, &geometry, max_height, quality);
     let _ = page.evaluate(
@@ -644,7 +654,8 @@ fn capture_with(
     let document_height = geometry.document_height;
     let height = document_height.min(max_height);
     let before = probe_layout(page, true);
-    let jpeg_base64 = page.screenshot_jpeg(geometry.capture_clip_x(), 0.0, width, height, quality)?;
+    let jpeg_base64 =
+        page.screenshot_jpeg(geometry.capture_clip_x(), 0.0, width, height, quality)?;
     // A page whose script answers the capture's resize re-lays itself while
     // the capture paints (developer.apple.com folds its navigator and slides
     // the column back over 300ms): the image shows that state, not the one
@@ -778,7 +789,11 @@ pub fn moved_boxes(before: &[Option<[f64; 4]>], after: &[Option<[f64; 4]>]) -> V
 /// sample: at least 2 of the elements measured both times, and a quarter of
 /// them, are [`moved_boxes`].
 pub fn layout_moved(before: &[Option<[f64; 4]>], after: &[Option<[f64; 4]>]) -> bool {
-    let measured = before.iter().zip(after).filter(|(b, a)| b.is_some() && a.is_some()).count();
+    let measured = before
+        .iter()
+        .zip(after)
+        .filter(|(b, a)| b.is_some() && a.is_some())
+        .count();
     let moved = moved_boxes(before, after).iter().filter(|m| **m).count();
     moved >= 2 && moved * 4 >= measured
 }
@@ -793,7 +808,11 @@ pub fn layout_moved(before: &[Option<[f64; 4]>], after: &[Option<[f64; 4]>]) -> 
 /// it keeps the beyond-viewport capture: the engine cannot tell whether the
 /// image or the rects hold its true place (developer.apple.com's navigator
 /// labels re-wrap at the capture's resize and stay that way).
-pub fn settled(before: &[Option<[f64; 4]>], moved: &[bool], measures: &[Vec<Option<[f64; 4]>>]) -> bool {
+pub fn settled(
+    before: &[Option<[f64; 4]>],
+    moved: &[bool],
+    measures: &[Vec<Option<[f64; 4]>>],
+) -> bool {
     let back = |m: &Vec<Option<[f64; 4]>>| {
         before.iter().zip(moved).enumerate().all(|(i, (b, moved))| {
             if !moved {
@@ -805,7 +824,9 @@ pub fn settled(before: &[Option<[f64; 4]>], moved: &[bool], measures: &[Vec<Opti
             }
         })
     };
-    moved.iter().any(|m| *m) && measures.len() >= 2 && measures[measures.len() - 2..].iter().all(back)
+    moved.iter().any(|m| *m)
+        && measures.len() >= 2
+        && measures[measures.len() - 2..].iter().all(back)
 }
 
 /// Measure the sample every 100ms, up to 2 seconds, until the boxes that
@@ -875,12 +896,20 @@ pub fn tile_positions(extent: f64, step: f64) -> Vec<f64> {
 /// The viewport rows `[from, to)` a tile contributes. Without a scroller the
 /// whole viewport. With one, the rows it shows, plus what sits above its box
 /// on the first tile and below it on the last.
-pub fn tile_rows(scroller: Option<&Scroller>, viewport_height: f64, first: bool, last: bool) -> (f64, f64) {
+pub fn tile_rows(
+    scroller: Option<&Scroller>,
+    viewport_height: f64,
+    first: bool,
+    last: bool,
+) -> (f64, f64) {
     match scroller {
         None => (0.0, viewport_height),
         Some(s) => {
             let (top, bottom) = s.band(viewport_height);
-            (if first { 0.0 } else { top }, if last { viewport_height } else { bottom })
+            (
+                if first { 0.0 } else { top },
+                if last { viewport_height } else { bottom },
+            )
         }
     }
 }
@@ -993,7 +1022,13 @@ fn stitch(
                     return Err(CdpError::new("a viewport tile does not match the viewport"));
                 }
                 let rows = tile_rows(scroller.as_ref(), vh, row == 0, at_bottom);
-                paste(&mut canvas, &tile, sx - geometry.capture_origin_x(), sy - origin, rows);
+                paste(
+                    &mut canvas,
+                    &tile,
+                    sx - geometry.capture_origin_x(),
+                    sy - origin,
+                    rows,
+                );
                 // A scroll that stops short sideways has reached the right edge.
                 if sx - geometry.capture_origin_x() + 0.5 < tx {
                     break;
@@ -1018,16 +1053,28 @@ fn stitch(
                         let pos = page.evaluate_value(&format!("({SCROLL_TO_JS})({args})"))?;
                         let sx = pos.get("x").and_then(Value::as_f64).unwrap_or(0.0);
                         let sy = pos.get("y").and_then(Value::as_f64).unwrap_or(0.0);
-                        let wy = pos.get("docY").and_then(Value::as_f64).unwrap_or(0.0).round();
+                        let wy = pos
+                            .get("docY")
+                            .and_then(Value::as_f64)
+                            .unwrap_or(0.0)
+                            .round();
                         if wy < 1.0 || (sy - row_y).abs() >= 1.0 {
                             break;
                         }
                         let tile = decode_png(&page.screenshot_viewport_png()?)
                             .ok_or_else(|| CdpError::new("could not decode a viewport tile"))?;
                         if tile.width() != vw.round() as u32 || tile.height() != vh.round() as u32 {
-                            return Err(CdpError::new("a viewport tile does not match the viewport"));
+                            return Err(CdpError::new(
+                                "a viewport tile does not match the viewport",
+                            ));
                         }
-                        paste(&mut canvas, &tile, sx - geometry.capture_origin_x(), sy - origin + wy, (vh - wy, vh));
+                        paste(
+                            &mut canvas,
+                            &tile,
+                            sx - geometry.capture_origin_x(),
+                            sy - origin + wy,
+                            (vh - wy, vh),
+                        );
                         if sx - geometry.capture_origin_x() + 0.5 < tx {
                             break;
                         }
@@ -1107,7 +1154,9 @@ pub fn capture_element_shots(
             "reuse": last.is_some(),
             "mayScroll": captures < MAX_ELEMENT_SHOTS,
         });
-        let Ok(v) = page.evaluate_value(&format!("({ELEMENT_INTO_VIEW_JS})({RESOLVE_FLAGGED_JS}, {args})")) else {
+        let Ok(v) = page.evaluate_value(&format!(
+            "({ELEMENT_INTO_VIEW_JS})({RESOLVE_FLAGGED_JS}, {args})"
+        )) else {
             last = None;
             continue;
         };
@@ -1120,7 +1169,9 @@ pub fn capture_element_shots(
         if v.get("visible").and_then(Value::as_bool) != Some(true) {
             continue;
         }
-        let Some(live) = v.get("rect").and_then(Value::as_array) else { continue };
+        let Some(live) = v.get("rect").and_then(Value::as_array) else {
+            continue;
+        };
         let live: Vec<f64> = live.iter().filter_map(Value::as_f64).collect();
         if live.len() < 4 {
             continue;
@@ -1131,7 +1182,9 @@ pub fn capture_element_shots(
         // this one only when this one is under no layer it left showing.
         if last.is_some() {
             let uncovered = page
-                .evaluate_value(&format!("({HIDE_COVERS_JS})({RESOLVE_FLAGGED_JS}, {args}, true)"))
+                .evaluate_value(&format!(
+                    "({HIDE_COVERS_JS})({RESOLVE_FLAGGED_JS}, {args}, true)"
+                ))
                 .ok()
                 .and_then(|v| v.as_f64())
                 == Some(0.0);
@@ -1149,11 +1202,17 @@ pub fn capture_element_shots(
                 // Fixed chrome over the element goes for the shot and comes
                 // back after it: elements that share the tile share it too.
                 tile_covers = page
-                    .evaluate_value(&format!("({HIDE_COVERS_JS})({RESOLVE_FLAGGED_JS}, {args}, false)"))
+                    .evaluate_value(&format!(
+                        "({HIDE_COVERS_JS})({RESOLVE_FLAGGED_JS}, {args}, false)"
+                    ))
                     .ok()
                     .and_then(|v| {
-                        v.as_array()
-                            .map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect())
+                        v.as_array().map(|a| {
+                            a.iter()
+                                .filter_map(Value::as_str)
+                                .map(String::from)
+                                .collect()
+                        })
                     })
                     .unwrap_or_default();
                 let shot = page.screenshot_viewport_jpeg(quality);
@@ -1184,14 +1243,18 @@ pub fn capture_element_shots(
 }
 
 fn decode_jpeg(jpeg_base64: &str) -> Option<RgbImage> {
-    let bytes = base64::engine::general_purpose::STANDARD.decode(jpeg_base64).ok()?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(jpeg_base64)
+        .ok()?;
     image::load_from_memory_with_format(&bytes, image::ImageFormat::Jpeg)
         .ok()
         .map(|img| img.to_rgb8())
 }
 
 fn decode_png(png_base64: &str) -> Option<RgbImage> {
-    let bytes = base64::engine::general_purpose::STANDARD.decode(png_base64).ok()?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(png_base64)
+        .ok()?;
     let mut decoder = png::Decoder::new(std::io::Cursor::new(bytes));
     decoder.set_transformations(png::Transformations::normalize_to_color8());
     let mut reader = decoder.read_info().ok()?;
@@ -1202,9 +1265,19 @@ fn decode_png(png_base64: &str) -> Option<RgbImage> {
     let data = &buf[..info.buffer_size()];
     let rgb: Vec<u8> = match samples {
         3 => data.to_vec(),
-        4 => data.chunks_exact(4).flat_map(|p| [p[0], p[1], p[2]]).collect(),
+        4 => data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .flat_map(|p| [p[0], p[1], p[2]])
+            .collect(),
         1 => data.iter().flat_map(|&g| [g, g, g]).collect(),
-        2 => data.chunks_exact(2).flat_map(|p| [p[0], p[0], p[0]]).collect(),
+        2 => data
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .flat_map(|p| [p[0], p[0], p[0]])
+            .collect(),
         _ => return None,
     };
     if rgb.len() != pixels * 3 {
@@ -1241,16 +1314,40 @@ mod tests {
     #[test]
     fn a_layout_moved_when_a_quarter_of_the_sample_shifted_sideways() {
         let at = |x: f64, w: f64| Some([x, 100.0, w, 40.0]);
-        let before = vec![at(390.0, 539.0), at(390.0, 539.0), at(150.0, 200.0), at(0.0, 1280.0), None];
+        let before = vec![
+            at(390.0, 539.0),
+            at(390.0, 539.0),
+            at(150.0, 200.0),
+            at(0.0, 1280.0),
+            None,
+        ];
         // The column moved left and the sidebar narrowed.
-        let after = vec![at(309.0, 620.0), at(309.0, 620.0), at(150.0, 127.0), at(0.0, 1280.0), at(5.0, 5.0)];
+        let after = vec![
+            at(309.0, 620.0),
+            at(309.0, 620.0),
+            at(150.0, 127.0),
+            at(0.0, 1280.0),
+            at(5.0, 5.0),
+        ];
         assert!(layout_moved(&before, &after));
         // One box moving is a widget, not the layout.
-        let after = vec![at(309.0, 539.0), at(390.0, 539.0), at(150.0, 200.0), at(0.0, 1280.0), None];
+        let after = vec![
+            at(309.0, 539.0),
+            at(390.0, 539.0),
+            at(150.0, 200.0),
+            at(0.0, 1280.0),
+            None,
+        ];
         assert!(!layout_moved(&before, &after));
         // Content pushed down (an image loading above) is not a relayout.
         let down = |x: f64, w: f64| Some([x, 400.0, w, 90.0]);
-        let after = vec![down(390.0, 539.0), down(390.0, 539.0), down(150.0, 200.0), down(0.0, 1280.0), None];
+        let after = vec![
+            down(390.0, 539.0),
+            down(390.0, 539.0),
+            down(150.0, 200.0),
+            down(0.0, 1280.0),
+            None,
+        ];
         assert!(!layout_moved(&before, &after));
         // Two of ten is under a quarter.
         let many: Vec<Option<[f64; 4]>> = (0..10).map(|i| at(i as f64 * 10.0, 50.0)).collect();
@@ -1272,12 +1369,20 @@ mod tests {
         let moved = moved_boxes(&before, &at(0.0));
         assert_eq!(moved, vec![true, true]);
         // Folded, then on its way back, then back twice: settled.
-        assert!(settled(&before, &moved, &[at(0.0), at(300.0), at(390.0), at(390.0)]));
+        assert!(settled(
+            &before,
+            &moved,
+            &[at(0.0), at(300.0), at(390.0), at(390.0)]
+        ));
         // Back once is not enough: a marquee passes its old place.
         assert!(!settled(&before, &moved, &[at(0.0), at(390.0)]));
         assert!(!settled(&before, &moved, &[at(390.0), at(200.0)]));
         // Never back.
-        assert!(!settled(&before, &moved, &[at(100.0), at(200.0), at(300.0)]));
+        assert!(!settled(
+            &before,
+            &moved,
+            &[at(100.0), at(200.0), at(300.0)]
+        ));
         assert!(!settled(&before, &moved, &[]));
         // Nothing moved at the capture: nothing to wait for.
         assert!(!settled(&before, &[false, false], &[at(390.0), at(390.0)]));
@@ -1307,7 +1412,11 @@ mod tests {
         // though the whole sample still reads as moved.
         let back = page(390.0, 84.0);
         assert!(layout_moved(&before, &back));
-        assert!(settled(&before, &moved, &[after.clone(), back.clone(), back.clone()]));
+        assert!(settled(
+            &before,
+            &moved,
+            &[after.clone(), back.clone(), back.clone()]
+        ));
         // Should-flag twin: a box that moved at the capture and stays
         // changed keeps the page unsettled, whatever the rest does. This
         // is developer.apple.com's shape: its labels re-wrap at the capture
@@ -1315,12 +1424,24 @@ mod tests {
         let rewrapped = page(309.0, 84.0);
         let moved_too = moved_boxes(&before, &rewrapped);
         assert_eq!(moved_too, vec![true; 6]);
-        assert!(!settled(&before, &moved_too, &[rewrapped.clone(), back.clone(), back.clone()]));
+        assert!(!settled(
+            &before,
+            &moved_too,
+            &[rewrapped.clone(), back.clone(), back.clone()]
+        ));
         let stays = page(309.0, 96.0);
-        assert!(!settled(&before, &moved, &[after.clone(), stays.clone(), stays]));
+        assert!(!settled(
+            &before,
+            &moved,
+            &[after.clone(), stays.clone(), stays]
+        ));
         let mut half = page(390.0, 96.0);
         half[1] = Some([390.0, 60.0, 420.0, 40.0]);
-        assert!(!settled(&before, &moved, &[after.clone(), half.clone(), half]));
+        assert!(!settled(
+            &before,
+            &moved,
+            &[after.clone(), half.clone(), half]
+        ));
         // A moved box that left the document is not back.
         let mut gone = page(390.0, 96.0);
         gone[0] = None;
@@ -1360,7 +1481,10 @@ mod tests {
     #[test]
     fn tiles_cover_the_extent_in_steps() {
         assert_eq!(tile_positions(2532.0, 844.0), vec![0.0, 844.0, 1688.0]);
-        assert_eq!(tile_positions(2533.0, 844.0), vec![0.0, 844.0, 1688.0, 2532.0]);
+        assert_eq!(
+            tile_positions(2533.0, 844.0),
+            vec![0.0, 844.0, 1688.0, 2532.0]
+        );
         assert_eq!(tile_positions(500.0, 844.0), vec![0.0]);
         assert_eq!(tile_positions(500.0, 0.0), vec![0.0]);
     }
@@ -1382,10 +1506,19 @@ mod tests {
         assert_eq!(s.unrolled_height(844.0, 844.0), 100.0 + 5000.0 + 44.0);
         // A document 150px taller than the viewport (a footer under the
         // shell) adds its rows below the bar.
-        assert_eq!(s.unrolled_height(844.0, 994.0), 100.0 + 5000.0 + 44.0 + 150.0);
+        assert_eq!(
+            s.unrolled_height(844.0, 994.0),
+            100.0 + 5000.0 + 44.0 + 150.0
+        );
         // Rects measured with the scroller at 300 start 300px earlier.
-        let scrolled = Scroller { scroll_top: 300.0, ..s };
-        assert_eq!(scrolled.unrolled_height(844.0, 844.0), 100.0 + 4700.0 + 44.0);
+        let scrolled = Scroller {
+            scroll_top: 300.0,
+            ..s
+        };
+        assert_eq!(
+            scrolled.unrolled_height(844.0, 844.0),
+            100.0 + 4700.0 + 44.0
+        );
         // A body scroller as tall as the viewport.
         let body = Scroller {
             top: 0.0,
@@ -1415,39 +1548,123 @@ mod tests {
 
     #[test]
     fn only_elements_outside_the_screenshot_get_a_shot() {
-        assert!(needs_element_shot(&[100.0, 12500.0, 200.0, 20.0], 0.0, 1280.0, 12000.0));
-        assert!(needs_element_shot(&[1400.0, 300.0, 200.0, 20.0], 0.0, 1280.0, 12000.0));
-        assert!(!needs_element_shot(&[100.0, 11990.0, 200.0, 20.0], 0.0, 1280.0, 12000.0));
+        assert!(needs_element_shot(
+            &[100.0, 12500.0, 200.0, 20.0],
+            0.0,
+            1280.0,
+            12000.0
+        ));
+        assert!(needs_element_shot(
+            &[1400.0, 300.0, 200.0, 20.0],
+            0.0,
+            1280.0,
+            12000.0
+        ));
+        assert!(!needs_element_shot(
+            &[100.0, 11990.0, 200.0, 20.0],
+            0.0,
+            1280.0,
+            12000.0
+        ));
         // Starting above the cut but mostly below it.
-        assert!(needs_element_shot(&[100.0, 11990.0, 200.0, 400.0], 0.0, 1280.0, 12000.0));
-        assert!(!needs_element_shot(&[100.0, 11900.0, 200.0, 120.0], 0.0, 1280.0, 12000.0));
-        assert!(needs_element_shot(&[1200.0, 300.0, 400.0, 20.0], 0.0, 1280.0, 12000.0));
+        assert!(needs_element_shot(
+            &[100.0, 11990.0, 200.0, 400.0],
+            0.0,
+            1280.0,
+            12000.0
+        ));
+        assert!(!needs_element_shot(
+            &[100.0, 11900.0, 200.0, 120.0],
+            0.0,
+            1280.0,
+            12000.0
+        ));
+        assert!(needs_element_shot(
+            &[1200.0, 300.0, 400.0, 20.0],
+            0.0,
+            1280.0,
+            12000.0
+        ));
         // Taller than the image and filling it: the screenshot shows it.
-        assert!(!needs_element_shot(&[0.0, 0.0, 1280.0, 30000.0], 0.0, 1280.0, 12000.0));
-        assert!(!needs_element_shot(&[100.0, 300.0, 200.0, 20.0], 0.0, 1280.0, 12000.0));
-        assert!(!needs_element_shot(&[100.0, 12500.0, 0.0, 20.0], 0.0, 1280.0, 12000.0));
-        assert!(!needs_element_shot(&[-500.0, 12500.0, 200.0, 20.0], 0.0, 1280.0, 12000.0));
-        assert!(!needs_element_shot(&[100.0, f64::NAN, 200.0, 20.0], 0.0, 1280.0, 12000.0));
+        assert!(!needs_element_shot(
+            &[0.0, 0.0, 1280.0, 30000.0],
+            0.0,
+            1280.0,
+            12000.0
+        ));
+        assert!(!needs_element_shot(
+            &[100.0, 300.0, 200.0, 20.0],
+            0.0,
+            1280.0,
+            12000.0
+        ));
+        assert!(!needs_element_shot(
+            &[100.0, 12500.0, 0.0, 20.0],
+            0.0,
+            1280.0,
+            12000.0
+        ));
+        assert!(!needs_element_shot(
+            &[-500.0, 12500.0, 200.0, 20.0],
+            0.0,
+            1280.0,
+            12000.0
+        ));
+        assert!(!needs_element_shot(
+            &[100.0, f64::NAN, 200.0, 20.0],
+            0.0,
+            1280.0,
+            12000.0
+        ));
         assert!(!needs_element_shot(&[100.0, 12500.0], 0.0, 1280.0, 12000.0));
         // An image that starts at document x -510 (a right-to-left page):
         // x -500 lies inside it, and its right edge is at document x 390.
-        assert!(!needs_element_shot(&[-500.0, 300.0, 200.0, 20.0], -510.0, 900.0, 12000.0));
-        assert!(needs_element_shot(&[-500.0, 12500.0, 200.0, 20.0], -510.0, 900.0, 12000.0));
-        assert!(needs_element_shot(&[400.0, 300.0, 200.0, 20.0], -510.0, 900.0, 12000.0));
-        assert!(!needs_element_shot(&[-800.0, 12500.0, 200.0, 20.0], -510.0, 900.0, 12000.0));
+        assert!(!needs_element_shot(
+            &[-500.0, 300.0, 200.0, 20.0],
+            -510.0,
+            900.0,
+            12000.0
+        ));
+        assert!(needs_element_shot(
+            &[-500.0, 12500.0, 200.0, 20.0],
+            -510.0,
+            900.0,
+            12000.0
+        ));
+        assert!(needs_element_shot(
+            &[400.0, 300.0, 200.0, 20.0],
+            -510.0,
+            900.0,
+            12000.0
+        ));
+        assert!(!needs_element_shot(
+            &[-800.0, 12500.0, 200.0, 20.0],
+            -510.0,
+            900.0,
+            12000.0
+        ));
     }
 
     #[test]
     fn the_screenshot_starts_where_the_document_scrolls() {
         // A page that scrolls from the left starts at 0, however wide.
-        let g = Geometry::from_value(&json!({ "vw": 390, "vh": 844, "docW": 1380, "docH": 7685, "originX": 0 }));
+        let g = Geometry::from_value(
+            &json!({ "vw": 390, "vh": 844, "docW": 1380, "docH": 7685, "originX": 0 }),
+        );
         assert_eq!((g.capture_origin_x(), g.capture_clip_x()), (0.0, 0.0));
         // A right-to-left page with 321px of overflow starts at its left edge.
-        let g = Geometry::from_value(&json!({ "vw": 390, "vh": 844, "docW": 711, "docH": 1932, "originX": -321 }));
-        assert_eq!((g.capture_width(), g.capture_origin_x(), g.capture_clip_x()), (711.0, -321.0, 0.0));
+        let g = Geometry::from_value(
+            &json!({ "vw": 390, "vh": 844, "docW": 711, "docH": 1932, "originX": -321 }),
+        );
+        assert_eq!(
+            (g.capture_width(), g.capture_origin_x(), g.capture_clip_x()),
+            (711.0, -321.0, 0.0)
+        );
         // Past the width cap, the cut falls on the far overflow and the
         // viewport (document x 0 to 1280) stays in the image.
-        let g = Geometry::from_value(&json!({ "vw": 1280, "vh": 800, "docW": 6000, "docH": 800, "originX": -4720 }));
+        let g = Geometry::from_value(
+            &json!({ "vw": 1280, "vh": 800, "docW": 6000, "docH": 800, "originX": -4720 }),
+        );
         assert_eq!(g.capture_width(), MAX_SCREENSHOT_WIDTH);
         assert_eq!(g.capture_origin_x(), -(MAX_SCREENSHOT_WIDTH - 1280.0));
         assert_eq!(g.capture_clip_x(), 6000.0 - MAX_SCREENSHOT_WIDTH);
@@ -1455,7 +1672,9 @@ mod tests {
         // A probe with no origin, or a positive one, reads as 0.
         let g = Geometry::from_value(&json!({ "vw": 390, "vh": 844, "docW": 711, "docH": 1932 }));
         assert_eq!(g.scroll_origin_x, 0.0);
-        let g = Geometry::from_value(&json!({ "vw": 390, "vh": 844, "docW": 711, "docH": 1932, "originX": 40 }));
+        let g = Geometry::from_value(
+            &json!({ "vw": 390, "vh": 844, "docW": 711, "docH": 1932, "originX": 40 }),
+        );
         assert_eq!(g.capture_origin_x(), 0.0);
     }
 
@@ -1467,11 +1686,16 @@ mod tests {
         }));
         assert_eq!(g.capture_width(), 1320.0);
         assert_eq!(g.scroller.unwrap().scroll_height, 6990.0);
-        let g = Geometry::from_value(&json!({ "vw": 1280, "vh": 800, "docW": 90000, "docH": 800, "scroller": null }));
+        let g = Geometry::from_value(
+            &json!({ "vw": 1280, "vh": 800, "docW": 90000, "docH": 800, "scroller": null }),
+        );
         assert_eq!(g.capture_width(), MAX_SCREENSHOT_WIDTH);
         assert!(g.scroller.is_none());
         let g = Geometry::from_value(&json!({}));
-        assert_eq!((g.viewport_width, g.viewport_height, g.capture_width()), (1280.0, 800.0, 1280.0));
+        assert_eq!(
+            (g.viewport_width, g.viewport_height, g.capture_width()),
+            (1280.0, 800.0, 1280.0)
+        );
     }
 
     #[test]

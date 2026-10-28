@@ -78,14 +78,22 @@ fn findings_at(
     viewport: Option<(u32, u32)>,
 ) -> Vec<(String, String)> {
     let url = format!("http://127.0.0.1:{port}/{fixture}");
-    let options = ScanOptions { viewport, ..Default::default() };
+    let options = ScanOptions {
+        viewport,
+        ..Default::default()
+    };
     engine
         .detect_url(&url, &options)
         .expect("scan")
         .into_iter()
         .filter(|f| f.antipattern == rule)
         .map(|f| {
-            let selector = f.extras.get("selector").and_then(|s| s.as_str()).unwrap_or("").to_string();
+            let selector = f
+                .extras
+                .get("selector")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string();
             (f.snippet, selector)
         })
         .collect()
@@ -96,13 +104,17 @@ fn findings_at(
 fn assert_cases(found: &[(String, String)], flag: &[&str], pass: &[&str], rule: &str) {
     for case in flag {
         assert!(
-            found.iter().any(|(snippet, sel)| sel.contains(case) || snippet.contains(case)),
+            found
+                .iter()
+                .any(|(snippet, sel)| sel.contains(case) || snippet.contains(case)),
             "{rule}: `{case}` should flag, got {found:?}"
         );
     }
     for case in pass {
         assert!(
-            !found.iter().any(|(snippet, sel)| sel.contains(case) || snippet.contains(case)),
+            !found
+                .iter()
+                .any(|(snippet, sel)| sel.contains(case) || snippet.contains(case)),
             "{rule}: `{case}` should pass, got {found:?}"
         );
     }
@@ -112,11 +124,27 @@ fn assert_cases(found: &[(String, String)], flag: &[&str], pass: &[&str], rule: 
 fn cramped_padding_measures_the_box_the_text_sits_in() {
     let Some(engine) = engine() else { return };
     let port = serve();
-    let found = findings(&engine, port, "cramped-padding-measured.html", "cramped-padding");
+    let found = findings(
+        &engine,
+        port,
+        "cramped-padding-measured.html",
+        "cramped-padding",
+    );
     assert_cases(
         &found,
-        &["flag-tight-band", "flag-gradient-other", "flag-plain-card", "flag-thin-bar"],
-        &["pass-wrapped-band", "pass-mark", "pass-gradient-same", "pass-photo-card", "pass-url-bar"],
+        &[
+            "flag-tight-band",
+            "flag-gradient-other",
+            "flag-plain-card",
+            "flag-thin-bar",
+        ],
+        &[
+            "pass-wrapped-band",
+            "pass-mark",
+            "pass-gradient-same",
+            "pass-photo-card",
+            "pass-url-bar",
+        ],
         "cramped-padding",
     );
 }
@@ -125,10 +153,20 @@ fn cramped_padding_measures_the_box_the_text_sits_in() {
 fn text_occlusion_needs_text_under_the_cover() {
     let Some(engine) = engine() else { return };
     let port = serve();
-    let found = findings(&engine, port, "text-occlusion-shapes.html", "text-occlusion");
+    let found = findings(
+        &engine,
+        port,
+        "text-occlusion-shapes.html",
+        "text-occlusion",
+    );
     assert_cases(
         &found,
-        &["flag-inline-leak", "flag-under-sticker", "flag-small-box-card", "flag-deck-status"],
+        &[
+            "flag-inline-leak",
+            "flag-under-sticker",
+            "flag-small-box-card",
+            "flag-deck-status",
+        ],
         &[
             "pass-inline-alone",
             "pass-past-the-words",
@@ -138,8 +176,15 @@ fn text_occlusion_needs_text_under_the_cover() {
         ],
         "text-occlusion",
     );
-    let deck = found.iter().find(|(_, sel)| sel.contains("flag-deck-status")).expect("deck");
-    assert!(deck.0.contains("on an opaque layer (div.deck-card.deck-front"), "{deck:?}");
+    let deck = found
+        .iter()
+        .find(|(_, sel)| sel.contains("flag-deck-status"))
+        .expect("deck");
+    assert!(
+        deck.0
+            .contains("on an opaque layer (div.deck-card.deck-front"),
+        "{deck:?}"
+    );
 }
 
 #[test]
@@ -155,9 +200,19 @@ fn a_link_menu_is_not_a_column_and_a_disabled_control_takes_no_verdict() {
         "first-viewport-column-overflow",
         Some((1280, 800)),
     );
-    assert_cases(&menu, &["flag-near-menus"], &["pass-link-menus"], "first-viewport-column-overflow");
+    assert_cases(
+        &menu,
+        &["flag-near-menus"],
+        &["pass-link-menus"],
+        "first-viewport-column-overflow",
+    );
     assert_eq!(menu.len(), 1, "{menu:?}");
-    let contrast = findings(&engine, port, "low-contrast-disabled-control.html", "low-contrast");
+    let contrast = findings(
+        &engine,
+        port,
+        "low-contrast-disabled-control.html",
+        "low-contrast",
+    );
     assert_cases(
         &contrast,
         &[
@@ -192,7 +247,12 @@ fn display_text_in_a_generic_box_is_not_body_copy() {
     );
     assert_cases(
         &found,
-        &["flag-body-copy", "flag-copy-18", "flag-lead-20", "flag-copy-23"],
+        &[
+            "flag-body-copy",
+            "flag-copy-18",
+            "flag-lead-20",
+            "flag-copy-23",
+        ],
         &[
             "pass-display-title",
             "pass-title-24",

@@ -111,7 +111,10 @@ mod tests {
         std::fs::write(&real, b"old").unwrap();
         std::os::unix::fs::symlink(&real, &link).unwrap();
         write_atomic(&link, b"new").unwrap();
-        assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+        assert!(std::fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink());
         assert_eq!(std::fs::read_to_string(&real).unwrap(), "new");
         let _ = std::fs::remove_dir_all(&d);
     }
@@ -128,9 +131,18 @@ mod tests {
         std::os::unix::fs::symlink("dotfiles/hop.json", &link).unwrap();
         std::os::unix::fs::symlink("real.json", &hop).unwrap();
         write_atomic(&link, b"new").unwrap();
-        assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
-        assert!(std::fs::symlink_metadata(&hop).unwrap().file_type().is_symlink());
-        assert_eq!(std::fs::read_to_string(d.join("dotfiles/real.json")).unwrap(), "new");
+        assert!(std::fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert!(std::fs::symlink_metadata(&hop)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(
+            std::fs::read_to_string(d.join("dotfiles/real.json")).unwrap(),
+            "new"
+        );
         assert_eq!(std::fs::read_to_string(&link).unwrap(), "new");
         let _ = std::fs::remove_dir_all(&d);
     }
@@ -143,8 +155,14 @@ mod tests {
         // `settings.json -> dotfiles/claude/settings.json`, with `dotfiles/claude/` not created yet.
         std::os::unix::fs::symlink("dotfiles/claude/settings.json", &link).unwrap();
         write_atomic(&link, b"new").unwrap();
-        assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
-        assert_eq!(std::fs::read_to_string(d.join("dotfiles/claude/settings.json")).unwrap(), "new");
+        assert!(std::fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(
+            std::fs::read_to_string(d.join("dotfiles/claude/settings.json")).unwrap(),
+            "new"
+        );
         let _ = std::fs::remove_dir_all(&d);
     }
 

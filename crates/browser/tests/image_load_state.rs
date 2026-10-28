@@ -56,9 +56,12 @@ fn the_capture_and_the_page_probe_agree_on_image_load_state() {
         _ => None,
     });
     let mut page = browser.new_page().unwrap();
-    page.goto(&format!("{origin}/"), "load", Duration::from_secs(15)).unwrap();
+    page.goto(&format!("{origin}/"), "load", Duration::from_secs(15))
+        .unwrap();
 
-    const IDS: [&str; 7] = ["loaded", "failed", "picture", "lazy", "input", "svgimage", "plain"];
+    const IDS: [&str; 7] = [
+        "loaded", "failed", "picture", "lazy", "input", "svgimage", "plain",
+    ];
 
     // The live page's probe: `[natural size, complete, currentSrc]` per id,
     // with the sentinels it hands the wasm side spelled as JSON null.

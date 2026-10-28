@@ -211,9 +211,7 @@ tB0WGTOG3QIgdJa8gBPU9Y6WsrursItsnUeGTYHKDCZZ6MjlekLFuoc=
             ("http_proxy", Some(&proxy_url)),
         ]);
 
-        let agent = agent_builder()
-            .timeout(Duration::from_secs(2))
-            .build();
+        let agent = agent_builder().timeout(Duration::from_secs(2)).build();
         let response = agent.get("http://proxy-test.invalid/").call();
         assert!(response.is_ok(), "expected proxy-routed GET to succeed");
 
@@ -315,9 +313,7 @@ tB0WGTOG3QIgdJa8gBPU9Y6WsrursItsnUeGTYHKDCZZ6MjlekLFuoc=
             ("http_proxy", None),
         ]);
 
-        let agent = agent_builder()
-            .timeout(Duration::from_secs(2))
-            .build();
+        let agent = agent_builder().timeout(Duration::from_secs(2)).build();
         let response = agent.get("http://proxy-test.invalid/").call();
         assert!(response.is_ok(), "expected SOCKS5-routed GET to succeed");
 

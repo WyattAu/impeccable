@@ -25,9 +25,18 @@ pub fn explicit_browser(cwd: &str, env: &Env) -> Option<String> {
     }
     for name in ["config.local.json", "config.json"] {
         let path = Path::new(cwd).join(".impeccable").join(name);
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
-        let Ok(v) = serde_json::from_str::<Value>(&text) else { continue };
-        if let Some(b) = v.get("browser").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()) {
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(v) = serde_json::from_str::<Value>(&text) else {
+            continue;
+        };
+        if let Some(b) = v
+            .get("browser")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
             return Some(b.to_string());
         }
     }
@@ -37,7 +46,11 @@ pub fn explicit_browser(cwd: &str, env: &Env) -> Option<String> {
 /// The configured browser, if any (see the module doc for the order): the
 /// explicit choice, else the generic `BROWSER` variable.
 pub fn resolve_browser(cwd: &str, env: &Env) -> Option<String> {
-    explicit_browser(cwd, env).or_else(|| env.get("BROWSER").map(|s| s.trim().to_string()).filter(|s| !s.is_empty()))
+    explicit_browser(cwd, env).or_else(|| {
+        env.get("BROWSER")
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    })
 }
 
 /// Launch the browser on `url` without waiting for it. Returns a short
@@ -46,9 +59,17 @@ pub fn open_url(url: &str, cwd: &str, env: &Env) -> Result<String, String> {
     let preference = resolve_browser(cwd, env);
     let mut cmd = command_for(url, preference.as_deref());
     let description = format!("{:?}", cmd).replace('"', "");
-    cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
     impeccable_common::proc::detach(&mut cmd);
-    cmd.spawn().map(|_| description).map_err(|e| format!("{}: {}", e, preference.unwrap_or_else(|| "default opener".to_string())))
+    cmd.spawn().map(|_| description).map_err(|e| {
+        format!(
+            "{}: {}",
+            e,
+            preference.unwrap_or_else(|| "default opener".to_string())
+        )
+    })
 }
 
 fn command_for(url: &str, preference: Option<&str>) -> Command {
@@ -96,27 +117,57 @@ mod tests {
     use super::*;
 
     fn env(pairs: &[(&str, &str)]) -> Env {
-        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 
     #[test]
     fn the_env_var_wins_then_the_config_then_browser() {
-        let dir = std::env::temp_dir().join(format!("impeccable-browser-open-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("impeccable-browser-open-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join(".impeccable")).unwrap();
         let cwd = dir.to_string_lossy().into_owned();
         assert_eq!(resolve_browser(&cwd, &env(&[])), None);
-        assert_eq!(resolve_browser(&cwd, &env(&[("BROWSER", "firefox")])), Some("firefox".into()));
-        std::fs::write(dir.join(".impeccable/config.json"), r#"{"browser":"Safari"}"#).unwrap();
-        assert_eq!(resolve_browser(&cwd, &env(&[("BROWSER", "firefox")])), Some("Safari".into()));
-        std::fs::write(dir.join(".impeccable/config.local.json"), r#"{"browser":"/tmp/my-opener"}"#).unwrap();
-        assert_eq!(resolve_browser(&cwd, &env(&[])), Some("/tmp/my-opener".into()));
-        assert_eq!(resolve_browser(&cwd, &env(&[("IMPECCABLE_BROWSER", " chrome ")])), Some("chrome".into()));
+        assert_eq!(
+            resolve_browser(&cwd, &env(&[("BROWSER", "firefox")])),
+            Some("firefox".into())
+        );
+        std::fs::write(
+            dir.join(".impeccable/config.json"),
+            r#"{"browser":"Safari"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            resolve_browser(&cwd, &env(&[("BROWSER", "firefox")])),
+            Some("Safari".into())
+        );
+        std::fs::write(
+            dir.join(".impeccable/config.local.json"),
+            r#"{"browser":"/tmp/my-opener"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            resolve_browser(&cwd, &env(&[])),
+            Some("/tmp/my-opener".into())
+        );
+        assert_eq!(
+            resolve_browser(&cwd, &env(&[("IMPECCABLE_BROWSER", " chrome ")])),
+            Some("chrome".into())
+        );
         // BROWSER is a fallback for the opener, never the user's explicit choice.
         std::fs::remove_file(dir.join(".impeccable/config.local.json")).unwrap();
         std::fs::remove_file(dir.join(".impeccable/config.json")).unwrap();
-        assert_eq!(explicit_browser(&cwd, &env(&[("BROWSER", "firefox")])), None);
-        assert_eq!(explicit_browser(&cwd, &env(&[("IMPECCABLE_BROWSER", "chrome")])), Some("chrome".into()));
+        assert_eq!(
+            explicit_browser(&cwd, &env(&[("BROWSER", "firefox")])),
+            None
+        );
+        assert_eq!(
+            explicit_browser(&cwd, &env(&[("IMPECCABLE_BROWSER", "chrome")])),
+            Some("chrome".into())
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

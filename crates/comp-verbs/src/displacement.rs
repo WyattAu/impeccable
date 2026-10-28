@@ -88,7 +88,11 @@ fn ncc(t: &m::Gray, w: &m::Gray, ox: i64, oy: i64) -> Option<(f64, usize, usize)
     if vt <= n * 4.0 || vw <= n * 4.0 {
         return None;
     }
-    Some(((stw - st * sw / n) / (vt * vw).sqrt(), (y1 - y0) as usize, (x1 - x0) as usize))
+    Some((
+        (stw - st * sw / n) / (vt * vw).sqrt(),
+        (y1 - y0) as usize,
+        (x1 - x0) as usize,
+    ))
 }
 
 struct Best {
@@ -100,11 +104,22 @@ struct Best {
 /// Search `region` (comp pixels) of `comp` in `build` (already scaled to the
 /// comp's width) over offsets within the bounds. `min_rows` is the share of the
 /// template's rows that must overlap the build for an offset to count.
-fn search(comp: &Image, build: &Image, region: Rect, dy_range: (f64, f64), dx_max: f64, min_rows: f64) -> Option<Best> {
+fn search(
+    comp: &Image,
+    build: &Image,
+    region: Rect,
+    dy_range: (f64, f64),
+    dx_max: f64,
+    min_rows: f64,
+) -> Option<Best> {
     let fx = (WORK / region.w).min(1.0);
     let fy = (WORK / region.h).min(1.0);
     let template = r::crop(comp, region.x, region.y, region.w, region.h);
-    let t = gray(&r::resize(&template, (template.width as f64 * fx).max(2.0), (template.height as f64 * fy).max(2.0)));
+    let t = gray(&r::resize(
+        &template,
+        (template.width as f64 * fx).max(2.0),
+        (template.height as f64 * fy).max(2.0),
+    ));
     // The window: the region's box widened by the search bounds, clamped to the build.
     let wx = (region.x - dx_max).max(0.0).floor();
     let wy = (region.y + dy_range.0).max(0.0).floor();
@@ -114,8 +129,15 @@ fn search(comp: &Image, build: &Image, region: Rect, dy_range: (f64, f64), dx_ma
         return None;
     }
     let window = r::crop(build, wx, wy, wr - wx, wb - wy);
-    let w = gray(&r::resize(&window, (window.width as f64 * fx).max(2.0), (window.height as f64 * fy).max(2.0)));
-    let (sx, sy) = (t.width as f64 / template.width as f64, t.height as f64 / template.height as f64);
+    let w = gray(&r::resize(
+        &window,
+        (window.width as f64 * fx).max(2.0),
+        (window.height as f64 * fy).max(2.0),
+    ));
+    let (sx, sy) = (
+        t.width as f64 / template.width as f64,
+        t.height as f64 / template.height as f64,
+    );
     let steps = |lo: f64, hi: f64, s: f64| ((lo * s).floor() as i64, (hi * s).ceil() as i64);
     let (ylo, yhi) = steps(dy_range.0, dy_range.1, sy);
     let (xlo, xhi) = steps(-dx_max, dx_max, sx);
@@ -126,12 +148,18 @@ fn search(comp: &Image, build: &Image, region: Rect, dy_range: (f64, f64), dx_ma
             // Template origin in window samples.
             let ox = ((region.x - wx) * sx).round() as i64 + dx;
             let oy = ((region.y - wy) * sy).round() as i64 + dy;
-            let Some((score, rows, cols)) = ncc(&t, &w, ox, oy) else { continue };
+            let Some((score, rows, cols)) = ncc(&t, &w, ox, oy) else {
+                continue;
+            };
             if rows < need_rows || cols * 2 < t.width {
                 continue;
             }
             if best.as_ref().is_none_or(|b| score > b.ncc + 1e-9) {
-                best = Some(Best { dx: dx as f64 / sx, dy: dy as f64 / sy, ncc: score });
+                best = Some(Best {
+                    dx: dx as f64 / sx,
+                    dy: dy as f64 / sy,
+                    ncc: score,
+                });
             }
         }
     }
@@ -140,7 +168,14 @@ fn search(comp: &Image, build: &Image, region: Rect, dy_range: (f64, f64), dx_ma
 
 /// The full comp-diff score of the part of `region` that, moved by (dx, dy),
 /// lands inside the build.
-fn confirm(comp: &Image, build: &Image, region: Rect, dx: f64, dy: f64, kind: Option<&str>) -> Option<Score> {
+fn confirm(
+    comp: &Image,
+    build: &Image,
+    region: Rect,
+    dx: f64,
+    dy: f64,
+    kind: Option<&str>,
+) -> Option<Score> {
     let top = (-(region.y + dy)).max(0.0);
     let left = (-(region.x + dx)).max(0.0);
     let bottom = (region.y + dy + region.h - build.height as f64).max(0.0);
@@ -169,7 +204,13 @@ fn visible(region: Rect, dx: f64, dy: f64, frame_w: f64, frame_h: f64) -> f64 {
 /// width whose first `frame_h` rows are the compared first viewport (a full-page
 /// capture may run below it). Returns None when the region is in place or is not
 /// found within the bounds.
-pub fn find(comp: &Image, build: &Image, frame_h: f64, region: Rect, kind: Option<&str>) -> Option<Displacement> {
+pub fn find(
+    comp: &Image,
+    build: &Image,
+    frame_h: f64,
+    region: Rect,
+    kind: Option<&str>,
+) -> Option<Displacement> {
     if region.w < 2.0 || region.h < 2.0 {
         return None;
     }
@@ -182,25 +223,45 @@ pub fn find(comp: &Image, build: &Image, frame_h: f64, region: Rect, kind: Optio
     if let Some(best) = search(comp, build, region, (-max_dy, max_dy), max_dx, 1.0 / 3.0) {
         if moved(best.dx, best.dy) {
             if let Some(score) = confirm(comp, build, region, best.dx, best.dy, kind) {
-                return Some(Displacement { dx: best.dx.round(), dy: best.dy.round(), visible: visible(region, best.dx, best.dy, frame_w, frame_h), inferred: false, score });
+                return Some(Displacement {
+                    dx: best.dx.round(),
+                    dy: best.dy.round(),
+                    visible: visible(region, best.dx, best.dy, frame_w, frame_h),
+                    inferred: false,
+                    score,
+                });
             }
         }
     }
     // Inferred: a region near the bottom of the frame whose pixels left it. Read
     // the offset of the content directly above it in its column, searching down
     // only, and accept it when that offset puts most of the region past the frame.
-    let context_h = region.y.min((region.h * 3.0).max(comp.height as f64 * 0.08)).floor();
+    let context_h = region
+        .y
+        .min((region.h * 3.0).max(comp.height as f64 * 0.08))
+        .floor();
     if context_h < 4.0 || region.y + region.h + max_dy < frame_h {
         return None;
     }
-    let above = Rect { x: region.x, y: region.y - context_h, w: region.w, h: context_h };
+    let above = Rect {
+        x: region.x,
+        y: region.y - context_h,
+        w: region.w,
+        h: context_h,
+    };
     let best = search(comp, build, above, (0.0, max_dy), max_dx, 0.5)?;
     if best.dy < 2.0 || best.ncc < 0.7 {
         return None;
     }
     let score = confirm(comp, build, above, best.dx, best.dy, None)?;
     let shown = visible(region, best.dx, best.dy, frame_w, frame_h);
-    (shown < 0.5).then_some(Displacement { dx: best.dx.round(), dy: best.dy.round(), visible: shown, inferred: true, score })
+    (shown < 0.5).then_some(Displacement {
+        dx: best.dx.round(),
+        dy: best.dy.round(),
+        visible: shown,
+        inferred: true,
+        score,
+    })
 }
 
 #[cfg(test)]
@@ -212,11 +273,25 @@ mod tests {
         // A column of rows ending in a short line of "text" at y = 330 + offset.
         for i in 0..8 {
             let y = 40.0 + i as f64 * 34.0 + offset * (i as f64 / 8.0);
-            r::fill_rect(&mut img, 220.0, y, 120.0 + (i % 3) as f64 * 20.0, 10.0, [20.0, 20.0, 20.0, 255.0]);
+            r::fill_rect(
+                &mut img,
+                220.0,
+                y,
+                120.0 + (i % 3) as f64 * 20.0,
+                10.0,
+                [20.0, 20.0, 20.0, 255.0],
+            );
         }
         let y = 330.0 + offset;
         for k in 0..6 {
-            r::fill_rect(&mut img, 230.0 + k as f64 * 22.0, y, 14.0, 18.0, [20.0, 20.0, 20.0, 255.0]);
+            r::fill_rect(
+                &mut img,
+                230.0 + k as f64 * 22.0,
+                y,
+                14.0,
+                18.0,
+                [20.0, 20.0, 20.0, 255.0],
+            );
         }
         img
     }
@@ -227,10 +302,29 @@ mod tests {
         let mut build = r::create_image(400, 360, [240, 240, 236, 255]);
         r::blit(&mut build, &comp, 0.0, 0.0);
         // Move only the sign-off line up by 24px.
-        r::fill_rect(&mut build, 220.0, 326.0, 180.0, 30.0, [240.0, 240.0, 236.0, 255.0]);
+        r::fill_rect(
+            &mut build,
+            220.0,
+            326.0,
+            180.0,
+            30.0,
+            [240.0, 240.0, 236.0, 255.0],
+        );
         let line = r::crop(&comp, 220.0, 326.0, 180.0, 26.0);
         r::blit(&mut build, &line, 220.0, 302.0);
-        let found = find(&comp, &build, 360.0, Rect { x: 222.0, y: 328.0, w: 140.0, h: 22.0 }, Some("text")).unwrap();
+        let found = find(
+            &comp,
+            &build,
+            360.0,
+            Rect {
+                x: 222.0,
+                y: 328.0,
+                w: 140.0,
+                h: 22.0,
+            },
+            Some("text"),
+        )
+        .unwrap();
         assert_eq!((found.dx, found.dy), (0.0, -24.0));
         assert!(!found.beyond_frame());
         assert!(!found.inferred);
@@ -241,8 +335,23 @@ mod tests {
         let comp = page(0.0, 360);
         // The column grows longer: every row moves down progressively, the last by 40px.
         let build = page(40.0, 360);
-        let found = find(&comp, &build, 360.0, Rect { x: 222.0, y: 328.0, w: 140.0, h: 22.0 }, Some("text")).unwrap();
-        assert!(found.inferred, "the line is out of the frame; its column says where it went");
+        let found = find(
+            &comp,
+            &build,
+            360.0,
+            Rect {
+                x: 222.0,
+                y: 328.0,
+                w: 140.0,
+                h: 22.0,
+            },
+            Some("text"),
+        )
+        .unwrap();
+        assert!(
+            found.inferred,
+            "the line is out of the frame; its column says where it went"
+        );
         assert!(found.dy >= 25.0 && found.dy <= 45.0, "{}", found.dy);
         assert!(found.beyond_frame());
     }
@@ -251,7 +360,19 @@ mod tests {
     fn a_full_page_capture_finds_the_region_itself_below_the_frame() {
         let comp = page(0.0, 360);
         let build = page(40.0, 480);
-        let found = find(&comp, &build, 360.0, Rect { x: 222.0, y: 328.0, w: 140.0, h: 22.0 }, Some("text")).unwrap();
+        let found = find(
+            &comp,
+            &build,
+            360.0,
+            Rect {
+                x: 222.0,
+                y: 328.0,
+                w: 140.0,
+                h: 22.0,
+            },
+            Some("text"),
+        )
+        .unwrap();
         assert!(!found.inferred);
         assert_eq!(found.dy, 40.0);
         assert!(found.beyond_frame());
@@ -261,9 +382,40 @@ mod tests {
     fn a_region_that_is_gone_is_not_displaced() {
         let comp = page(0.0, 360);
         let mut build = comp.clone();
-        r::fill_rect(&mut build, 220.0, 326.0, 180.0, 34.0, [240.0, 240.0, 236.0, 255.0]);
-        assert!(find(&comp, &build, 360.0, Rect { x: 222.0, y: 328.0, w: 140.0, h: 22.0 }, Some("text")).is_none());
+        r::fill_rect(
+            &mut build,
+            220.0,
+            326.0,
+            180.0,
+            34.0,
+            [240.0, 240.0, 236.0, 255.0],
+        );
+        assert!(find(
+            &comp,
+            &build,
+            360.0,
+            Rect {
+                x: 222.0,
+                y: 328.0,
+                w: 140.0,
+                h: 22.0
+            },
+            Some("text")
+        )
+        .is_none());
         // In place: nothing to report either.
-        assert!(find(&comp, &comp, 360.0, Rect { x: 222.0, y: 328.0, w: 140.0, h: 22.0 }, Some("text")).is_none());
+        assert!(find(
+            &comp,
+            &comp,
+            360.0,
+            Rect {
+                x: 222.0,
+                y: 328.0,
+                w: 140.0,
+                h: 22.0
+            },
+            Some("text")
+        )
+        .is_none());
     }
 }

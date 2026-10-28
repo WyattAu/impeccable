@@ -61,7 +61,11 @@ fn die(message: String) -> ! {
 fn bundle(check: bool, pure: bool) {
     let root = root();
     let out_dir = root.join("target/wasm-bundle");
-    let cargo_args: &[&str] = if pure { &["--features", "pure-exports"] } else { &[] };
+    let cargo_args: &[&str] = if pure {
+        &["--features", "pure-exports"]
+    } else {
+        &[]
+    };
     let (glue, wasm) =
         impeccable_bundle::wasm_pack_build(&root.join("crates/wasm"), &out_dir, cargo_args)
             .unwrap_or_else(|e| die(e));
@@ -82,7 +86,10 @@ fn bundle(check: bool, pure: bool) {
     // (impeccable.style counts and renders the rules from it).
     let assets = root.join("crates/live/assets");
     let tracked: [(PathBuf, &[u8]); 2] = [
-        (assets.join("detect-antipatterns-browser.js"), out.as_bytes()),
+        (
+            assets.join("detect-antipatterns-browser.js"),
+            out.as_bytes(),
+        ),
         (assets.join("antipatterns.json"), registry.as_bytes()),
     ];
     if check {
@@ -116,7 +123,8 @@ fn bundle(check: bool, pure: bool) {
     std::fs::write(ext_dir.join("overlay.js"), &ext.overlay_js).expect("write overlay.js");
     std::fs::write(ext_dir.join("core.js"), &ext.core_js).expect("write core.js");
     std::fs::write(ext_dir.join("core_bg.wasm"), &ext.core_bg_wasm).expect("write core_bg.wasm");
-    std::fs::write(ext_dir.join("antipatterns.json"), &ext.antipatterns_json).expect("write registry");
+    std::fs::write(ext_dir.join("antipatterns.json"), &ext.antipatterns_json)
+        .expect("write registry");
     println!(
         "extension/detector/: snapshot.js {} KB, overlay.js {} KB, core.js {} KB, core_bg.wasm {} KB",
         ext.snapshot_js.len() / 1024,

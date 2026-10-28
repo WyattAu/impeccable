@@ -2,18 +2,19 @@
 //! utilities that read raw CSS (no DOM), plus the finding shapes the scanners
 //! return. The scanners themselves live in `impeccable-core`.
 
-use crate::js::{self, ci, math_max, math_min, parse_float, WS, WS_CHARS};
+use crate::js::{self, ci, math_max, math_min, parse_float, WS};
 use crate::js_ext_a::{
     is_word_byte, last_index_of_byte, split_commas_outside_parens, split_ws, JsMap,
 };
-use crate::rules::types::{ANY, B};
+use crate::rules::types::B;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 macro_rules! re {
     ($name:ident, $pat:expr) => {
-        static $name: Lazy<Regex> = Lazy::new(|| Regex::new(&$pat).expect(stringify!($name)));
+        static $name: Lazy<Regex> =
+            Lazy::new(|| Regex::new(r"\.([A-Za-z_][A-Za-z0-9_-]*)").expect(stringify!($name)));
     };
 }
 
@@ -135,7 +136,9 @@ pub fn enclosing_css_selector(css_text: &str, index: usize) -> Option<String> {
     // the at-rule's own brace, not a declaration.
     // A delimiter in a quoted string (`[data-template*="{"]`) or escaped
     // (`\{`) bounds nothing.
-    let slice_start = last_unquoted_delimiter(&before_open, b"{};").map(|p| p + 1).unwrap_or(0);
+    let slice_start = last_unquoted_delimiter(&before_open, b"{};")
+        .map(|p| p + 1)
+        .unwrap_or(0);
     // Only a grouping at-rule may enclose the rule. Inside a style rule
     // (`.card { & > .stripe { … } }`, CSS nesting) the selector means
     // nothing without its parent, so the match stays unscoped as before.
@@ -225,7 +228,8 @@ fn enclosed_only_by_at_rules(css: &str) -> bool {
         }
         i += 1;
     }
-    open.iter().all(|&(start, brace)| js::trim(&css[start..brace]).starts_with('@'))
+    open.iter()
+        .all(|&(start, brace)| js::trim(&css[start..brace]).starts_with('@'))
 }
 
 // ─── Rule-block helpers ─────────────────────────────────────────────────────
@@ -429,7 +433,10 @@ fn translate_component(value: &str) -> Option<(f64, f64)> {
     }
     if let Some(n) = v.strip_suffix('%') {
         let n = js::trim(n);
-        if !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit() || b == b'.' || b == b'-' || b == b'+') {
+        if !n.is_empty()
+            && n.bytes()
+                .all(|b| b.is_ascii_digit() || b == b'.' || b == b'-' || b == b'+')
+        {
             let pct = parse_float(n);
             return pct.is_finite().then_some((0.0, pct));
         }
@@ -456,8 +463,12 @@ fn add_axis(axis: &mut TranslateAxis, part: Option<(f64, f64)>) {
 /// centred float (`translate(-50%, -14px)`) moves on y. `None` when the step
 /// declares neither property.
 fn step_translation(decls: &DeclMap) -> Option<[TranslateAxis; 3]> {
-    let transform = decls.get("transform").map(|v| js::to_lower_case(js::trim(v)));
-    let translate = decls.get("translate").map(|v| js::to_lower_case(js::trim(v)));
+    let transform = decls
+        .get("transform")
+        .map(|v| js::to_lower_case(js::trim(v)));
+    let translate = decls
+        .get("translate")
+        .map(|v| js::to_lower_case(js::trim(v)));
     if transform.is_none() && translate.is_none() {
         return None;
     }
@@ -474,7 +485,10 @@ fn step_translation(decls: &DeclMap) -> Option<[TranslateAxis; 3]> {
         // declared distance. After the translate it leaves the travel alone.
         if let Some(first) = TRANSLATE_FN_RE.find(t) {
             let before = &t[..first.start()];
-            if ["scale", "rotate", "skew", "perspective"].iter().any(|f| before.contains(f)) {
+            if ["scale", "rotate", "skew", "perspective"]
+                .iter()
+                .any(|f| before.contains(f))
+            {
                 return Some([None; 3]);
             }
         }
@@ -498,7 +512,10 @@ fn step_translation(decls: &DeclMap) -> Option<[TranslateAxis; 3]> {
                 continue;
             }
             let args: Vec<&str> = inner.split(',').map(js::trim).collect();
-            let part = |i: usize| args.get(i).map_or(Some((0.0, 0.0)), |a| translate_component(a));
+            let part = |i: usize| {
+                args.get(i)
+                    .map_or(Some((0.0, 0.0)), |a| translate_component(a))
+            };
             match name {
                 "translatex" => add_axis(&mut out[0], part(0)),
                 "translatey" => add_axis(&mut out[1], part(0)),
@@ -557,7 +574,9 @@ fn keyframes_move_or_resize(body: &str) -> bool {
         }
     }
     let travels = translations.iter().any(|a| {
-        translations.iter().any(|b| (0..3).any(|i| axis_travels(a[i], b[i])))
+        translations
+            .iter()
+            .any(|b| (0..3).any(|i| axis_travels(a[i], b[i])))
     });
     // Two spellings of one length (`8px`, `8.0px`) are one size.
     let same = |a: &str, b: &str| match (css_length_to_px(a), css_length_to_px(b)) {
@@ -755,7 +774,7 @@ fn attr_tag_match_starts(content: &str, attr: &str, needle: &str, exact: bool) -
             }
             k += 1;
             k += content.len() - k - js::trim_start(&content[k..]).len();
-            if !u8_at(content, k).map_or(false, is_quote) {
+            if !u8_at(content, k).is_some_and(is_quote) {
                 continue;
             }
             k += 1;

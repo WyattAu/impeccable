@@ -32,7 +32,10 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-use crate::hook_claim::{private_file_mode, ensure_safe_dir, is_claim_name, is_safe_dir, safe_user_dir, sha256_hex, user_dir};
+use crate::hook_claim::{
+    ensure_safe_dir, is_claim_name, is_safe_dir, private_file_mode, safe_user_dir, sha256_hex,
+    user_dir,
+};
 use crate::hook_lib::Runtime;
 
 const OVERRIDE_ENV: &str = "IMPECCABLE_HOOK_SESSION_DIR";
@@ -67,9 +70,13 @@ pub fn record_root(rt: &Runtime, session: &str, root: &str) {
     if std::fs::symlink_metadata(&file).is_ok() {
         return;
     }
-    let Some(base) = safe_user_dir(base) else { return };
+    let Some(base) = safe_user_dir(base) else {
+        return;
+    };
     let dir = base.join(&session_name);
-    let Some(created) = ensure_safe_dir(&dir) else { return };
+    let Some(created) = ensure_safe_dir(&dir) else {
+        return;
+    };
     if created {
         sweep_expired(&base, &session_name);
     }
@@ -93,7 +100,9 @@ pub fn recorded_roots(rt: &Runtime, session: &str) -> Vec<String> {
     if session.is_empty() {
         return vec![];
     }
-    let Some(base) = index_dir(rt) else { return vec![] };
+    let Some(base) = index_dir(rt) else {
+        return vec![];
+    };
     let dir = base.join(sha256_hex(session));
     for d in [&base, &dir] {
         match std::fs::symlink_metadata(d) {
@@ -101,19 +110,29 @@ pub fn recorded_roots(rt: &Runtime, session: &str) -> Vec<String> {
             _ => return vec![],
         }
     }
-    let Ok(entries) = std::fs::read_dir(&dir) else { return vec![] };
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return vec![];
+    };
     let mut roots: Vec<String> = Vec::new();
     for entry in entries.flatten().take(SWEEP_SCAN_LIMIT) {
         let name = entry.file_name();
-        let Some(name) = name.to_str().filter(|n| is_claim_name(n)) else { continue };
+        let Some(name) = name.to_str().filter(|n| is_claim_name(n)) else {
+            continue;
+        };
         // `DirEntry::file_type` does not follow symlinks.
         if !entry.file_type().is_ok_and(|t| t.is_file()) {
             continue;
         }
-        let Some(root) = read_entry(&entry.path()) else { continue };
+        let Some(root) = read_entry(&entry.path()) else {
+            continue;
+        };
         // A root that is gone (a deleted project, a test's temp dir) never
         // takes one of the [`MAX_ROOTS`] places.
-        if sha256_hex(&root) == name && Path::new(&root).is_absolute() && Path::new(&root).is_dir() && !roots.contains(&root) {
+        if sha256_hex(&root) == name
+            && Path::new(&root).is_absolute()
+            && Path::new(&root).is_dir()
+            && !roots.contains(&root)
+        {
             roots.push(root);
         }
     }
@@ -134,21 +153,31 @@ fn read_entry(path: &Path) -> Option<String> {
 /// session. Only safe `<64 hex>` dirs are touched, and in them only
 /// `<64 hex>` regular files; a dir holding anything else is left in place.
 fn sweep_expired(base: &Path, keep: &str) {
-    let Some(cutoff) = SystemTime::now().checked_sub(Duration::from_secs(EXPIRE_SECONDS)) else { return };
-    let Ok(entries) = std::fs::read_dir(base) else { return };
+    let Some(cutoff) = SystemTime::now().checked_sub(Duration::from_secs(EXPIRE_SECONDS)) else {
+        return;
+    };
+    let Ok(entries) = std::fs::read_dir(base) else {
+        return;
+    };
     let mut removed = 0usize;
     for entry in entries.flatten().take(SWEEP_SCAN_LIMIT) {
         if removed >= SWEEP_REMOVE_LIMIT {
             break;
         }
         let name = entry.file_name();
-        let Some(name) = name.to_str().filter(|n| is_claim_name(n) && *n != keep) else { continue };
+        let Some(name) = name.to_str().filter(|n| is_claim_name(n) && *n != keep) else {
+            continue;
+        };
         let dir = base.join(name);
-        let Ok(meta) = std::fs::symlink_metadata(&dir) else { continue };
+        let Ok(meta) = std::fs::symlink_metadata(&dir) else {
+            continue;
+        };
         if !is_safe_dir(&meta) || meta.modified().map_or(true, |m| m > cutoff) {
             continue;
         }
-        let Ok(files) = std::fs::read_dir(&dir) else { continue };
+        let Ok(files) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for file in files.flatten().take(SWEEP_SCAN_LIMIT) {
             let ok_name = file.file_name().to_str().is_some_and(is_claim_name);
             if ok_name && file.file_type().is_ok_and(|t| t.is_file()) {

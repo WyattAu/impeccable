@@ -25,7 +25,9 @@ pub fn react_recoverable_hydration_error(message: &str) -> Option<u32> {
     let rest = &message[message.find(MARK)? + MARK.len()..];
     let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
     let code = rest[..digits].parse::<u32>().ok()?;
-    REACT_RECOVERABLE_HYDRATION_ERRORS.contains(&code).then_some(code)
+    REACT_RECOVERABLE_HYDRATION_ERRORS
+        .contains(&code)
+        .then_some(code)
 }
 
 /// Whether `message` is the rejection Chrome gives a `play()` promise that a
@@ -52,7 +54,9 @@ mod tests {
             "Uncaught (in promise) AbortError: The play() request was interrupted by a new load request. https://goo.gl/LdLk22"
         ));
         // Twins: an aborted fetch and a play() that failed for another reason.
-        assert!(!media_play_interrupted("Uncaught (in promise) AbortError: The user aborted a request."));
+        assert!(!media_play_interrupted(
+            "Uncaught (in promise) AbortError: The user aborted a request."
+        ));
         assert!(!media_play_interrupted(
             "Uncaught (in promise) NotAllowedError: play() failed because the user didn't interact with the document first."
         ));

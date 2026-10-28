@@ -167,10 +167,8 @@ fn snapshot_server_serves_frozen_bytes_and_checks_host() {
     fs::write(f.0.join("assets/art.png"), b"new bytes").unwrap();
     let actual = get("/assets/art.png", host);
     assert!(actual.ends_with(b"asset bytes"));
-    assert!(
-        String::from_utf8_lossy(&actual)
-            .contains("Cache-Control: private, max-age=3600, immutable")
-    );
+    assert!(String::from_utf8_lossy(&actual)
+        .contains("Cache-Control: private, max-age=3600, immutable"));
     assert!(String::from_utf8_lossy(&actual).starts_with("HTTP/1.1 200 OK"));
     for (path, h) in [
         ("/.env", host),
@@ -238,9 +236,17 @@ fn snapshot_server_serves_around_idle_and_late_connections_and_closes_them_on_dr
     let snapshot = Arc::new(HtmlSnapshot::freeze(f.selection()).unwrap());
     let server = snapshot.serve().unwrap();
     let url = server.entry_url();
-    let host = url.strip_prefix("http://").unwrap().split('/').next().unwrap().to_string();
+    let host = url
+        .strip_prefix("http://")
+        .unwrap()
+        .split('/')
+        .next()
+        .unwrap()
+        .to_string();
     let get = |stream: &mut TcpStream| {
-        stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
         write!(stream, "GET /index.html HTTP/1.1\r\nHost: {host}\r\n\r\n").unwrap();
         let mut response = Vec::new();
         stream.read_to_end(&mut response).unwrap();
@@ -252,15 +258,24 @@ fn snapshot_server_serves_around_idle_and_late_connections_and_closes_them_on_dr
     std::thread::sleep(Duration::from_millis(50));
     let started = Instant::now();
     assert!(get(&mut TcpStream::connect(&host).unwrap()).starts_with("HTTP/1.1 200 OK"));
-    assert!(started.elapsed() < Duration::from_millis(1500), "an idle connection held up a request");
+    assert!(
+        started.elapsed() < Duration::from_millis(1500),
+        "an idle connection held up a request"
+    );
     // Connected now, written later than the old 2 s idle limit.
     let mut late = TcpStream::connect(&host).unwrap();
     std::thread::sleep(Duration::from_millis(2500));
-    assert!(get(&mut late).starts_with("HTTP/1.1 200 OK"), "a late request lost its connection");
+    assert!(
+        get(&mut late).starts_with("HTTP/1.1 200 OK"),
+        "a late request lost its connection"
+    );
     drop(server);
     idle.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
     let closed = Instant::now();
     let mut buf = [0u8; 16];
     assert!(matches!(idle.read(&mut buf), Ok(0) | Err(_)));
-    assert!(closed.elapsed() < Duration::from_secs(4), "dropping the server left a connection open");
+    assert!(
+        closed.elapsed() < Duration::from_secs(4),
+        "dropping the server left a connection open"
+    );
 }

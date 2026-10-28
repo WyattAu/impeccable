@@ -27,7 +27,9 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 
-use impeccable_browser::{detect_url_evidence, origin, replay_url_scan, BrowserEngine, EvidenceRequest};
+use impeccable_browser::{
+    detect_url_evidence, origin, replay_url_scan, BrowserEngine, EvidenceRequest,
+};
 use impeccable_detect::engines::{ScanOptions, UrlEngine};
 
 fn fixtures_dir() -> PathBuf {
@@ -74,7 +76,11 @@ fn engine() -> Option<BrowserEngine> {
 }
 
 /// `(rule, selector, snippet)` for every finding of a scan.
-fn scan(engine: &BrowserEngine, fixture: &str, viewport: Option<(u32, u32)>) -> Vec<(String, String, String)> {
+fn scan(
+    engine: &BrowserEngine,
+    fixture: &str,
+    viewport: Option<(u32, u32)>,
+) -> Vec<(String, String, String)> {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/{fixture}");
     let options = ScanOptions {
@@ -99,7 +105,11 @@ fn scan(engine: &BrowserEngine, fixture: &str, viewport: Option<(u32, u32)>) -> 
         .collect()
 }
 
-fn snippet<'a>(flagged: &'a [(String, String, String)], rule: &str, selector: &str) -> Option<&'a str> {
+fn snippet<'a>(
+    flagged: &'a [(String, String, String)],
+    rule: &str,
+    selector: &str,
+) -> Option<&'a str> {
     flagged
         .iter()
         .find(|(r, s, _)| r == rule && s == selector)
@@ -156,14 +166,23 @@ fn surfaces_off_the_ancestor_chain_are_read_where_they_paint() {
     }
     // Dim copy is printed against the gradient it sits on.
     let dim = snippet(&flagged, "low-contrast", "#flag-dim-on-dark-panel").unwrap_or_default();
-    assert!(dim.ends_with("(layer on div.layer)") && !dim.contains("on #ffffff"), "{dim}");
+    assert!(
+        dim.ends_with("(layer on div.layer)") && !dim.contains("on #ffffff"),
+        "{dim}"
+    );
     // What the walk never saw is read from pixels.
     for selector in ["#flag-cream-copy-on-photo", "#flag-faint-link-below-fold"] {
         let s = snippet(&flagged, "low-contrast", selector).unwrap_or_default();
         assert!(s.starts_with("pixel contrast "), "{selector}: {s}");
     }
-    assert!(snippet(&flagged, "dark-glow", "#flag-glow-under-vignette").is_some(), "{flagged:#?}");
-    assert!(snippet(&flagged, "dark-glow", "#pass-glow-on-light-panel").is_none(), "{flagged:#?}");
+    assert!(
+        snippet(&flagged, "dark-glow", "#flag-glow-under-vignette").is_some(),
+        "{flagged:#?}"
+    );
+    assert!(
+        snippet(&flagged, "dark-glow", "#pass-glow-on-light-panel").is_none(),
+        "{flagged:#?}"
+    );
 }
 
 #[test]
@@ -187,11 +206,21 @@ fn verdicts_the_pixels_replace_stay_out_of_the_replayed_scan() {
     let url = format!("http://127.0.0.1:{port}/unread-surface-contrast.html");
     let options = ScanOptions::default();
     let mut browser = engine.launch().expect("launch");
-    let (live, evidence) =
-        detect_url_evidence(&mut browser, &url, &options, "networkidle0", 0, &EvidenceRequest::default())
-            .expect("evidence scan");
+    let (live, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &options,
+        "networkidle0",
+        0,
+        &EvidenceRequest::default(),
+    )
+    .expect("evidence scan");
     let selector = |f: &impeccable_core::findings::Finding| {
-        f.extras.get("selector").and_then(|v| v.as_str()).unwrap_or("").to_string()
+        f.extras
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
     };
     // The pixels read the outlined sticker and pass it, which drops the
     // element pass's verdict on it. That verdict was never the scan
@@ -222,12 +251,16 @@ fn verdicts_the_pixels_replace_stay_out_of_the_replayed_scan() {
     let replayed: Vec<&impeccable_core::findings::Finding> = replay.findings.iter().collect();
     assert_eq!(replayed, replayable, "replay differs from the live scan");
     assert!(
-        !replayed.iter().any(|f| f.antipattern == "low-contrast" && selector(f) == "#pass-outline-sticker"),
+        !replayed
+            .iter()
+            .any(|f| f.antipattern == "low-contrast" && selector(f) == "#pass-outline-sticker"),
         "{replayed:#?}"
     );
     // Verdicts the pass reads from the capture alone are still the scan's.
     assert!(
-        replayed.iter().any(|f| f.antipattern == "low-contrast" && selector(f) == "#flag-dim-on-dark-panel"),
+        replayed
+            .iter()
+            .any(|f| f.antipattern == "low-contrast" && selector(f) == "#flag-dim-on-dark-panel"),
         "{replayed:#?}"
     );
 }

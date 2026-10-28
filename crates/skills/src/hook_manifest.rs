@@ -17,7 +17,10 @@
 //! `impeccable_context::hook_markers::is_impeccable_hook_command`, so the two
 //! writers and the three readers can never disagree on what counts as ours.
 
-use impeccable_context::hook_markers::{cursor_hook_manifest, cursor_manifest_has_retired_gate, is_impeccable_hook_command, is_launcher_hook_command, parse_manifest_jsonc, windows_launcher_hook_command};
+use impeccable_context::hook_markers::{
+    cursor_hook_manifest, cursor_manifest_has_retired_gate, is_impeccable_hook_command,
+    is_launcher_hook_command, parse_manifest_jsonc, windows_launcher_hook_command,
+};
 use serde_json::{Map, Value};
 
 use crate::providers::Sys;
@@ -33,12 +36,42 @@ pub struct HookArtifactSpec {
 /// JS: PROVIDER_HOOK_ARTIFACTS[provider]
 pub fn provider_hook_artifacts(provider: &str) -> &'static [HookArtifactSpec] {
     match provider {
-        ".claude" => &[HookArtifactSpec { source_provider: ".claude", rel: "settings.json", dest_provider: ".claude", dest_rel: Some("settings.local.json") }],
-        ".gemini" => &[HookArtifactSpec { source_provider: ".gemini", rel: "settings.json", dest_provider: ".gemini", dest_rel: None }],
-        ".cursor" => &[HookArtifactSpec { source_provider: ".cursor", rel: "hooks.json", dest_provider: ".cursor", dest_rel: None }],
-        ".agents" => &[HookArtifactSpec { source_provider: ".codex", rel: "hooks.json", dest_provider: ".codex", dest_rel: None }],
-        ".github" => &[HookArtifactSpec { source_provider: ".github", rel: "hooks/impeccable.json", dest_provider: ".github", dest_rel: None }],
-        ".grok" => &[HookArtifactSpec { source_provider: ".grok", rel: "hooks/impeccable.json", dest_provider: ".grok", dest_rel: None }],
+        ".claude" => &[HookArtifactSpec {
+            source_provider: ".claude",
+            rel: "settings.json",
+            dest_provider: ".claude",
+            dest_rel: Some("settings.local.json"),
+        }],
+        ".gemini" => &[HookArtifactSpec {
+            source_provider: ".gemini",
+            rel: "settings.json",
+            dest_provider: ".gemini",
+            dest_rel: None,
+        }],
+        ".cursor" => &[HookArtifactSpec {
+            source_provider: ".cursor",
+            rel: "hooks.json",
+            dest_provider: ".cursor",
+            dest_rel: None,
+        }],
+        ".agents" => &[HookArtifactSpec {
+            source_provider: ".codex",
+            rel: "hooks.json",
+            dest_provider: ".codex",
+            dest_rel: None,
+        }],
+        ".github" => &[HookArtifactSpec {
+            source_provider: ".github",
+            rel: "hooks/impeccable.json",
+            dest_provider: ".github",
+            dest_rel: None,
+        }],
+        ".grok" => &[HookArtifactSpec {
+            source_provider: ".grok",
+            rel: "hooks/impeccable.json",
+            dest_provider: ".grok",
+            dest_rel: None,
+        }],
         _ => &[],
     }
 }
@@ -50,7 +83,11 @@ pub struct HookArtifact {
 }
 
 /// JS: hookArtifactsForProvider(bundleDir, root, provider)
-pub fn hook_artifacts_for_provider(bundle_dir: &str, root: &str, provider: &str) -> Vec<HookArtifact> {
+pub fn hook_artifacts_for_provider(
+    bundle_dir: &str,
+    root: &str,
+    provider: &str,
+) -> Vec<HookArtifact> {
     provider_hook_artifacts(provider)
         .iter()
         .map(|spec| {
@@ -68,7 +105,12 @@ pub fn hook_artifacts_for_provider(bundle_dir: &str, root: &str, provider: &str)
         .collect()
 }
 
-fn hook_artifacts_for_install(bundle_dir: &str, root: &str, provider: &str, user_scope: bool) -> Vec<HookArtifact> {
+fn hook_artifacts_for_install(
+    bundle_dir: &str,
+    root: &str,
+    provider: &str,
+    user_scope: bool,
+) -> Vec<HookArtifact> {
     if provider == ".claude" && user_scope {
         return vec![HookArtifact {
             src: jsp::join(&[bundle_dir, ".claude", "settings.json"]),
@@ -84,9 +126,9 @@ pub fn expected_hook_dests(root: &str, providers: &[&str]) -> Vec<String> {
     providers
         .iter()
         .flat_map(|p| {
-            provider_hook_artifacts(p)
-                .iter()
-                .map(|spec| jsp::join(&[root, spec.dest_provider, spec.dest_rel.unwrap_or(spec.rel)]))
+            provider_hook_artifacts(p).iter().map(|spec| {
+                jsp::join(&[root, spec.dest_provider, spec.dest_rel.unwrap_or(spec.rel)])
+            })
         })
         .collect()
 }
@@ -108,7 +150,10 @@ pub fn migrate_cursor_gate(value: &Value, skill_root: &str, absolute: bool) -> V
         return value.clone();
     }
     // Any launcher-form command carries the marker the rewrite replaces.
-    let template = cursor_hook_manifest("\".cursor/skills/impeccable/scripts/impeccable\" hook", CURSOR_TIMEOUT_SECONDS);
+    let template = cursor_hook_manifest(
+        "\".cursor/skills/impeccable/scripts/impeccable\" hook",
+        CURSOR_TIMEOUT_SECONDS,
+    );
     let fresh = rewrite_hook_commands_for_skill_root(&template, ".cursor", skill_root, absolute);
     merge_hook_manifests(value, &fresh)
 }
@@ -139,9 +184,14 @@ pub fn launcher_rel_path(provider: &str) -> String {
 /// path or the hook command targets a file that does not exist.
 pub fn launcher_path(skill_root: &str, provider: &str) -> Option<String> {
     match provider {
-        ".cursor" | ".claude" | ".agents" | ".grok" | ".gemini" => {
-            Some(jsp::join(&[skill_root, provider, "skills", "impeccable", "scripts", "impeccable"]))
-        }
+        ".cursor" | ".claude" | ".agents" | ".grok" | ".gemini" => Some(jsp::join(&[
+            skill_root,
+            provider,
+            "skills",
+            "impeccable",
+            "scripts",
+            "impeccable",
+        ])),
         _ => None,
     }
 }
@@ -170,11 +220,23 @@ pub struct QuotedPath {
 /// absolute install path gets real single-quote escaping (issue #476); the
 /// relative form is a per-provider constant and stays double-quoted so
 /// Claude's `${CLAUDE_PROJECT_DIR}` keeps expanding at hook time.
-pub fn quoted_launcher_path(skill_root: &str, provider: &str, absolute: bool) -> Option<QuotedPath> {
+pub fn quoted_launcher_path(
+    skill_root: &str,
+    provider: &str,
+    absolute: bool,
+) -> Option<QuotedPath> {
     let abs = launcher_path(skill_root, provider)?;
-    let path = if absolute { abs } else { launcher_rel_path(provider) };
+    let path = if absolute {
+        abs
+    } else {
+        launcher_rel_path(provider)
+    };
     Some(QuotedPath {
-        posix: if absolute { sh_single_quote(&path) } else { json_string(&path) },
+        posix: if absolute {
+            sh_single_quote(&path)
+        } else {
+            json_string(&path)
+        },
         win32: json_string(&path),
         raw: path,
     })
@@ -187,13 +249,24 @@ pub fn quoted_launcher_path(skill_root: &str, provider: &str, absolute: bool) ->
 /// so write that resolved root with Bash-compatible forward slashes.
 fn quoted_github_user_launcher(skill_root: &str, win32: bool) -> QuotedPath {
     let path = if win32 {
-        jsp::win32::join(&[skill_root, ".github", "skills", "impeccable", "scripts", "impeccable"])
-            .replace('\\', "/")
+        jsp::win32::join(&[
+            skill_root,
+            ".github",
+            "skills",
+            "impeccable",
+            "scripts",
+            "impeccable",
+        ])
+        .replace('\\', "/")
     } else {
         "$HOME/.github/skills/impeccable/scripts/impeccable".to_string()
     };
     QuotedPath {
-        posix: if win32 { sh_single_quote(&path) } else { json_string(&path) },
+        posix: if win32 {
+            sh_single_quote(&path)
+        } else {
+            json_string(&path)
+        },
         win32: json_string(&path),
         raw: path,
     }
@@ -239,7 +312,10 @@ fn gemini_hook_command(quoted: &QuotedPath, verb: &str, win32: bool) -> String {
     }
     let cmd = format!("{path}.cmd");
     let q = if relative {
-        format!("\"{}\"", cmd.replacen("$GEMINI_PROJECT_DIR", "$env:GEMINI_PROJECT_DIR", 1))
+        format!(
+            "\"{}\"",
+            cmd.replacen("$GEMINI_PROJECT_DIR", "$env:GEMINI_PROJECT_DIR", 1)
+        )
     } else {
         format!("'{}'", cmd.replace('\'', "''"))
     };
@@ -254,7 +330,12 @@ pub fn windows_hook_command(quoted: &QuotedPath, provider: &str) -> String {
 }
 
 /// JS: rewriteHookCommandsForSkillRoot(value, provider, {skillRoot, absolute})
-pub fn rewrite_hook_commands_for_skill_root(value: &Value, provider: &str, skill_root: &str, absolute: bool) -> Value {
+pub fn rewrite_hook_commands_for_skill_root(
+    value: &Value,
+    provider: &str,
+    skill_root: &str,
+    absolute: bool,
+) -> Value {
     let quoted = if provider == ".github" && absolute {
         Some(quoted_github_user_launcher(skill_root, cfg!(windows)))
     } else {
@@ -268,7 +349,13 @@ pub fn rewrite_hook_commands_for_skill_root(value: &Value, provider: &str, skill
 
 /// `rewrite_hook_commands_for_skill_root` with the platform made explicit
 /// (tests drive the Windows form from any host).
-pub fn rewrite_hook_commands_for_platform(value: &Value, provider: &str, skill_root: &str, absolute: bool, win32: bool) -> Value {
+pub fn rewrite_hook_commands_for_platform(
+    value: &Value,
+    provider: &str,
+    skill_root: &str,
+    absolute: bool,
+    win32: bool,
+) -> Value {
     let quoted = if provider == ".github" && absolute {
         Some(quoted_github_user_launcher(skill_root, win32))
     } else {
@@ -290,7 +377,12 @@ fn rewrite_value(value: &Value, provider: &str, quoted: &QuotedPath, win32: bool
             }
             Value::String(hook_command(quoted, provider, win32))
         }
-        Value::Array(items) => Value::Array(items.iter().map(|v| rewrite_value(v, provider, quoted, win32)).collect()),
+        Value::Array(items) => Value::Array(
+            items
+                .iter()
+                .map(|v| rewrite_value(v, provider, quoted, win32))
+                .collect(),
+        ),
         Value::Object(map) => {
             let mut next = Map::new();
             for (k, v) in map {
@@ -299,7 +391,10 @@ fn rewrite_value(value: &Value, provider: &str, quoted: &QuotedPath, win32: bool
             if provider == ".agents" {
                 if let Some(cmd @ Value::String(_)) = map.get("command") {
                     if value_has_impeccable_hook_marker(cmd) {
-                        next.insert("commandWindows".to_string(), Value::String(windows_hook_command(quoted, provider)));
+                        next.insert(
+                            "commandWindows".to_string(),
+                            Value::String(windows_hook_command(quoted, provider)),
+                        );
                     }
                 }
             }
@@ -337,10 +432,16 @@ pub fn manifest_has_stale_hook(file: &str) -> bool {
     if !util::exists(file) {
         return false;
     }
-    let Ok(text) = util::read_text(file) else { return false };
-    let Ok(Value::Object(map)) = serde_json::from_str::<Value>(&text) else { return false };
+    let Ok(text) = util::read_text(file) else {
+        return false;
+    };
+    let Ok(Value::Object(map)) = serde_json::from_str::<Value>(&text) else {
+        return false;
+    };
     match map.get("hooks") {
-        Some(h @ (Value::Object(_) | Value::Array(_))) => value_has_impeccable_hook_marker(h) && !value_has_launcher_hook_marker(h),
+        Some(h @ (Value::Object(_) | Value::Array(_))) => {
+            value_has_impeccable_hook_marker(h) && !value_has_launcher_hook_marker(h)
+        }
         _ => false,
     }
 }
@@ -351,15 +452,21 @@ pub fn manifest_has_retired_cursor_gate(file: &str) -> bool {
     if !util::exists(file) {
         return false;
     }
-    let Ok(text) = util::read_text(file) else { return false };
-    let Ok(parsed) = serde_json::from_str::<Value>(&text) else { return false };
+    let Ok(text) = util::read_text(file) else {
+        return false;
+    };
+    let Ok(parsed) = serde_json::from_str::<Value>(&text) else {
+        return false;
+    };
     cursor_manifest_has_retired_gate(&parsed)
 }
 
 /// JS: fileHasImpeccableHookMarker(file): parse and scan only the `hooks`
 /// subtree.
 pub fn file_has_impeccable_hook_marker(file: &str) -> bool {
-    let Some((Value::Object(map), _)) = read_manifest(file) else { return false };
+    let Some((Value::Object(map), _)) = read_manifest(file) else {
+        return false;
+    };
     match map.get("hooks") {
         Some(h @ (Value::Object(_) | Value::Array(_))) => value_has_impeccable_hook_marker(h),
         _ => false,
@@ -402,7 +509,8 @@ pub fn hook_installed_for_provider(root: &str, provider: &str) -> bool {
         if file_has_impeccable_hook_marker(&jsp::join(&[root, spec.dest_provider, write_rel])) {
             return true;
         }
-        write_rel != spec.rel && file_has_impeccable_hook_marker(&jsp::join(&[root, spec.dest_provider, spec.rel]))
+        write_rel != spec.rel
+            && file_has_impeccable_hook_marker(&jsp::join(&[root, spec.dest_provider, spec.rel]))
     })
 }
 
@@ -428,11 +536,19 @@ pub fn hook_installed_for_provider_at_scope(root: &str, provider: &str, user_sco
 }
 
 /// The portable prefix of a project Copilot hook command.
-const GITHUB_PORTABLE_PREFIX: &str = "$(git rev-parse --show-toplevel)/.github/skills/impeccable/scripts/impeccable";
+const GITHUB_PORTABLE_PREFIX: &str =
+    "$(git rev-parse --show-toplevel)/.github/skills/impeccable/scripts/impeccable";
 
 /// True when the project carries its own Copilot skill launcher.
 fn github_project_skill_exists(project_root: &str) -> bool {
-    util::exists(&jsp::join(&[project_root, ".github", "skills", "impeccable", "scripts", "impeccable"]))
+    util::exists(&jsp::join(&[
+        project_root,
+        ".github",
+        "skills",
+        "impeccable",
+        "scripts",
+        "impeccable",
+    ]))
 }
 
 /// True when `root` is a project (not the home dir) that ships its own
@@ -447,10 +563,14 @@ fn github_manifest_names_missing_project_skill(root: &str) -> bool {
     if github_project_skill_exists(root) {
         return false;
     }
-    let Some((Value::Object(map), _)) = read_manifest(&jsp::join(&[root, ".github", "hooks", "impeccable.json"])) else {
+    let Some((Value::Object(map), _)) =
+        read_manifest(&jsp::join(&[root, ".github", "hooks", "impeccable.json"]))
+    else {
         return false;
     };
-    let Some(hooks @ (Value::Object(_) | Value::Array(_))) = map.get("hooks") else { return false };
+    let Some(hooks @ (Value::Object(_) | Value::Array(_))) = map.get("hooks") else {
+        return false;
+    };
     let mut commands = Vec::new();
     collect_impeccable_hook_commands(hooks, &mut commands);
     commands.iter().any(|c| c.contains(GITHUB_PORTABLE_PREFIX))
@@ -466,8 +586,12 @@ pub fn user_claude_hook_command(home_root: &str, win32: bool) -> Option<String> 
 fn collect_impeccable_hook_commands<'a>(value: &'a Value, out: &mut Vec<&'a str>) {
     match value {
         Value::String(s) if is_impeccable_hook_command(s) => out.push(s),
-        Value::Array(a) => a.iter().for_each(|v| collect_impeccable_hook_commands(v, out)),
-        Value::Object(o) => o.values().for_each(|v| collect_impeccable_hook_commands(v, out)),
+        Value::Array(a) => a
+            .iter()
+            .for_each(|v| collect_impeccable_hook_commands(v, out)),
+        Value::Object(o) => o
+            .values()
+            .for_each(|v| collect_impeccable_hook_commands(v, out)),
         _ => {}
     }
 }
@@ -484,22 +608,33 @@ pub fn user_claude_hook_is_current(home_root: &str) -> bool {
 
 /// `user_claude_hook_is_current` with the platform made explicit.
 pub fn user_claude_hook_is_current_for(home_root: &str, win32: bool) -> bool {
-    let Some(expected) = user_claude_hook_command(home_root, win32) else { return false };
-    let Some(launcher) = launcher_path(home_root, ".claude") else { return false };
+    let Some(expected) = user_claude_hook_command(home_root, win32) else {
+        return false;
+    };
+    let Some(launcher) = launcher_path(home_root, ".claude") else {
+        return false;
+    };
     if !util::exists(&launcher) {
         return false;
     }
-    let Some((Value::Object(map), _)) = read_manifest(&jsp::join(&[home_root, ".claude", "settings.json"])) else {
+    let Some((Value::Object(map), _)) =
+        read_manifest(&jsp::join(&[home_root, ".claude", "settings.json"]))
+    else {
         return false;
     };
-    let Some(hooks @ (Value::Object(_) | Value::Array(_))) = map.get("hooks") else { return false };
+    let Some(hooks @ (Value::Object(_) | Value::Array(_))) = map.get("hooks") else {
+        return false;
+    };
     let mut commands = Vec::new();
     collect_impeccable_hook_commands(hooks, &mut commands);
     !commands.is_empty() && commands.iter().all(|c| *c == expected)
 }
 
 fn marker_in(entry: &Map<String, Value>, key: &str) -> bool {
-    entry.get(key).map(value_has_impeccable_hook_marker).unwrap_or(false)
+    entry
+        .get(key)
+        .map(value_has_impeccable_hook_marker)
+        .unwrap_or(false)
 }
 
 /// JS: stripImpeccableHookEntry(entry)
@@ -518,7 +653,10 @@ fn strip_impeccable_hook_entry(entry: &Value) -> Option<Value> {
     let Some(Value::Array(hooks)) = e.get("hooks") else {
         return Some(entry.clone());
     };
-    let stripped: Vec<Value> = hooks.iter().filter_map(strip_impeccable_hook_entry).collect();
+    let stripped: Vec<Value> = hooks
+        .iter()
+        .filter_map(strip_impeccable_hook_entry)
+        .collect();
     if stripped.is_empty() && hooks.iter().any(value_has_impeccable_hook_marker) {
         return None;
     }
@@ -541,7 +679,9 @@ pub fn prune_impeccable_hook_from_manifest(manifest_path: &str) -> Result<bool, 
     if !file_has_impeccable_hook_marker(manifest_path) {
         return Ok(false);
     }
-    let Some((Value::Object(parsed), had_comments)) = read_manifest(manifest_path) else { return Ok(false) };
+    let Some((Value::Object(parsed), had_comments)) = read_manifest(manifest_path) else {
+        return Ok(false);
+    };
     let existing_hooks: Map<String, Value> = match parsed.get("hooks") {
         Some(Value::Object(h)) => h.clone(),
         _ => Map::new(),
@@ -565,7 +705,10 @@ pub fn prune_impeccable_hook_from_manifest(manifest_path: &str) -> Result<bool, 
     if next.is_empty() {
         util::rm_rf(manifest_path);
     } else {
-        util::write_bytes(manifest_path, format!("{}\n", util::json_pretty(&Value::Object(next))).as_bytes())?;
+        util::write_bytes(
+            manifest_path,
+            format!("{}\n", util::json_pretty(&Value::Object(next))).as_bytes(),
+        )?;
     }
     Ok(true)
 }
@@ -615,8 +758,14 @@ pub fn merge_hook_manifests(existing: &Value, fresh: &Value) -> Value {
 
 /// JS: readJsonFile(filePath, description)
 fn read_json_file(path: &str, description: &str) -> Result<Value, String> {
-    let text = util::read_text(path).map_err(|e| format!("{description} is not valid JSON: {path}. {e}"))?;
-    serde_json::from_str(&text).map_err(|e| format!("{description} is not valid JSON: {path}. {}", json_parse_message(&e)))
+    let text = util::read_text(path)
+        .map_err(|e| format!("{description} is not valid JSON: {path}. {e}"))?;
+    serde_json::from_str(&text).map_err(|e| {
+        format!(
+            "{description} is not valid JSON: {path}. {}",
+            json_parse_message(&e)
+        )
+    })
 }
 
 /// Node's `JSON.parse` message shape is not reproducible; report serde's.
@@ -626,13 +775,26 @@ fn json_parse_message(e: &serde_json::Error) -> String {
 
 /// JS: copyProviderHooks(bundleDir, root, providers, {force, skillRoot}).
 /// Returns the providers whose manifest was written (deduplicated, in order).
-pub fn copy_provider_hooks(sys: &crate::providers::Sys, bundle_dir: &str, root: &str, providers: &[&'static str], force: bool, skill_root: Option<&str>, project_root: Option<&str>) -> Result<Vec<&'static str>, String> {
+pub fn copy_provider_hooks(
+    sys: &crate::providers::Sys,
+    bundle_dir: &str,
+    root: &str,
+    providers: &[&'static str],
+    force: bool,
+    skill_root: Option<&str>,
+    project_root: Option<&str>,
+) -> Result<Vec<&'static str>, String> {
     let skill_root = skill_root.unwrap_or(root);
     let user_scope = sys.is_home_dir(skill_root);
     let mut written: Vec<&'static str> = Vec::new();
     for provider in providers {
-        let manifest_root = if user_scope && *provider == ".claude" { skill_root } else { root };
-        for artifact in hook_artifacts_for_install(bundle_dir, manifest_root, provider, user_scope) {
+        let manifest_root = if user_scope && *provider == ".claude" {
+            skill_root
+        } else {
+            root
+        };
+        for artifact in hook_artifacts_for_install(bundle_dir, manifest_root, provider, user_scope)
+        {
             if !util::exists(&artifact.src) {
                 continue;
             }
@@ -647,7 +809,12 @@ pub fn copy_provider_hooks(sys: &crate::providers::Sys, bundle_dir: &str, root: 
             // team-committed command even when the user installs globally.
             let absolute = (skill_root != root || sys.is_home_dir(root))
                 && !(*provider == ".github" && github_keeps_portable_form(sys, root));
-            let fresh = rewrite_hook_commands_for_skill_root(&fresh_manifest, provider, skill_root, absolute);
+            let fresh = rewrite_hook_commands_for_skill_root(
+                &fresh_manifest,
+                provider,
+                skill_root,
+                absolute,
+            );
             let mut next = fresh.clone();
             if util::exists(&artifact.dest) {
                 match read_manifest(&artifact.dest) {
@@ -662,7 +829,10 @@ pub fn copy_provider_hooks(sys: &crate::providers::Sys, bundle_dir: &str, root: 
                         if !force {
                             return Err(format!("Existing hook manifest is not valid JSON: {}. Re-run with --force to replace it.", artifact.dest));
                         }
-                        util::write_bytes(&format!("{}.bak", artifact.dest), &util::read_bytes(&artifact.dest)?)?;
+                        util::write_bytes(
+                            &format!("{}.bak", artifact.dest),
+                            &util::read_bytes(&artifact.dest)?,
+                        )?;
                         next = fresh;
                     }
                 }
@@ -675,7 +845,11 @@ pub fn copy_provider_hooks(sys: &crate::providers::Sys, bundle_dir: &str, root: 
             }
             util::mkdir_p(&jsp::dirname(&artifact.dest))?;
             // Atomic: in user scope this is the user's whole Claude settings file.
-            impeccable_common::fsx::write_atomic(&artifact.dest, format!("{}\n", util::json_pretty(&next)).as_bytes()).map_err(|e| util::node_error("open", &artifact.dest, &e))?;
+            impeccable_common::fsx::write_atomic(
+                &artifact.dest,
+                format!("{}\n", util::json_pretty(&next)).as_bytes(),
+            )
+            .map_err(|e| util::node_error("open", &artifact.dest, &e))?;
             if !written.contains(provider) {
                 written.push(provider);
             }
@@ -693,13 +867,25 @@ pub fn copy_provider_hooks(sys: &crate::providers::Sys, bundle_dir: &str, root: 
 /// Prunes them, and only when the user hook is confirmed current: a legacy or
 /// dangling user entry does not count. Runs after a fresh hook write and on a
 /// repeat install whose user hook is already current.
-pub fn prune_duplicate_claude_hooks(sys: &crate::providers::Sys, home_root: &str, project_root: &str) -> Result<(), String> {
+pub fn prune_duplicate_claude_hooks(
+    sys: &crate::providers::Sys,
+    home_root: &str,
+    project_root: &str,
+) -> Result<(), String> {
     if !user_claude_hook_is_current(home_root) {
         return Ok(());
     }
-    prune_impeccable_hook_from_manifest(&jsp::join(&[home_root, ".claude", "settings.local.json"]))?;
+    prune_impeccable_hook_from_manifest(&jsp::join(&[
+        home_root,
+        ".claude",
+        "settings.local.json",
+    ]))?;
     if !sys.is_home_dir(project_root) {
-        prune_impeccable_hook_from_manifest(&jsp::join(&[project_root, ".claude", "settings.local.json"]))?;
+        prune_impeccable_hook_from_manifest(&jsp::join(&[
+            project_root,
+            ".claude",
+            "settings.local.json",
+        ]))?;
     }
     Ok(())
 }
@@ -721,7 +907,12 @@ pub fn prune_duplicate_claude_hooks(sys: &crate::providers::Sys, home_root: &str
 /// in either spelling, so an update moves it to the post-edit hook whether or
 /// not the user re-consents to hooks. Returns the providers whose manifest
 /// changed.
-pub fn repair_stale_hook_manifests(sys: &Sys, root: &str, providers: &[&'static str], skill_root: Option<&str>) -> Result<Vec<&'static str>, String> {
+pub fn repair_stale_hook_manifests(
+    sys: &Sys,
+    root: &str,
+    providers: &[&'static str],
+    skill_root: Option<&str>,
+) -> Result<Vec<&'static str>, String> {
     let skill_root = skill_root.unwrap_or(root);
     let absolute = skill_root != root || sys.is_home_dir(root);
     let mut repaired: Vec<&'static str> = Vec::new();
@@ -742,15 +933,22 @@ pub fn repair_stale_hook_manifests(sys: &Sys, root: &str, providers: &[&'static 
                 if !cursor_gate && !manifest_has_stale_hook(&path) {
                     continue;
                 }
-                let Ok(text) = util::read_text(&path) else { continue };
-                let Ok(parsed) = serde_json::from_str::<Value>(&text) else { continue };
+                let Ok(text) = util::read_text(&path) else {
+                    continue;
+                };
+                let Ok(parsed) = serde_json::from_str::<Value>(&text) else {
+                    continue;
+                };
                 let rewritten = if cursor_gate {
                     migrate_cursor_gate(&parsed, skill_root, absolute)
                 } else {
                     rewrite_hook_commands_for_skill_root(&parsed, provider, skill_root, absolute)
                 };
                 if rewritten != parsed {
-                    util::write_bytes(&path, format!("{}\n", util::json_pretty(&rewritten)).as_bytes())?;
+                    util::write_bytes(
+                        &path,
+                        format!("{}\n", util::json_pretty(&rewritten)).as_bytes(),
+                    )?;
                     changed = true;
                 }
             }
@@ -784,7 +982,10 @@ pub fn set_hook_consent(root: &str, value: &str) -> Result<String, String> {
     let mut next = existing;
     next.insert("hook".to_string(), Value::Object(hook));
     util::mkdir_p(&jsp::dirname(&file_path))?;
-    util::write_bytes(&file_path, format!("{}\n", util::json_pretty(&Value::Object(next))).as_bytes())?;
+    util::write_bytes(
+        &file_path,
+        format!("{}\n", util::json_pretty(&Value::Object(next))).as_bytes(),
+    )?;
     impeccable_detect::config::ensure_config_git_exclude(root);
     Ok(file_path)
 }

@@ -214,16 +214,28 @@ impl FakeDom {
         if !rects.is_empty() {
             let left = rects.iter().map(|r| r.left).fold(f64::INFINITY, f64::min);
             let top = rects.iter().map(|r| r.top).fold(f64::INFINITY, f64::min);
-            let right = rects.iter().map(|r| r.right).fold(f64::NEG_INFINITY, f64::max);
-            let bottom = rects.iter().map(|r| r.bottom).fold(f64::NEG_INFINITY, f64::max);
-            self.el_mut(id).direct_text_rect = Some(Rect::from_xywh(left, top, right - left, bottom - top));
+            let right = rects
+                .iter()
+                .map(|r| r.right)
+                .fold(f64::NEG_INFINITY, f64::max);
+            let bottom = rects
+                .iter()
+                .map(|r| r.bottom)
+                .fold(f64::NEG_INFINITY, f64::max);
+            self.el_mut(id).direct_text_rect =
+                Some(Rect::from_xywh(left, top, right - left, bottom - top));
         }
         self.el_mut(id).text_line_rects = Some(rects);
         self
     }
     /// Where the last two words of `id`'s text rendered: the word before the
     /// last, then the last, each `(x, y, w, h)`.
-    pub fn set_last_words(&mut self, id: ElId, before: (f64, f64, f64, f64), last: (f64, f64, f64, f64)) -> &mut Self {
+    pub fn set_last_words(
+        &mut self,
+        id: ElId,
+        before: (f64, f64, f64, f64),
+        last: (f64, f64, f64, f64),
+    ) -> &mut Self {
         let rect = |(x, y, w, h): (f64, f64, f64, f64)| Rect::from_xywh(x, y, w, h);
         self.el_mut(id).last_word_rects = Some([rect(before), rect(last)]);
         self

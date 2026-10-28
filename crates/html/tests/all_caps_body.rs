@@ -42,7 +42,11 @@ fn fixture_columns_split_on_run_length() {
         .collect();
 
     let divide = line_of(&src, "id=\"should-pass\"");
-    assert_eq!(lines.len(), 3, "expected the three caps paragraphs, got {lines:?}");
+    assert_eq!(
+        lines.len(),
+        3,
+        "expected the three caps paragraphs, got {lines:?}"
+    );
     assert!(
         lines.iter().all(|&l| l < divide),
         "a should-pass element was flagged: {lines:?} against the divide at {divide}"
@@ -57,7 +61,11 @@ fn short_caps_label_passes() {
 </style></head>
 <body><a class="cta" href="/blog">How Mintlify is scaling sales-led GTM</a></body></html>
 "#;
-    let findings = detect_html_source(html, Path::new("/tmp/caps.html"), &DetectHtmlOptions::default());
+    let findings = detect_html_source(
+        html,
+        Path::new("/tmp/caps.html"),
+        &DetectHtmlOptions::default(),
+    );
     assert!(
         !findings.iter().any(|f| f.antipattern == "all-caps-body"),
         "37-char CTA should stay silent, got {findings:?}"
@@ -72,12 +80,19 @@ fn long_caps_run_flags() {
 </style></head>
 <body><p class="blurb">Every plan includes unlimited seats, priority support and a full audit trail for your whole team.</p></body></html>
 "#;
-    let findings = detect_html_source(html, Path::new("/tmp/caps.html"), &DetectHtmlOptions::default());
+    let findings = detect_html_source(
+        html,
+        Path::new("/tmp/caps.html"),
+        &DetectHtmlOptions::default(),
+    );
     let hit = findings
         .iter()
         .find(|f| f.antipattern == "all-caps-body")
         .unwrap_or_else(|| panic!("97-char caps paragraph should flag, got {findings:?}"));
-    assert_eq!(hit.snippet, "text-transform: uppercase on 97 chars of body text");
+    assert_eq!(
+        hit.snippet,
+        "text-transform: uppercase on 97 chars of body text"
+    );
 }
 
 /// The length that matters is the element's own run. A wrapper whose children
@@ -91,7 +106,11 @@ fn subtree_text_does_not_make_a_run() {
 </style></head>
 <body><div class="bar">Audit trail <span>immutable log of every configuration change your team makes</span> <em>verified</em></div></body></html>
 "#;
-    let findings = detect_html_source(html, Path::new("/tmp/caps.html"), &DetectHtmlOptions::default());
+    let findings = detect_html_source(
+        html,
+        Path::new("/tmp/caps.html"),
+        &DetectHtmlOptions::default(),
+    );
     assert!(
         !findings.iter().any(|f| f.antipattern == "all-caps-body"),
         "no run in the bar reaches 80 chars, got {findings:?}"

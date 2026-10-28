@@ -48,16 +48,20 @@ fn px(value: &str) -> Option<f64> {
 fn box_size(el: &StaticElement<'_>) -> Option<(f64, f64)> {
     let style = el.style();
     let w = px(sv(style, "width")).or_else(|| {
-        (el.tag_lower() == "svg").then(|| el.get_attribute("width").and_then(|w| {
-            let n = js::parse_float(w.trim_end_matches("px"));
-            n.is_finite().then_some(n)
-        }))?
+        (el.tag_lower() == "svg").then(|| {
+            el.get_attribute("width").and_then(|w| {
+                let n = js::parse_float(w.trim_end_matches("px"));
+                n.is_finite().then_some(n)
+            })
+        })?
     })?;
     let h = px(sv(style, "height")).or_else(|| {
-        (el.tag_lower() == "svg").then(|| el.get_attribute("height").and_then(|h| {
-            let n = js::parse_float(h.trim_end_matches("px"));
-            n.is_finite().then_some(n)
-        }))?
+        (el.tag_lower() == "svg").then(|| {
+            el.get_attribute("height").and_then(|h| {
+                let n = js::parse_float(h.trim_end_matches("px"));
+                n.is_finite().then_some(n)
+            })
+        })?
     })?;
     Some((w, h))
 }
@@ -97,11 +101,21 @@ fn centred(host: &StaticElement<'_>, el: &StaticElement<'_>, height: f64) -> boo
     // `safe` and `unsafe` only qualify the keyword after them.
     let is_center = |prop: &str| {
         let value = js::to_lower_case(sv(style, prop));
-        let tokens: Vec<&str> = value.split_whitespace().filter(|t| *t != "safe" && *t != "unsafe").collect();
-        let token = if prop == "alignItems" { tokens.first() } else { tokens.last() };
+        let tokens: Vec<&str> = value
+            .split_whitespace()
+            .filter(|t| *t != "safe" && *t != "unsafe")
+            .collect();
+        let token = if prop == "alignItems" {
+            tokens.first()
+        } else {
+            tokens.last()
+        };
         token == Some(&"center")
     };
-    if matches!(display, "flex" | "inline-flex") && is_center("justifyContent") && is_center("alignItems") {
+    if matches!(display, "flex" | "inline-flex")
+        && is_center("justifyContent")
+        && is_center("alignItems")
+    {
         return true;
     }
     if matches!(display, "grid" | "inline-grid")
@@ -190,8 +204,10 @@ pub fn decorative_text_facts(el: &StaticElement<'_>) -> DecorativeTextFacts {
     let control = ancestors_inclusive(el)
         .find(|c| CONTROL_TAGS.contains(&c.tag_lower().as_str()) || role_is(c, CONTROL_ROLES));
     let in_heading = ancestors_inclusive(el).any(|c| {
-        matches!(c.tag_lower().as_str(), "h1" | "h2" | "h3" | "h4" | "h5" | "h6")
-            || role_is(&c, &["heading"])
+        matches!(
+            c.tag_lower().as_str(),
+            "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
+        ) || role_is(&c, &["heading"])
     });
     let signature_marked = ancestors_inclusive(el)
         .take(2)

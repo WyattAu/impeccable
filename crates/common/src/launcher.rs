@@ -52,7 +52,10 @@ pub fn with_call_operator(raw: &str, rendered: String) -> String {
 /// is printed as the PowerShell call; every other value is returned unchanged.
 pub fn spell_self(raw: &str) -> String {
     let value = raw.trim();
-    if is_cmd_launcher(value) && value.chars().any(char::is_whitespace) && !value.starts_with(['"', '\'', '&']) {
+    if is_cmd_launcher(value)
+        && value.chars().any(char::is_whitespace)
+        && !value.starts_with(['"', '\'', '&'])
+    {
         powershell_call(value)
     } else {
         value.to_string()
@@ -65,7 +68,9 @@ mod tests {
 
     #[test]
     fn recognises_only_the_cmd_launcher() {
-        assert!(is_cmd_launcher(r"C:\Users\A B\skill\scripts\impeccable.cmd"));
+        assert!(is_cmd_launcher(
+            r"C:\Users\A B\skill\scripts\impeccable.cmd"
+        ));
         assert!(is_cmd_launcher("C:/skill/scripts/IMPECCABLE.CMD"));
         assert!(!is_cmd_launcher("/Users/a b/skill/scripts/impeccable"));
         assert!(!is_cmd_launcher("npx impeccable"));
@@ -80,35 +85,74 @@ mod tests {
             assert_eq!(spell_self(value), value);
         }
         assert!(is_cmd_launcher(r"C:\Users\工具\impeccable.cmd"));
-        assert_eq!(spell_self(r"C:\Users\工具 箱\impeccable.cmd"), r"& 'C:\Users\工具 箱\impeccable.cmd'");
+        assert_eq!(
+            spell_self(r"C:\Users\工具 箱\impeccable.cmd"),
+            r"& 'C:\Users\工具 箱\impeccable.cmd'"
+        );
     }
 
     #[test]
     fn quoted_cmd_becomes_a_powershell_literal_call() {
         let raw = r"C:\Users\A B\impeccable.cmd";
-        assert_eq!(with_call_operator(raw, format!("\"{raw}\"")), format!("& '{raw}'"));
+        assert_eq!(
+            with_call_operator(raw, format!("\"{raw}\"")),
+            format!("& '{raw}'")
+        );
         // The caller's own escaping (doubled backslashes) is not carried over.
-        assert_eq!(with_call_operator(raw, r#""C:\\Users\\A B\\impeccable.cmd""#.into()), format!("& '{raw}'"));
+        assert_eq!(
+            with_call_operator(raw, r#""C:\\Users\\A B\\impeccable.cmd""#.into()),
+            format!("& '{raw}'")
+        );
         // Unquoted, or the sh launcher quoted for sh: unchanged.
-        assert_eq!(with_call_operator(r"C:\x\impeccable.cmd", r"C:\x\impeccable.cmd".into()), r"C:\x\impeccable.cmd");
-        assert_eq!(with_call_operator("/a b/impeccable", "'/a b/impeccable'".into()), "'/a b/impeccable'");
-        assert_eq!(with_call_operator("/a b/impeccable", "\"/a b/impeccable\"".into()), "\"/a b/impeccable\"");
+        assert_eq!(
+            with_call_operator(r"C:\x\impeccable.cmd", r"C:\x\impeccable.cmd".into()),
+            r"C:\x\impeccable.cmd"
+        );
+        assert_eq!(
+            with_call_operator("/a b/impeccable", "'/a b/impeccable'".into()),
+            "'/a b/impeccable'"
+        );
+        assert_eq!(
+            with_call_operator("/a b/impeccable", "\"/a b/impeccable\"".into()),
+            "\"/a b/impeccable\""
+        );
     }
 
     #[test]
     fn powershell_metacharacters_stay_literal() {
         // `$` and backticks are inert in a single-quoted literal; quotes double.
-        assert_eq!(powershell_call(r"C:\Users\A B\$work\impeccable.cmd"), r"& 'C:\Users\A B\$work\impeccable.cmd'");
-        assert_eq!(powershell_call(r"C:\a `b\impeccable.cmd"), r"& 'C:\a `b\impeccable.cmd'");
-        assert_eq!(powershell_call(r"C:\Users\O'Brien X\impeccable.cmd"), r"& 'C:\Users\O''Brien X\impeccable.cmd'");
-        assert_eq!(powershell_call("C:\\a \u{2019}b\\impeccable.cmd"), "& 'C:\\a \u{2019}\u{2019}b\\impeccable.cmd'");
+        assert_eq!(
+            powershell_call(r"C:\Users\A B\$work\impeccable.cmd"),
+            r"& 'C:\Users\A B\$work\impeccable.cmd'"
+        );
+        assert_eq!(
+            powershell_call(r"C:\a `b\impeccable.cmd"),
+            r"& 'C:\a `b\impeccable.cmd'"
+        );
+        assert_eq!(
+            powershell_call(r"C:\Users\O'Brien X\impeccable.cmd"),
+            r"& 'C:\Users\O''Brien X\impeccable.cmd'"
+        );
+        assert_eq!(
+            powershell_call("C:\\a \u{2019}b\\impeccable.cmd"),
+            "& 'C:\\a \u{2019}\u{2019}b\\impeccable.cmd'"
+        );
     }
 
     #[test]
     fn raw_spelling_quotes_only_a_spaced_cmd_path() {
-        assert_eq!(spell_self(r"C:\Users\A B\impeccable.cmd"), r"& 'C:\Users\A B\impeccable.cmd'");
-        assert_eq!(spell_self(r"C:\skill\impeccable.cmd"), r"C:\skill\impeccable.cmd");
-        assert_eq!(spell_self("/Users/a b/skill/scripts/impeccable"), "/Users/a b/skill/scripts/impeccable");
+        assert_eq!(
+            spell_self(r"C:\Users\A B\impeccable.cmd"),
+            r"& 'C:\Users\A B\impeccable.cmd'"
+        );
+        assert_eq!(
+            spell_self(r"C:\skill\impeccable.cmd"),
+            r"C:\skill\impeccable.cmd"
+        );
+        assert_eq!(
+            spell_self("/Users/a b/skill/scripts/impeccable"),
+            "/Users/a b/skill/scripts/impeccable"
+        );
         assert_eq!(spell_self("npx impeccable"), "npx impeccable");
         // Already spelled: never double-wrapped.
         let spelled = spell_self(r"C:\A B\impeccable.cmd");

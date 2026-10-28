@@ -18,10 +18,10 @@ use super::{
 use crate::dom::StaticDocument;
 use crate::profile::{self, Meta, ProfileSink};
 use ego_tree::NodeId;
+use impeccable_common::jsp;
 use impeccable_core::checks::css_scan::{collect_css_custom_props, css_length_to_px};
 use impeccable_core::checks::measures;
 use impeccable_core::color::parse_any_color;
-use impeccable_common::jsp;
 use impeccable_core::js;
 use indexmap::IndexMap;
 use once_cell::sync::Lazy;
@@ -51,7 +51,7 @@ fn resolve_linked_css_path(file_dir: &str, href: &str) -> String {
         .split(['/', '\\'])
         .filter(|p| !p.is_empty() && *p != ".")
         .collect();
-    if segments.iter().any(|p| *p == "..") {
+    if segments.contains(&"..") {
         let joined = segments
             .iter()
             .filter(|p| **p != "..")
@@ -378,9 +378,7 @@ pub fn build_static_style_map(
                 };
                 for node in matched {
                     for decl in &rule.declarations {
-                        if placeholder_host.is_some()
-                            && js::to_lower_case(&decl.prop) != "color"
-                        {
+                        if placeholder_host.is_some() && js::to_lower_case(&decl.prop) != "color" {
                             continue;
                         }
                         let meta = DeclMeta {
@@ -476,7 +474,7 @@ fn mark_side_accent_radius_blind_spots(
         .collect();
     if css_text.contains("adius") {
         for rule in CssHostIndex::new(css_text).unapplied_radius_rules() {
-            let could_round = rule.corners.to_corners().map_or(true, |c| {
+            let could_round = rule.corners.to_corners().is_none_or(|c| {
                 [c.top_left, c.top_right, c.bottom_right, c.bottom_left]
                     .iter()
                     .any(|v| *v >= SIDE_ACCENT_MIN_RADIUS_PX)
@@ -615,7 +613,12 @@ fn compute_styles(
         }
         // Minimal user-agent emphasis styles. Author declarations below
         // still win, including explicit normal/inherit resets.
-        if doc.element(node).is_some_and(|el| matches!(el.tag_lower().as_str(), "em" | "i" | "cite" | "dfn" | "var" | "address")) {
+        if doc.element(node).is_some_and(|el| {
+            matches!(
+                el.tag_lower().as_str(),
+                "em" | "i" | "cite" | "dfn" | "var" | "address"
+            )
+        }) {
             values.insert("fontStyle".to_string(), "italic".to_string());
         }
         for (prop, decl) in specified_map {

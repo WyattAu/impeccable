@@ -11,7 +11,7 @@ use regex::Regex;
 use serde_json::{Map, Value};
 
 use crate::jsp;
-use crate::util::{as_plain_object, js_string, re, read_json, D, DOT, WS};
+use crate::util::{as_plain_object, js_string, re, read_json, DOT};
 
 /// JS: impeccable-config.mjs#getConfigPath
 pub fn get_config_path(root: &str) -> String {
@@ -185,7 +185,11 @@ pub fn normalize_extension_entries(entries: &[Value]) -> Vec<ExtensionEntry> {
 pub fn merge_extensions(existing: &[ExtensionEntry], incoming: &[Value]) -> Vec<ExtensionEntry> {
     // JS Map semantics: insertion order, later set replaces the value in place.
     let mut map: Vec<ExtensionEntry> = Vec::new();
-    for e in existing.iter().cloned().chain(normalize_extension_entries(incoming)) {
+    for e in existing
+        .iter()
+        .cloned()
+        .chain(normalize_extension_entries(incoming))
+    {
         match map.iter_mut().find(|slot| slot.ext == e.ext) {
             Some(slot) => *slot = e,
             None => map.push(e),
@@ -945,10 +949,7 @@ pub fn extract_finding_ignore_value(finding: &Finding) -> String {
 /// Shared by `ignores add-value` and `hooks ignore-value`.
 pub fn synthetic_ignore_value(rule: &str, value: &str) -> String {
     let mut extras = serde_json::Map::new();
-    extras.insert(
-        "ignoreValue".into(),
-        Value::String(value.to_string()),
-    );
+    extras.insert("ignoreValue".into(), Value::String(value.to_string()));
     let finding = Finding {
         antipattern: rule.to_string(),
         name: String::new(),
@@ -1055,7 +1056,7 @@ pub fn decode_uri_component(s: &str) -> String {
 
 re!(
     ANIMATE_BOUNCE_RE,
-    format!("(?-u:\\b)(?i:animate-bounce)(?-u:\\b)")
+    "(?-u:\\b)(?i:animate-bounce)(?-u:\\b)".to_string()
 );
 re!(BEZIER_RE, r"(?i:cubic-bezier)\([^)]+\)");
 re!(
@@ -1225,10 +1226,8 @@ mod tests {
 
     #[test]
     fn detection_extensions() {
-        let dir = std::env::temp_dir().join(format!(
-            "impeccable-detect-ext-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("impeccable-detect-ext-{}", std::process::id()));
         let impeccable = dir.join(".impeccable");
         std::fs::create_dir_all(&impeccable).unwrap();
         std::fs::write(

@@ -24,16 +24,27 @@ fn scan_fixture(name: &str) -> Vec<Finding> {
 }
 
 fn scan(html: &str) -> Vec<Finding> {
-    detect_html_source(html, Path::new("/tmp/advisory.html"), &DetectHtmlOptions::default())
-        .into_iter()
-        .filter(|f| f.antipattern == "low-contrast")
-        .collect()
+    detect_html_source(
+        html,
+        Path::new("/tmp/advisory.html"),
+        &DetectHtmlOptions::default(),
+    )
+    .into_iter()
+    .filter(|f| f.antipattern == "low-contrast")
+    .collect()
 }
 
 /// The finding whose snippet names `needle`, which must be exactly one.
 fn one<'a>(findings: &'a [Finding], needle: &str) -> &'a Finding {
-    let hits: Vec<&Finding> = findings.iter().filter(|f| f.snippet.contains(needle)).collect();
-    assert_eq!(hits.len(), 1, "expected one finding naming {needle}, got {findings:#?}");
+    let hits: Vec<&Finding> = findings
+        .iter()
+        .filter(|f| f.snippet.contains(needle))
+        .collect();
+    assert_eq!(
+        hits.len(),
+        1,
+        "expected one finding naming {needle}, got {findings:#?}"
+    );
     hits[0]
 }
 
@@ -72,7 +83,10 @@ fn near_bar_ratios_are_advisory_and_the_rest_fail() {
         assert_failing(one(&findings, needle));
     }
     for readable in ["#767676", "#757575", "#949494", "#737373"] {
-        assert!(findings.iter().all(|f| !f.snippet.contains(readable)), "{findings:#?}");
+        assert!(
+            findings.iter().all(|f| !f.snippet.contains(readable)),
+            "{findings:#?}"
+        );
     }
 }
 
@@ -131,9 +145,14 @@ fn decorative_shapes_are_advisory_and_uncertain_shapes_fail() {
         "#a2a2a2 on #ffffff",
         "#a3a3a3 on #ffffff",
     ] {
-        assert!(failing.iter().any(|s| s.contains(pair)), "failing {pair}: {failing:#?}");
+        assert!(
+            failing.iter().any(|s| s.contains(pair)),
+            "failing {pair}: {failing:#?}"
+        );
     }
-    assert!(findings.iter().all(|f| !f.snippet.contains("#1d4ed8") && !f.snippet.contains("#4b5563")));
+    assert!(findings
+        .iter()
+        .all(|f| !f.snippet.contains("#1d4ed8") && !f.snippet.contains("#4b5563")));
 }
 
 #[test]
@@ -169,13 +188,28 @@ fn an_initial_is_decorative_only_when_its_box_centres_it() {
         assert_eq!(findings.len(), 1, "{layout}: {findings:#?}");
         findings[0].severity.clone()
     };
-    assert_eq!(scan_box("display: flex; align-items: center; justify-content: center;"), "advisory");
+    assert_eq!(
+        scan_box("display: flex; align-items: center; justify-content: center;"),
+        "advisory"
+    );
     assert_eq!(scan_box("display: grid; place-items: center;"), "advisory");
-    assert_eq!(scan_box("--a: center; display: grid; place-items: var(--a);"), "advisory");
-    assert_eq!(scan_box("--a: center stretch; display: grid; place-items: var(--a);"), "warning");
+    assert_eq!(
+        scan_box("--a: center; display: grid; place-items: var(--a);"),
+        "advisory"
+    );
+    assert_eq!(
+        scan_box("--a: center stretch; display: grid; place-items: var(--a);"),
+        "warning"
+    );
     // A flex or grid box that leaves the initial in a corner.
-    assert_eq!(scan_box("display: flex; align-items: center; justify-content: flex-start;"), "warning");
-    assert_eq!(scan_box("display: flex; align-items: flex-start; justify-content: center;"), "warning");
+    assert_eq!(
+        scan_box("display: flex; align-items: center; justify-content: flex-start;"),
+        "warning"
+    );
+    assert_eq!(
+        scan_box("display: flex; align-items: flex-start; justify-content: center;"),
+        "warning"
+    );
     assert_eq!(scan_box("display: grid;"), "warning");
 }
 

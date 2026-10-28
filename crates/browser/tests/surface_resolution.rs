@@ -71,7 +71,9 @@ fn low_contrast_reads_the_surface_and_ink_a_reader_sees() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/{FIXTURE}");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     let flagged: Vec<(String, String, String)> = findings
         .iter()
         .map(|f| {
@@ -104,7 +106,10 @@ fn low_contrast_reads_the_surface_and_ink_a_reader_sees() {
         "#flag-translucent-caption",
         "#flag-frosted-tagline",
     ] {
-        assert!(has(selector), "missing low-contrast on {selector} in {flagged:#?}");
+        assert!(
+            has(selector),
+            "missing low-contrast on {selector} in {flagged:#?}"
+        );
     }
     for selector in [
         "#pass-edge-photo-title",
@@ -120,7 +125,10 @@ fn low_contrast_reads_the_surface_and_ink_a_reader_sees() {
         "#pass-same-ink-copy",
         "#pass-frosted-readable",
     ] {
-        assert!(!has(selector), "low-contrast on {selector} was flagged in {flagged:#?}");
+        assert!(
+            !has(selector),
+            "low-contrast on {selector} was flagged in {flagged:#?}"
+        );
     }
     // The eyebrow is scored against the page white, not the contents root.
     let eyebrow = flagged

@@ -76,7 +76,11 @@ pub fn js_number_to_string(v: f64) -> String {
         return "NaN".into();
     }
     if v.is_infinite() {
-        return if v > 0.0 { "Infinity".into() } else { "-Infinity".into() };
+        return if v > 0.0 {
+            "Infinity".into()
+        } else {
+            "-Infinity".into()
+        };
     }
     if v == 0.0 {
         return "0".into();
@@ -85,7 +89,7 @@ pub fn js_number_to_string(v: f64) -> String {
         return format!("{}", v as i128);
     }
     let a = v.abs();
-    if a >= 1e-6 && a < 1e21 {
+    if (1e-6..1e21).contains(&a) {
         let s = format!("{}", v);
         return s;
     }
@@ -121,7 +125,9 @@ pub fn is_file(p: &str) -> bool {
 
 /// `fs.readFileSync(p, 'utf-8')` or null.
 pub fn safe_read(p: &str) -> Option<String> {
-    std::fs::read(p).ok().map(|b| String::from_utf8_lossy(&b).into_owned())
+    std::fs::read(p)
+        .ok()
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
 }
 
 /// `JSON.parse(fs.readFileSync(p))` or null.
@@ -167,7 +173,11 @@ pub fn read_dir_entries(p: &str) -> Option<Vec<DirEntry>> {
                 Some(t) => (t.is_dir(), t.is_file()),
                 None => (false, false),
             };
-            DirEntry { name, is_dir, is_file }
+            DirEntry {
+                name,
+                is_dir,
+                is_file,
+            }
         })
         .collect();
     out.sort_by(|a, b| a.name.cmp(&b.name));
@@ -285,7 +295,10 @@ pub fn env_nonempty<'a>(env: &'a Env, key: &str) -> Option<&'a str> {
 /// hook-lib `truthy()`: /^(1|true|yes|on)$/i on the trimmed value.
 pub fn truthy_env(env: &Env, key: &str) -> bool {
     match env.get(key) {
-        Some(v) => matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"),
+        Some(v) => matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        ),
         None => false,
     }
 }
@@ -297,7 +310,7 @@ pub fn node_read_error(p: &str, err: &std::io::Error) -> String {
         std::io::ErrorKind::PermissionDenied => format!("EACCES: permission denied, open '{}'", p),
         _ => {
             if err.raw_os_error() == Some(21) {
-                format!("EISDIR: illegal operation on a directory, read")
+                "EISDIR: illegal operation on a directory, read".to_string()
             } else {
                 format!("{}", err)
             }

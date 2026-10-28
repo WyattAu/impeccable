@@ -279,7 +279,10 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
     let no_live_bar = args.iter().any(|a| a == "--no-live-bar");
     let live_bar_hidden = if no_live_bar {
         let port = server_info.get("port").and_then(Value::as_u64).unwrap_or(0);
-        let token = server_info.get("token").and_then(Value::as_str).unwrap_or("");
+        let token = server_info
+            .get("token")
+            .and_then(Value::as_str)
+            .unwrap_or("");
         request_live_bar_hidden(port, token)
     } else {
         false
@@ -292,7 +295,9 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
         None
     } else {
         crate::dev_url::probe(
-            &crate::dev_url::candidates(env.get("IMPECCABLE_DEV_URL_CANDIDATES").map(String::as_str)),
+            &crate::dev_url::candidates(
+                env.get("IMPECCABLE_DEV_URL_CANDIDATES").map(String::as_str),
+            ),
             &token_for_probe,
         )
     };
@@ -331,7 +336,10 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             obj.insert("liveBarHidden".into(), json!(live_bar_hidden));
         }
         if want_dev_url {
-            obj.insert("devUrl".into(), dev_url.map(Value::String).unwrap_or(Value::Null));
+            obj.insert(
+                "devUrl".into(),
+                dev_url.map(Value::String).unwrap_or(Value::Null),
+            );
         }
         if allow_missing_context {
             obj.insert("contextMissing".into(), json!(missing));

@@ -232,7 +232,13 @@ fn stylesheet_margin_shorthand_keeps_negative_and_var_sides() {
     let mut specified: SpecifiedStore<&str> = SpecifiedStore::new();
     for (i, (node, rule)) in ["a", "b"].iter().zip(&rules).enumerate() {
         for d in &rule.declarations {
-            apply_static_declaration(&mut specified, *node, &d.prop, &d.value, &meta(false, [0, 1, 0], i as i64, false));
+            apply_static_declaration(
+                &mut specified,
+                *node,
+                &d.prop,
+                &d.value,
+                &meta(false, [0, 1, 0], i as i64, false),
+            );
         }
     }
     let sides = |node: &str| -> Vec<String> {

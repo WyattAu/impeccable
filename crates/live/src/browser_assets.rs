@@ -11,11 +11,14 @@ use crate::util::{exists, jsp, safe_read, Env};
 use crate::vocabulary::{live_commands, live_ui_surfaces, LIVE_CHROME_MOUNT_CONTRACT};
 use serde_json::{json, Value};
 
-pub const LIVE_BROWSER_SESSION_JS: &str = include_str!("../../../skill/scripts/live-browser-session.js");
+pub const LIVE_BROWSER_SESSION_JS: &str =
+    include_str!("../../../skill/scripts/live-browser-session.js");
 pub const LIVE_BROWSER_DOM_JS: &str = include_str!("../../../skill/scripts/live-browser-dom.js");
-pub const LIVE_BROWSER_IGNORES_JS: &str = include_str!("../../../skill/scripts/live-browser-ignores.js");
+pub const LIVE_BROWSER_IGNORES_JS: &str =
+    include_str!("../../../skill/scripts/live-browser-ignores.js");
 pub const LIVE_BROWSER_JS: &str = include_str!("../../../skill/scripts/live-browser.js");
-pub const MODERN_SCREENSHOT_JS: &[u8] = include_bytes!("../../../skill/scripts/modern-screenshot.umd.js");
+pub const MODERN_SCREENSHOT_JS: &[u8] =
+    include_bytes!("../../../skill/scripts/modern-screenshot.umd.js");
 pub const DETECT_BROWSER_JS: &str = include_str!("../assets/detect-antipatterns-browser.js");
 
 /// JS: LIVE_BROWSER_SCRIPT_PARTS, in order: (name, file, embedded source).

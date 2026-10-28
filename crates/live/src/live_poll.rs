@@ -681,7 +681,7 @@ fn handle_poll_error(err: PollError, io: &mut Io) -> i32 {
 fn arg_value_int(args: &[String], prefix: &str, default: i64) -> i64 {
     match args.iter().find(|a| a.starts_with(prefix)) {
         Some(a) => {
-            let raw = a.splitn(2, '=').nth(1).unwrap_or("");
+            let raw = a.split_once('=').map(|x| x.1).unwrap_or("");
             let n = impeccable_core::js::parse_int(raw, 10);
             if n.is_nan() {
                 i64::MIN
@@ -819,7 +819,13 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
 /// handle it, print it. `reply_ack` is the `--then-poll` case: the reply
 /// that just went out rides along as `_replyAck` on the printed event so
 /// the caller sees both halves of its one call.
-fn one_shot_poll(argv: &[String], base: &str, token: &str, reply_ack: Option<Value>, io: &mut Io) -> i32 {
+fn one_shot_poll(
+    argv: &[String],
+    base: &str,
+    token: &str,
+    reply_ack: Option<Value>,
+    io: &mut Io,
+) -> i32 {
     let types_arg = argv
         .iter()
         .find(|a| a.starts_with("--types="))
@@ -860,7 +866,8 @@ mod tests {
     use serde_json::json;
 
     fn print_captured(event: Value) -> Value {
-        let (mut io, captured) = Io::captured("", std::path::PathBuf::from("/p"), Default::default());
+        let (mut io, captured) =
+            Io::captured("", std::path::PathBuf::from("/p"), Default::default());
         let mut event = event;
         print_poll_event(&mut event, &mut io);
         drop(io);
@@ -880,7 +887,11 @@ mod tests {
         }));
         let instr = parsed["_instructions"].as_str().unwrap();
         assert!(instr.contains("--reply zz1 steer_done"), "{}", instr);
-        assert!(!instr.contains("Disregard the reference document"), "{}", instr);
+        assert!(
+            !instr.contains("Disregard the reference document"),
+            "{}",
+            instr
+        );
     }
 
     #[test]

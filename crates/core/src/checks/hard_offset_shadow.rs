@@ -17,7 +17,8 @@ pub fn check_hard_offset_shadow(shadow: &str, current_color: &str, opacity: f64)
     // Unresolved values likewise cannot establish a visible shadow here.
     let layers: Result<_, cssparser::ParseError<'_, ()>> = parser.parse_comma_separated(|parser| {
         let start = parser.position();
-        let layer = parse_layer(parser, current_color).ok_or_else(|| parser.new_custom_error(()))?;
+        let layer =
+            parse_layer(parser, current_color).ok_or_else(|| parser.new_custom_error(()))?;
         Ok((parser.slice_from(start), layer))
     });
     let Ok(layers) = layers else {
@@ -47,9 +48,9 @@ pub fn has_shadow(shadow: &str) -> bool {
 }
 
 const LENGTH_UNITS: &[&str] = &[
-    "px", "em", "rem", "ex", "rex", "ch", "rch", "cap", "rcap", "ic", "ric", "lh", "rlh", "vw", "vh",
-    "vi", "vb", "vmin", "vmax", "svw", "svh", "lvw", "lvh", "dvw", "dvh", "cqw", "cqh", "cqi", "cqb",
-    "cqmin", "cqmax", "cm", "mm", "q", "in", "pt", "pc",
+    "px", "em", "rem", "ex", "rex", "ch", "rch", "cap", "rcap", "ic", "ric", "lh", "rlh", "vw",
+    "vh", "vi", "vb", "vmin", "vmax", "svw", "svh", "lvw", "lvh", "dvw", "dvh", "cqw", "cqh",
+    "cqi", "cqb", "cqmin", "cqmax", "cm", "mm", "q", "in", "pt", "pc",
 ];
 
 fn is_length_unit(unit: &str) -> bool {
@@ -98,7 +99,9 @@ fn parse_layer(parser: &mut Parser<'_, '_>, current_color: &str) -> Option<Shado
             }
             // A zero length is zero in every unit (`0em` blur paints the same
             // hard edge as `0px`); other non-px lengths stay unresolved.
-            Token::Dimension { value, ref unit, .. } if value == 0.0 && is_length_unit(unit) => {
+            Token::Dimension {
+                value, ref unit, ..
+            } if value == 0.0 && is_length_unit(unit) => {
                 if lengths_closed {
                     return None;
                 }
@@ -176,7 +179,10 @@ mod tests {
                 format!("{invalid}, 4px 4px black"),
                 format!("4px 4px black, {invalid}"),
             ] {
-                assert!(check_hard_offset_shadow(&shadow, "black", 1.0).is_empty(), "{shadow}");
+                assert!(
+                    check_hard_offset_shadow(&shadow, "black", 1.0).is_empty(),
+                    "{shadow}"
+                );
             }
         }
     }
@@ -198,7 +204,11 @@ mod tests {
                 format!("{control}, 4px 4px black"),
                 format!("4px 4px black, {control}"),
             ] {
-                assert_eq!(check_hard_offset_shadow(&shadow, "black", 1.0).len(), 1, "{shadow}");
+                assert_eq!(
+                    check_hard_offset_shadow(&shadow, "black", 1.0).len(),
+                    1,
+                    "{shadow}"
+                );
             }
         }
     }

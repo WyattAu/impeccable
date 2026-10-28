@@ -33,7 +33,10 @@ fn point_json(p: Option<(f64, f64)>) -> String {
 #[wasm_bindgen]
 pub fn collect_visual_contrast_candidates(options_json: &str) -> String {
     let options = parse(options_json);
-    Value::Array(with_dom(|dom| vc::collect_visual_contrast_candidates(dom, &options))).to_string()
+    Value::Array(with_dom(|dom| {
+        vc::collect_visual_contrast_candidates(dom, &options)
+    }))
+    .to_string()
 }
 
 /// `isRenderedForBrowserRule(el)`.
@@ -75,9 +78,17 @@ pub fn vc_stack_nodes(el: u32, x: f64, y: f64, depth: f64) -> String {
 /// `sampleImageElement` geometry: `intrinsic_*` = `naturalWidth || videoWidth
 /// || width` (0 when none). Returns `{ painted, point }` or `{ sample }`.
 #[wasm_bindgen]
-pub fn vc_img_source_point(node: u32, intrinsic_w: f64, intrinsic_h: f64, x: f64, y: f64) -> String {
+pub fn vc_img_source_point(
+    node: u32,
+    intrinsic_w: f64,
+    intrinsic_h: f64,
+    x: f64,
+    y: f64,
+) -> String {
     match with_dom(|dom| vc::img_source_point(dom, node, intrinsic_w, intrinsic_h, x, y)) {
-        Ok((painted, (px, py))) => json!({ "painted": painted, "point": { "x": px, "y": py } }).to_string(),
+        Ok((painted, (px, py))) => {
+            json!({ "painted": painted, "point": { "x": px, "y": py } }).to_string()
+        }
         Err(sample) => json!({ "sample": sample }).to_string(),
     }
 }
@@ -85,9 +96,19 @@ pub fn vc_img_source_point(node: u32, intrinsic_w: f64, intrinsic_h: f64, x: f64
 /// `sampleImageElement` retry with the separately loaded image: the source
 /// point (`{x,y}` or `null`) using the loaded intrinsic size.
 #[wasm_bindgen]
-pub fn vc_img_loaded_source_point(painted_json: &str, loaded_w: f64, loaded_h: f64, x: f64, y: f64) -> String {
-    let Ok(painted) = serde_json::from_str::<vc::PaintedRect>(painted_json) else { return "null".into() };
-    point_json(vc::img_loaded_source_point(&painted, loaded_w, loaded_h, x, y))
+pub fn vc_img_loaded_source_point(
+    painted_json: &str,
+    loaded_w: f64,
+    loaded_h: f64,
+    x: f64,
+    y: f64,
+) -> String {
+    let Ok(painted) = serde_json::from_str::<vc::PaintedRect>(painted_json) else {
+        return "null".into();
+    };
+    point_json(vc::img_loaded_source_point(
+        &painted, loaded_w, loaded_h, x, y,
+    ))
 }
 
 /// `{ ...sample, method: 'canvas-img-underlay' }` when sampled.
@@ -99,14 +120,24 @@ pub fn vc_img_finish(sample_json: &str) -> String {
 /// canvas/video underlay source point (`intrinsic_*` = `node.width ||
 /// node.videoWidth`, 0 when none); `{x,y}` or `null`.
 #[wasm_bindgen]
-pub fn vc_raster_source_point(node: u32, intrinsic_w: f64, intrinsic_h: f64, x: f64, y: f64) -> String {
-    point_json(with_dom(|dom| vc::raster_source_point(dom, node, intrinsic_w, intrinsic_h, x, y)))
+pub fn vc_raster_source_point(
+    node: u32,
+    intrinsic_w: f64,
+    intrinsic_h: f64,
+    x: f64,
+    y: f64,
+) -> String {
+    point_json(with_dom(|dom| {
+        vc::raster_source_point(dom, node, intrinsic_w, intrinsic_h, x, y)
+    }))
 }
 
 /// `{ ...sample, method: 'canvas-<tag>-underlay' }` when sampled.
 #[wasm_bindgen]
 pub fn vc_raster_finish(node: u32, sample_json: &str) -> String {
-    out(&with_dom(|dom| vc::raster_finish(dom, node, parse(sample_json))))
+    out(&with_dom(|dom| {
+        vc::raster_finish(dom, node, parse(sample_json))
+    }))
 }
 
 /// A picture's sample finished for the stack walk: faded by its own box's
@@ -114,7 +145,9 @@ pub fn vc_raster_finish(node: u32, sample_json: &str) -> String {
 /// (`visual::media_sample`). `node` is the picture, `el` the text.
 #[wasm_bindgen]
 pub fn vc_media_sample(node: u32, el: u32, sample_json: &str) -> String {
-    out(&with_dom(|dom| vc::media_sample(dom, node, el, parse(sample_json))))
+    out(&with_dom(|dom| {
+        vc::media_sample(dom, node, el, parse(sample_json))
+    }))
 }
 
 /// `sampleDrawablePixel` canvas sizing: `{ width, height, scaleX, scaleY }`.
@@ -126,7 +159,9 @@ pub fn vc_raster_plan(intrinsic_w: f64, intrinsic_h: f64) -> String {
 /// `sampleDrawablePixel` pixel address on the raster: `{x,y}`.
 #[wasm_bindgen]
 pub fn vc_raster_pixel(plan_json: &str, source_x: f64, source_y: f64) -> String {
-    let Ok(plan) = serde_json::from_str::<vc::RasterPlan>(plan_json) else { return "null".into() };
+    let Ok(plan) = serde_json::from_str::<vc::RasterPlan>(plan_json) else {
+        return "null".into();
+    };
     point_json(Some(vc::raster_pixel(&plan, source_x, source_y)))
 }
 
@@ -167,15 +202,38 @@ pub fn vc_css_plan(node: u32, text_color_json: &str) -> String {
 /// placement covers neither the candidate `el`'s text nor `node`'s box.
 #[wasm_bindgen]
 pub fn vc_css_url_no_image(node: u32, el: u32, size: &str, position: &str) -> String {
-    out(&with_dom(|dom| vc::css_url_no_image(dom, node, el, size, position)))
+    out(&with_dom(|dom| {
+        vc::css_url_no_image(dom, node, el, size, position)
+    }))
 }
 
 /// url path: source point on the loaded image (`{ point }` or `{ sample }`).
 /// `el` is the candidate whose text is being sampled: an image that covers
 /// neither its own box nor that text answers with a sample that ends the walk.
 #[wasm_bindgen]
-pub fn vc_css_url_source_point(node: u32, el: u32, intrinsic_w: f64, intrinsic_h: f64, size: &str, position: &str, x: f64, y: f64) -> String {
-    match with_dom(|dom| vc::css_url_source_point(dom, node, el, intrinsic_w, intrinsic_h, size, position, x, y)) {
+pub fn vc_css_url_source_point(
+    node: u32,
+    el: u32,
+    intrinsic_w: f64,
+    intrinsic_h: f64,
+    size: &str,
+    position: &str,
+    x: f64,
+    y: f64,
+) -> String {
+    match with_dom(|dom| {
+        vc::css_url_source_point(
+            dom,
+            node,
+            el,
+            intrinsic_w,
+            intrinsic_h,
+            size,
+            position,
+            x,
+            y,
+        )
+    }) {
         Ok((px, py)) => json!({ "point": { "x": px, "y": py } }).to_string(),
         Err(sample) => json!({ "sample": sample }).to_string(),
     }
@@ -185,7 +243,9 @@ pub fn vc_css_url_source_point(node: u32, el: u32, intrinsic_w: f64, intrinsic_h
 /// over `node`'s own `background-color` where the pixel is translucent.
 #[wasm_bindgen]
 pub fn vc_css_url_finish(node: u32, sample_json: &str) -> String {
-    out(&with_dom(|dom| vc::css_url_finish(dom, node, parse(sample_json))))
+    out(&with_dom(|dom| {
+        vc::css_url_finish(dom, node, parse(sample_json))
+    }))
 }
 
 /// A sampled color that ends the walk (no compositing beneath).
@@ -226,16 +286,29 @@ pub fn vc_unresolved_from_reasons(reasons_json: &str) -> String {
 #[wasm_bindgen]
 pub fn vc_prepare_analysis(candidate_json: &str) -> String {
     let candidate = parse(candidate_json);
-    serde_json::to_string(&with_dom(|dom| vc::prepare_analysis(dom, &candidate))).unwrap_or_default()
+    serde_json::to_string(&with_dom(|dom| vc::prepare_analysis(dom, &candidate)))
+        .unwrap_or_default()
 }
 
 /// `analyzeVisualContrastCandidate` after sampling: the result object.
 #[wasm_bindgen]
-pub fn vc_finish_analysis(candidate_json: &str, text_color_json: &str, samples_json: &str, points_len: u32) -> String {
+pub fn vc_finish_analysis(
+    candidate_json: &str,
+    text_color_json: &str,
+    samples_json: &str,
+    points_len: u32,
+) -> String {
     let candidate = parse(candidate_json);
-    let Some(tc) = rgba(text_color_json) else { return "null".into() };
+    let Some(tc) = rgba(text_color_json) else {
+        return "null".into();
+    };
     let samples: Vec<Value> = serde_json::from_str(samples_json).unwrap_or_default();
-    out(&vc::finish_analysis(&candidate, &tc, &samples, points_len as usize))
+    out(&vc::finish_analysis(
+        &candidate,
+        &tc,
+        &samples,
+        points_len as usize,
+    ))
 }
 
 /// `analyzeVisualContrast`: retry after scrollIntoView?

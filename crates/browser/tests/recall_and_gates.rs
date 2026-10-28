@@ -83,11 +83,16 @@ fn engine() -> Option<BrowserEngine> {
 
 fn scan(engine: &BrowserEngine, port: u16, fixture: &str) -> Vec<Finding> {
     let url = format!("http://127.0.0.1:{port}/antipatterns/{fixture}");
-    engine.detect_url(&url, &ScanOptions::default()).expect("scan")
+    engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan")
 }
 
 fn selector(f: &Finding) -> &str {
-    f.extras.get("selector").and_then(|s| s.as_str()).unwrap_or("")
+    f.extras
+        .get("selector")
+        .and_then(|s| s.as_str())
+        .unwrap_or("")
 }
 
 fn third_party(f: &Finding) -> Option<&str> {
@@ -115,10 +120,17 @@ fn prose_written_into_a_div_is_measured() {
     assert_eq!(line.len(), 1, "{f:#?}");
     let edge = on(&f, "body-text-viewport-edge", "#flag-cms-body");
     assert_eq!(edge.len(), 1, "{f:#?}");
-    assert!(edge[0].snippet.starts_with("<div> with "), "{}", edge[0].snippet);
+    assert!(
+        edge[0].snippet.starts_with("<div> with "),
+        "{}",
+        edge[0].snippet
+    );
     for id in ["#pass-flex-row", "#pass-code-block", "#pass-link-body"] {
         assert!(on(&f, "line-length", id).is_empty(), "{id}: {f:#?}");
-        assert!(on(&f, "body-text-viewport-edge", id).is_empty(), "{id}: {f:#?}");
+        assert!(
+            on(&f, "body-text-viewport-edge", id).is_empty(),
+            "{id}: {f:#?}"
+        );
     }
 }
 
@@ -127,24 +139,51 @@ fn label_collectors_read_the_text_that_sets_the_label() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let f = scan(&engine, port, "label-collectors.html");
-    let hero: Vec<&str> = of(&f, "hero-eyebrow-chip").iter().map(|h| h.snippet.as_str()).collect();
+    let hero: Vec<&str> = of(&f, "hero-eyebrow-chip")
+        .iter()
+        .map(|h| h.snippet.as_str())
+        .collect();
     assert!(
-        hero.iter().any(|s| s.contains("\"U.S.-Based Independent Broker\"")),
+        hero.iter()
+            .any(|s| s.contains("\"U.S.-Based Independent Broker\"")),
         "chip beside an icon: {hero:?}"
     );
     assert!(
-        hero.iter().any(|s| s.contains("\"Utah-based commercial insurance agency\"")),
+        hero.iter()
+            .any(|s| s.contains("\"Utah-based commercial insurance agency\"")),
         "tracking-widest chip: {hero:?}"
     );
     assert!(!hero.iter().any(|s| s.contains("Plainly set")), "{hero:?}");
     assert!(!hero.iter().any(|s| s.contains("North")), "{hero:?}");
-    let kickers: Vec<&str> = of(&f, "kicker-above-heading").iter().map(|h| h.snippet.as_str()).collect();
-    assert!(kickers.iter().any(|s| s.contains("\"On the roadmap\"")), "{kickers:?}");
+    let kickers: Vec<&str> = of(&f, "kicker-above-heading")
+        .iter()
+        .map(|h| h.snippet.as_str())
+        .collect();
+    assert!(
+        kickers.iter().any(|s| s.contains("\"On the roadmap\"")),
+        "{kickers:?}"
+    );
     // The hero rule took the tracked chips; the kicker rule does not repeat them.
-    assert!(!kickers.iter().any(|s| s.contains("Broker") || s.contains("Utah")), "{kickers:?}");
-    let numbered: Vec<&str> = of(&f, "numbered-section-labels").iter().map(|h| h.snippet.as_str()).collect();
-    assert!(numbered.iter().any(|s| s.contains("\"Say who you want\"")), "{numbered:?}");
-    assert!(!numbered.iter().any(|s| s.contains("numbered card") || s.contains("numbers itself")), "{numbered:?}");
+    assert!(
+        !kickers
+            .iter()
+            .any(|s| s.contains("Broker") || s.contains("Utah")),
+        "{kickers:?}"
+    );
+    let numbered: Vec<&str> = of(&f, "numbered-section-labels")
+        .iter()
+        .map(|h| h.snippet.as_str())
+        .collect();
+    assert!(
+        numbered.iter().any(|s| s.contains("\"Say who you want\"")),
+        "{numbered:?}"
+    );
+    assert!(
+        !numbered
+            .iter()
+            .any(|s| s.contains("numbered card") || s.contains("numbers itself")),
+        "{numbered:?}"
+    );
 }
 
 #[test]
@@ -152,16 +191,41 @@ fn the_eyebrow_hand_off_keeps_dated_meta_and_small_caps_straight() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let f = scan(&engine, port, "eyebrow-hand-off.html");
-    let hero: Vec<&str> = of(&f, "hero-eyebrow-chip").iter().map(|h| h.snippet.as_str()).collect();
-    assert!(hero.iter().any(|s| s.contains("\"Now in public beta\"")), "{hero:?}");
+    let hero: Vec<&str> = of(&f, "hero-eyebrow-chip")
+        .iter()
+        .map(|h| h.snippet.as_str())
+        .collect();
+    assert!(
+        hero.iter().any(|s| s.contains("\"Now in public beta\"")),
+        "{hero:?}"
+    );
     // A dated line and a <time> over a post's h1 are its meta, not an eyebrow.
-    assert!(!hero.iter().any(|s| s.contains("September") || s.contains("Sep 2")), "{hero:?}");
+    assert!(
+        !hero
+            .iter()
+            .any(|s| s.contains("September") || s.contains("Sep 2")),
+        "{hero:?}"
+    );
     // The hero rule does not read small-caps as caps, so the kicker keeps it.
-    let kickers: Vec<&str> = of(&f, "kicker-above-heading").iter().map(|h| h.snippet.as_str()).collect();
-    assert!(kickers.iter().any(|s| s.contains("\"new in version four\"")), "{kickers:?}");
-    assert!(!kickers.iter().any(|s| s.contains("public beta")), "{kickers:?}");
+    let kickers: Vec<&str> = of(&f, "kicker-above-heading")
+        .iter()
+        .map(|h| h.snippet.as_str())
+        .collect();
+    assert!(
+        kickers
+            .iter()
+            .any(|s| s.contains("\"new in version four\"")),
+        "{kickers:?}"
+    );
+    assert!(
+        !kickers.iter().any(|s| s.contains("public beta")),
+        "{kickers:?}"
+    );
     for id in ["#pass-dated-meta", "#pass-time-meta"] {
-        assert!(on(&f, "kicker-above-heading", id).is_empty(), "{id}: {f:#?}");
+        assert!(
+            on(&f, "kicker-above-heading", id).is_empty(),
+            "{id}: {f:#?}"
+        );
     }
 }
 
@@ -170,8 +234,15 @@ fn a_bold_div_title_anchors_an_icon_tile() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let f = scan(&engine, port, "icon-tile-card-title.html");
-    let tiles: Vec<&str> = of(&f, "icon-tile-stack").iter().map(|h| h.snippet.as_str()).collect();
-    assert_eq!(tiles, vec!["48x48px icon tile above div \"Global Hotkey Overlay\""], "{f:#?}");
+    let tiles: Vec<&str> = of(&f, "icon-tile-stack")
+        .iter()
+        .map(|h| h.snippet.as_str())
+        .collect();
+    assert_eq!(
+        tiles,
+        vec!["48x48px icon tile above div \"Global Hotkey Overlay\""],
+        "{f:#?}"
+    );
 }
 
 #[test]
@@ -180,8 +251,16 @@ fn small_labels_are_not_body_text_and_a_short_line_is_scored() {
     let port = serve();
     let f = scan(&engine, port, "small-text-labels.html");
     assert_eq!(on(&f, "tiny-text", "#flag-tiny-prose").len(), 1, "{f:#?}");
-    assert_eq!(on(&f, "wide-tracking", "#flag-tracked-prose").len(), 1, "{f:#?}");
-    assert_eq!(on(&f, "low-contrast", "#flag-nine-pixel-line").len(), 1, "{f:#?}");
+    assert_eq!(
+        on(&f, "wide-tracking", "#flag-tracked-prose").len(),
+        1,
+        "{f:#?}"
+    );
+    assert_eq!(
+        on(&f, "low-contrast", "#flag-nine-pixel-line").len(),
+        1,
+        "{f:#?}"
+    );
     for id in ["#pass-typed-caps-meta", "#pass-terminal-command"] {
         assert!(on(&f, "tiny-text", id).is_empty(), "{id}: {f:#?}");
     }
@@ -196,20 +275,49 @@ fn colour_and_effect_tells_measure_what_paints() {
     let port = serve();
     let f = scan(&engine, port, "paint-that-shows.html");
     let palette = |id: &str| -> Vec<String> {
-        on(&f, "ai-color-palette", id).iter().map(|h| h.snippet.clone()).collect()
+        on(&f, "ai-color-palette", id)
+            .iter()
+            .map(|h| h.snippet.clone())
+            .collect()
     };
-    assert_eq!(palette("#flag-cyan-ramp"), vec!["Cyan gradient background"], "{f:#?}");
+    assert_eq!(
+        palette("#flag-cyan-ramp"),
+        vec!["Cyan gradient background"],
+        "{f:#?}"
+    );
     assert!(palette("#pass-hover-wipe").is_empty(), "{f:#?}");
     // One report per element: the computed form speaks for the class form.
-    assert_eq!(palette("#flag-purple-once"), vec!["Purple/violet gradient background"], "{f:#?}");
+    assert_eq!(
+        palette("#flag-purple-once"),
+        vec!["Purple/violet gradient background"],
+        "{f:#?}"
+    );
     // A gradient clipped to the text is gradient-text's.
-    assert_eq!(on(&f, "gradient-text", "#flag-clipped-violet").len(), 1, "{f:#?}");
+    assert_eq!(
+        on(&f, "gradient-text", "#flag-clipped-violet").len(),
+        1,
+        "{f:#?}"
+    );
     assert!(palette("#flag-clipped-violet").is_empty(), "{f:#?}");
-    assert!(on(&f, "gradient-text", "#pass-watermark").is_empty(), "{f:#?}");
-    assert!(on(&f, "gradient-text", "#pass-closed-menu").is_empty(), "{f:#?}");
+    assert!(
+        on(&f, "gradient-text", "#pass-watermark").is_empty(),
+        "{f:#?}"
+    );
+    assert!(
+        on(&f, "gradient-text", "#pass-closed-menu").is_empty(),
+        "{f:#?}"
+    );
     let halos = of(&f, "gpt-thin-border-wide-shadow");
-    assert!(halos.iter().any(|h| selector(h).contains("#flag-paper-card")), "{halos:#?}");
-    assert!(!halos.iter().any(|h| selector(h).contains("glass")), "{halos:#?}");
+    assert!(
+        halos
+            .iter()
+            .any(|h| selector(h).contains("#flag-paper-card")),
+        "{halos:#?}"
+    );
+    assert!(
+        !halos.iter().any(|h| selector(h).contains("glass")),
+        "{halos:#?}"
+    );
     assert_eq!(on(&f, "dark-glow", "#flag-neon-glow").len(), 1, "{f:#?}");
     assert!(on(&f, "dark-glow", "#pass-shadow-lg").is_empty(), "{f:#?}");
 }
@@ -220,15 +328,35 @@ fn run_28_widget_vendors_are_named() {
     let port = serve();
     let f = scan(&engine, port, "third-party-widgets-carousels.html");
     let tagged = |rule: &str, id: &str| -> Option<String> {
-        on(&f, rule, id).first().and_then(|h| third_party(h).map(String::from))
+        on(&f, rule, id)
+            .first()
+            .and_then(|h| third_party(h).map(String::from))
     };
     // Slick's list and SuperSlide's tempWrap are carousel windows: the slide
     // parked past them is not a clipping fault, so there is nothing to tag.
-    assert!(on(&f, "clipped-overflow-container", "#pass-slick-list").is_empty(), "{f:#?}");
-    assert_eq!(tagged("low-contrast", "#flag-slick-dot").as_deref(), Some("Slick"), "{f:#?}");
-    assert!(on(&f, "clipped-overflow-container", "#pass-superslide-wrap").is_empty(), "{f:#?}");
-    assert_eq!(tagged("low-contrast", "#flag-marquee-quote").as_deref(), Some("react-fast-marquee"), "{f:#?}");
-    assert_eq!(tagged("bounce-easing", "#flag-kaltura-area").as_deref(), Some("Kaltura"), "{f:#?}");
+    assert!(
+        on(&f, "clipped-overflow-container", "#pass-slick-list").is_empty(),
+        "{f:#?}"
+    );
+    assert_eq!(
+        tagged("low-contrast", "#flag-slick-dot").as_deref(),
+        Some("Slick"),
+        "{f:#?}"
+    );
+    assert!(
+        on(&f, "clipped-overflow-container", "#pass-superslide-wrap").is_empty(),
+        "{f:#?}"
+    );
+    assert_eq!(
+        tagged("low-contrast", "#flag-marquee-quote").as_deref(),
+        Some("react-fast-marquee"),
+        "{f:#?}"
+    );
+    assert_eq!(
+        tagged("bounce-easing", "#flag-kaltura-area").as_deref(),
+        Some("Kaltura"),
+        "{f:#?}"
+    );
     let own = on(&f, "low-contrast", "#flag-own-button");
     assert_eq!(own.len(), 1, "{f:#?}");
     assert_eq!(third_party(own[0]), None);
@@ -241,7 +369,11 @@ fn run_28_ad_tech_hosts_are_advisory() {
     let f = scan(&engine, port, "script-error-ad-tech-hosts.html");
     let errors = of(&f, "script-error");
     let vendor = |needle: &str| errors.iter().find(|e| e.snippet.contains(needle)).copied();
-    for (needle, name) in [("nagich.co.il", "Nagich"), ("reportingjs", "Chase Reporting"), ("_prebidjs", "Prebid")] {
+    for (needle, name) in [
+        ("nagich.co.il", "Nagich"),
+        ("reportingjs", "Chase Reporting"),
+        ("_prebidjs", "Prebid"),
+    ] {
         let e = vendor(needle).unwrap_or_else(|| panic!("{needle}: {errors:#?}"));
         assert_eq!(e.severity, "advisory", "{needle}");
         assert_eq!(third_party(e), Some(name), "{needle}");
@@ -285,11 +417,21 @@ fn a_press_and_hold_sheet_over_the_page_is_a_challenge() {
     let port = serve();
     let options = ScanOptions::default();
     let open = format!("http://127.0.0.1:{port}/validity/press-and-hold.html");
-    let err = engine.detect_url(&open, &options).expect_err("the sheet stands in front of the page");
+    let err = engine
+        .detect_url(&open, &options)
+        .expect_err("the sheet stands in front of the page");
     assert!(err.message.contains("bot challenge"), "{}", err.message);
-    assert!(err.message.contains("overlay human-press-and-hold"), "{}", err.message);
+    assert!(
+        err.message.contains("overlay human-press-and-hold"),
+        "{}",
+        err.message
+    );
     let closed = format!("http://127.0.0.1:{port}/validity/press-and-hold-closed.html");
-    engine.detect_url(&closed, &options).expect("a closed sheet leaves the page");
+    engine
+        .detect_url(&closed, &options)
+        .expect("a closed sheet leaves the page");
     let faded = format!("http://127.0.0.1:{port}/validity/press-and-hold-faded.html");
-    engine.detect_url(&faded, &options).expect("a sheet inside a faded wrapper leaves the page");
+    engine
+        .detect_url(&faded, &options)
+        .expect("a sheet inside a faded wrapper leaves the page");
 }

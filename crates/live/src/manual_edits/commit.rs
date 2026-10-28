@@ -103,12 +103,10 @@ struct Agent<'a> {
 
 impl Agent<'_> {
     fn run(&mut self, batch: &Value) -> Result<Value, String> {
-        let cb = match self.apply_batch_to_source.as_mut() {
-            Some(f) => {
-                Some(&mut **f as &mut dyn FnMut(&Value, Option<&Value>) -> Result<Value, String>)
-            }
-            None => None,
-        };
+        let cb = self
+            .apply_batch_to_source
+            .as_mut()
+            .map(|f| &mut **f as &mut dyn FnMut(&Value, Option<&Value>) -> Result<Value, String>);
         run_copy_edit_batch_agent(
             batch,
             &self.cwd,

@@ -25,15 +25,19 @@ const TEXT_LABEL_OVERLAP_PX: f64 = 4.0;
 const TEXT_LABEL_MAX_CLIMB: usize = 2;
 
 /// Tags an unassociated text label is written in.
-const TEXT_LABEL_TAGS: &[&str] = &["label", "span", "div", "p", "legend", "dt", "strong", "b", "small"];
+const TEXT_LABEL_TAGS: &[&str] = &[
+    "label", "span", "div", "p", "legend", "dt", "strong", "b", "small",
+];
 /// Tags whose text is not label text, and whose subtree is not searched.
-const NOT_LABEL_TEXT_TAGS: &[&str] =
-    &["input", "select", "textarea", "button", "option", "script", "style", "template", "noscript"];
+const NOT_LABEL_TEXT_TAGS: &[&str] = &[
+    "input", "select", "textarea", "button", "option", "script", "style", "template", "noscript",
+];
 /// What an element cannot hold and still be a plain text label.
 const CONTROL_SELECTOR: &str =
     "input, select, textarea, button, a, [role=\"button\"], [role=\"link\"], [contenteditable]";
 /// Boxes the climb for a label above the field does not leave.
-const LABEL_CLIMB_STOP_TAGS: &[&str] = &["form", "fieldset", "body", "html", "td", "th", "li", "tr"];
+const LABEL_CLIMB_STOP_TAGS: &[&str] =
+    &["form", "fieldset", "body", "html", "td", "th", "li", "tr"];
 
 /// Whether `root` shows text of its own: it or a descendant outside any
 /// control holds a non-blank text node in a box painted at capture and
@@ -44,7 +48,11 @@ fn shows_text(dom: &dyn Dom, root: ElId, field: ElId) -> bool {
         if el == field || NOT_LABEL_TEXT_TAGS.contains(&tag_lower(dom, el).as_str()) {
             continue;
         }
-        if dom.direct_text_nodes(el).iter().any(|t| !js::trim(t).is_empty()) {
+        if dom
+            .direct_text_nodes(el)
+            .iter()
+            .any(|t| !js::trim(t).is_empty())
+        {
             let r = dom.rect(el);
             if r.width > 1.0 && r.height > 1.0 && painted_at_capture(dom, el) {
                 return true;
@@ -63,9 +71,9 @@ fn all(dom: &dyn Dom, selector: &str) -> Vec<ElId> {
 fn label_element(dom: &dyn Dom, field: ElId) -> bool {
     let id = dom.attr(field, "id").unwrap_or_default();
     if !id.is_empty()
-        && all(dom, "label")
-            .into_iter()
-            .any(|l| dom.attr(l, "for").as_deref() == Some(id.as_str()) && shows_text(dom, l, field))
+        && all(dom, "label").into_iter().any(|l| {
+            dom.attr(l, "for").as_deref() == Some(id.as_str()) && shows_text(dom, l, field)
+        })
     {
         return true;
     }
@@ -86,7 +94,9 @@ fn labelledby_text(dom: &dyn Dom, field: ElId) -> bool {
     }
     all(dom, "*").into_iter().any(|e| {
         e != field
-            && dom.attr(e, "id").is_some_and(|id| ids.contains(&id.as_str()))
+            && dom
+                .attr(e, "id")
+                .is_some_and(|id| ids.contains(&id.as_str()))
             && shows_text(dom, e, field)
     })
 }
@@ -106,12 +116,19 @@ fn text_label_above(dom: &dyn Dom, field: ElId) -> bool {
             if dom.attr(prev, "for").is_some_and(|f| !f.is_empty()) {
                 return false;
             }
-            let text = js::trim(&dom.text_content(prev)).split_whitespace().collect::<Vec<_>>().join(" ");
+            let text = js::trim(&dom.text_content(prev))
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
             let chars = text.chars().count();
             if chars == 0 || chars > TEXT_LABEL_MAX_CHARS {
                 return false;
             }
-            if !dom.query_all(Some(prev), CONTROL_SELECTOR).unwrap_or_default().is_empty() {
+            if !dom
+                .query_all(Some(prev), CONTROL_SELECTOR)
+                .unwrap_or_default()
+                .is_empty()
+            {
                 return false;
             }
             let pr = dom.rect(prev);
@@ -142,7 +159,13 @@ mod tests {
     use super::*;
     use crate::browser::fake_dom::FakeDom;
 
-    fn text_el(d: &mut FakeDom, parent: ElId, tag: &str, text: &str, rect: (f64, f64, f64, f64)) -> ElId {
+    fn text_el(
+        d: &mut FakeDom,
+        parent: ElId,
+        tag: &str,
+        text: &str,
+        rect: (f64, f64, f64, f64),
+    ) -> ElId {
         let el = d.add(Some(parent), tag);
         d.add_text(el, text);
         d.set_rect(el, rect.0, rect.1, rect.2, rect.3);
@@ -160,7 +183,13 @@ mod tests {
         // superradiant.co: `<label for>` over the field.
         let mut d = FakeDom::new();
         let (_, body) = d.with_page();
-        let label = text_el(&mut d, body, "label", "Organization", (0.0, 0.0, 120.0, 20.0));
+        let label = text_el(
+            &mut d,
+            body,
+            "label",
+            "Organization",
+            (0.0, 0.0, 120.0, 20.0),
+        );
         d.set_attr(label, "for", "org");
         let input = field(&mut d, body, 28.0);
         d.set_attr(input, "id", "org");
@@ -206,7 +235,13 @@ mod tests {
 
         let mut d = FakeDom::new();
         let (_, body) = d.with_page();
-        let heading = text_el(&mut d, body, "h3", "Billing address", (0.0, 0.0, 200.0, 24.0));
+        let heading = text_el(
+            &mut d,
+            body,
+            "h3",
+            "Billing address",
+            (0.0, 0.0, 200.0, 24.0),
+        );
         d.set_attr(heading, "id", "billing");
         let spacer = d.add(Some(body), "hr");
         d.set_rect(spacer, 0.0, 30.0, 280.0, 1.0);
@@ -276,7 +311,13 @@ mod tests {
         let row = d.add(Some(body), "div");
         let first = d.add(Some(row), "div");
         d.set_rect(first, 0.0, 0.0, 280.0, 70.0);
-        text_el(&mut d, first, "label", "First name", (0.0, 0.0, 280.0, 20.0));
+        text_el(
+            &mut d,
+            first,
+            "label",
+            "First name",
+            (0.0, 0.0, 280.0, 20.0),
+        );
         field(&mut d, first, 28.0);
         let second = d.add(Some(row), "div");
         d.set_rect(second, 0.0, 78.0, 280.0, 40.0);

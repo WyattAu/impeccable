@@ -521,9 +521,9 @@ pub fn parse_radial_gradient_stops(value: Option<&str>) -> Option<Vec<GradientSt
             continue; // repeating-* is a pattern, not a spotlight
         }
         let start = g.get(0).map(|m| m.start()).unwrap_or(0);
-        let open = match value[start..].find('(') {
-            Some(i) => start + i,
-            None => return None,
+        let open = {
+            let i = value[start..].find('(')?;
+            start + i
         };
         let end = matching_paren(bytes, open)?;
         let args = color::split_top_level_commas(&value[open + 1..end]);
@@ -736,7 +736,10 @@ pub fn box_shadow_paints(box_shadow: &str) -> bool {
         }
         let cleaned = CSS_COLOR_TOKEN_RE.replace_all(layer, " ");
         let cleaned = WORD_RE.replace_all(&cleaned, " ");
-        let nums: Vec<f64> = NUM_RE.find_iter(&cleaned).map(|m| parse_float(m.as_str())).collect();
+        let nums: Vec<f64> = NUM_RE
+            .find_iter(&cleaned)
+            .map(|m| parse_float(m.as_str()))
+            .collect();
         if !nums.iter().any(|&n| n != 0.0) {
             return false;
         }
@@ -1190,7 +1193,7 @@ fn css_unescape(s: &str) -> String {
             continue;
         }
         let mut hex = String::new();
-        while hex.len() < 6 && chars.peek().map_or(false, |h| h.is_ascii_hexdigit()) {
+        while hex.len() < 6 && chars.peek().is_some_and(|h| h.is_ascii_hexdigit()) {
             hex.push(chars.next().unwrap_or_default());
         }
         if hex.is_empty() {
@@ -1199,10 +1202,15 @@ fn css_unescape(s: &str) -> String {
             }
             continue;
         }
-        if chars.peek().map_or(false, |w| *w == ' ') {
+        if chars.peek().is_some_and(|w| *w == ' ') {
             chars.next();
         }
-        out.push(u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32).unwrap_or('\u{fffd}'));
+        out.push(
+            u32::from_str_radix(&hex, 16)
+                .ok()
+                .and_then(char::from_u32)
+                .unwrap_or('\u{fffd}'),
+        );
     }
     out
 }
@@ -1342,8 +1350,14 @@ mod tests {
         // A 4px diagonal move under a 4px pull still shows past a rounded
         // corner (review of #968): the offset is read as a distance.
         assert!(box_shadow_paints("rgb(0, 0, 0) 4px 4px 0px -4px"));
-        assert!(box_shadow_paints("rgb(0, 0, 0) 0px 4px 0px -3px"), "offset past the spread");
-        assert!(box_shadow_paints("rgb(0, 0, 0) 0px 0px 6px -2px"), "a blur reaches out");
+        assert!(
+            box_shadow_paints("rgb(0, 0, 0) 0px 4px 0px -3px"),
+            "offset past the spread"
+        );
+        assert!(
+            box_shadow_paints("rgb(0, 0, 0) 0px 0px 6px -2px"),
+            "a blur reaches out"
+        );
     }
 
     #[test]
@@ -1391,11 +1405,21 @@ mod tests {
         // square, whatever its horizontal one.
         assert_eq!(
             c("10px / 0"),
-            Corners { top_left: 0.0, top_right: 0.0, bottom_right: 0.0, bottom_left: 0.0 }
+            Corners {
+                top_left: 0.0,
+                top_right: 0.0,
+                bottom_right: 0.0,
+                bottom_left: 0.0
+            }
         );
         assert_eq!(
             c("10px / 0px 6px"),
-            Corners { top_left: 0.0, top_right: 10.0, bottom_right: 0.0, bottom_left: 10.0 }
+            Corners {
+                top_left: 0.0,
+                top_right: 10.0,
+                bottom_right: 0.0,
+                bottom_left: 10.0
+            }
         );
         assert_eq!(parse_radius_corners(Some("10px / calc(1px)"), 200.0), None);
         assert_eq!(parse_radius_corner_px(Some("10px 0px"), 200.0), Some(0.0));

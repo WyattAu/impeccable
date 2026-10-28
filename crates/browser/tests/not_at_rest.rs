@@ -70,7 +70,9 @@ fn what_is_not_at_rest_is_not_scored() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/{FIXTURE}");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     let flagged: Vec<(String, String, String)> = findings
         .iter()
         .filter(|f| {
@@ -82,13 +84,22 @@ fn what_is_not_at_rest_is_not_scored() {
         .map(|f| {
             (
                 f.antipattern.clone(),
-                f.extras.get("selector").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                f.extras
+                    .get("selector")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
                 f.snippet.clone(),
             )
         })
         .collect();
-    let on = |rule: &str, selector: &str| flagged.iter().any(|(r, s, _)| r == rule && s == selector);
-    let reports = |rule: &str, needle: &str| flagged.iter().any(|(r, _, snippet)| r == rule && snippet.contains(needle));
+    let on =
+        |rule: &str, selector: &str| flagged.iter().any(|(r, s, _)| r == rule && s == selector);
+    let reports = |rule: &str, needle: &str| {
+        flagged
+            .iter()
+            .any(|(r, _, snippet)| r == rule && snippet.contains(needle))
+    };
 
     for want in [
         ("buried-raster", "#flag-buried"),
@@ -105,9 +116,26 @@ fn what_is_not_at_rest_is_not_scored() {
         .iter()
         .filter(|(_, s, _)| s.starts_with("#pass-"))
         .collect();
-    assert!(passed.is_empty(), "unexpected should-pass findings: {passed:#?}");
-    assert_eq!(flagged.iter().filter(|(r, _, _)| r == "buried-raster").count(), 2, "{flagged:#?}");
-    assert_eq!(flagged.iter().filter(|(r, _, _)| r == "cramped-padding").count(), 2, "{flagged:#?}");
+    assert!(
+        passed.is_empty(),
+        "unexpected should-pass findings: {passed:#?}"
+    );
+    assert_eq!(
+        flagged
+            .iter()
+            .filter(|(r, _, _)| r == "buried-raster")
+            .count(),
+        2,
+        "{flagged:#?}"
+    );
+    assert_eq!(
+        flagged
+            .iter()
+            .filter(|(r, _, _)| r == "cramped-padding")
+            .count(),
+        2,
+        "{flagged:#?}"
+    );
     // Keyframes no painted element runs put no glow on the page.
     assert!(!reports("dark-glow", "#00c8ff"), "{flagged:#?}");
     assert!(!reports("dark-glow", "#7dff00"), "{flagged:#?}");
@@ -125,6 +153,15 @@ fn what_is_not_at_rest_is_not_scored() {
         .and_then(|(_, rest)| rest.split_once(" chars)"))
         .map(|(counts, _)| counts)
         .unwrap_or("");
-    assert_eq!(counts, format!("{HIDDEN_CHARS} of {TOTAL_CHARS}"), "{}", hidden[0]);
-    assert!(hidden[0].contains("This section was meant to fade in"), "{}", hidden[0]);
+    assert_eq!(
+        counts,
+        format!("{HIDDEN_CHARS} of {TOTAL_CHARS}"),
+        "{}",
+        hidden[0]
+    );
+    assert!(
+        hidden[0].contains("This section was meant to fade in"),
+        "{}",
+        hidden[0]
+    );
 }

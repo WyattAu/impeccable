@@ -1,5 +1,5 @@
 //! Repair history is derived from stored packets, never supplied by the producer.
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 fn inputs(state: &Value, component: &Value) -> BTreeMap<String, Value> {
@@ -73,8 +73,10 @@ pub fn between(previous: &Value, current: &Value) -> Value {
                 .cloned()
                 .collect();
             let source_changed = prior["revision"] != component["revision"];
-            let unchanged = !source_changed || (current["visualApprovalCarry"][id]["basis"] == "identical-native-captures-v1"
-                && current["visualApprovalCarry"][id]["fromPacketRevision"] == previous["packet"]["revision"]);
+            let unchanged = !source_changed
+                || (current["visualApprovalCarry"][id]["basis"] == "identical-native-captures-v1"
+                    && current["visualApprovalCarry"][id]["fromPacketRevision"]
+                        == previous["packet"]["revision"]);
 
             let mut reasons = Vec::new();
             if !files.is_empty() {
@@ -95,8 +97,12 @@ pub fn between(previous: &Value, current: &Value) -> Value {
         let listed = previous["draft"]["reclassify"].as_array()
             .and_then(|all| all.iter().find(|r| r["id"] == id))
             .map(|r| json!({"action":"reclassify","kind":r["kind"],"feedback":r["feedback"].as_str().unwrap_or("")}));
-        let decision = listed.as_ref().unwrap_or(&previous["draft"]["decisions"][id]);
-        if matches!(decision["action"].as_str(), Some("revise" | "reclassify")) && !previous["receipt"].is_null() {
+        let decision = listed
+            .as_ref()
+            .unwrap_or(&previous["draft"]["decisions"][id]);
+        if matches!(decision["action"].as_str(), Some("revise" | "reclassify"))
+            && !previous["receipt"].is_null()
+        {
             feedback.insert(
                 id.into(),
                 json!({"round":previous["packet"]["round"],"decision":decision}),

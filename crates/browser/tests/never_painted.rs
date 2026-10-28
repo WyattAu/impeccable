@@ -63,19 +63,30 @@ fn paint_that_never_reaches_the_screen_is_not_scored() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/{FIXTURE}");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     let flagged: Vec<(String, String, String)> = findings
         .iter()
         .map(|f| {
             (
                 f.antipattern.clone(),
-                f.extras.get("selector").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                f.extras
+                    .get("selector")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
                 f.snippet.clone(),
             )
         })
         .collect();
-    let on = |rule: &str, selector: &str| flagged.iter().any(|(r, s, _)| r == rule && s == selector);
-    let reports = |rule: &str, needle: &str| flagged.iter().any(|(r, _, snippet)| r == rule && snippet.contains(needle));
+    let on =
+        |rule: &str, selector: &str| flagged.iter().any(|(r, s, _)| r == rule && s == selector);
+    let reports = |rule: &str, needle: &str| {
+        flagged
+            .iter()
+            .any(|(r, _, snippet)| r == rule && snippet.contains(needle))
+    };
 
     for want in [
         ("low-contrast", "#flag-dot"),
@@ -95,21 +106,44 @@ fn paint_that_never_reaches_the_screen_is_not_scored() {
         assert!(on(want.0, want.1), "missing {want:?} in {flagged:#?}");
     }
     // Words in an inline colour that no transition moves are at rest.
-    assert!(reports("low-contrast", "text #e2e2e6 on #ffffff"), "{flagged:#?}");
+    assert!(
+        reports("low-contrast", "text #e2e2e6 on #ffffff"),
+        "{flagged:#?}"
+    );
     // Copy an editor coloured under a theme's transition is not a reveal:
     // the footer list, the one-link paragraphs and the TinyMCE spans.
-    for pair in ["text #b1b1b1 on #ffffff", "text #a9a9aa on #ffffff", "text #c4c4c5 on #ffffff"] {
-        assert!(reports("low-contrast", pair), "missing {pair} in {flagged:#?}");
+    for pair in [
+        "text #b1b1b1 on #ffffff",
+        "text #a9a9aa on #ffffff",
+        "text #c4c4c5 on #ffffff",
+    ] {
+        assert!(
+            reports("low-contrast", pair),
+            "missing {pair} in {flagged:#?}"
+        );
     }
 
     let passed: Vec<&(String, String, String)> = flagged
         .iter()
         .filter(|(_, s, _)| s.starts_with("#pass-"))
         .collect();
-    assert!(passed.is_empty(), "unexpected should-pass findings: {passed:#?}");
+    assert!(
+        passed.is_empty(),
+        "unexpected should-pass findings: {passed:#?}"
+    );
     // The reveal's words carry no id; their colour names them.
-    assert!(!reports("low-contrast", "text #e4e4e7 on #ffffff"), "{flagged:#?}");
+    assert!(
+        !reports("low-contrast", "text #e4e4e7 on #ffffff"),
+        "{flagged:#?}"
+    );
     // The drawer's gradient label is the page's only other clipped gradient,
     // and the page form does not stand in for it.
-    assert_eq!(flagged.iter().filter(|(r, _, _)| r == "gradient-text").count(), 1, "{flagged:#?}");
+    assert_eq!(
+        flagged
+            .iter()
+            .filter(|(r, _, _)| r == "gradient-text")
+            .count(),
+        1,
+        "{flagged:#?}"
+    );
 }

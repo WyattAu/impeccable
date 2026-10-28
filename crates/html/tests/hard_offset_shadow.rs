@@ -7,21 +7,43 @@ fn shadow_list_fixture_has_only_four_valid_advisories() {
         .join("../../tests/fixtures/hard-offset-shadow/lists.html");
     let html = std::fs::read_to_string(&path).unwrap();
     let findings = detect_html_source(&html, &path, &DetectHtmlOptions::default());
-    let hits: Vec<_> = findings.iter().filter(|f| f.antipattern == "hard-offset-shadow").collect();
+    let hits: Vec<_> = findings
+        .iter()
+        .filter(|f| f.antipattern == "hard-offset-shadow")
+        .collect();
     assert_eq!(hits.len(), 4, "{hits:#?}");
-    assert!(hits.iter().all(|f| f.advisory == Some(true) && f.severity == "advisory"));
+    assert!(hits
+        .iter()
+        .all(|f| f.advisory == Some(true) && f.severity == "advisory"));
 }
 
 #[test]
 fn invalid_shadow_lists_do_not_report_valid_looking_layers() {
-    for invalid in ["0 0 -1px black", "4px black", "4px 4px red blue", "none", ""] {
+    for invalid in [
+        "0 0 -1px black",
+        "4px black",
+        "4px 4px red blue",
+        "none",
+        "",
+    ] {
         for shadow in [
             format!("{invalid}, 4px 4px black"),
             format!("4px 4px black, {invalid}"),
         ] {
-            let html = format!("<div style='width:220px;height:96px;box-shadow:{shadow}'>Invalid shadow</div>");
-            let findings = detect_html_source(&html, Path::new("/tmp/invalid-shadow.html"), &DetectHtmlOptions::default());
-            assert!(!findings.iter().any(|f| f.antipattern == "hard-offset-shadow"), "{shadow}: {findings:#?}");
+            let html = format!(
+                "<div style='width:220px;height:96px;box-shadow:{shadow}'>Invalid shadow</div>"
+            );
+            let findings = detect_html_source(
+                &html,
+                Path::new("/tmp/invalid-shadow.html"),
+                &DetectHtmlOptions::default(),
+            );
+            assert!(
+                !findings
+                    .iter()
+                    .any(|f| f.antipattern == "hard-offset-shadow"),
+                "{shadow}: {findings:#?}"
+            );
         }
     }
 }

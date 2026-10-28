@@ -46,7 +46,10 @@ pub fn inspect(sessions: &[PathBuf], required: &[String]) -> Result<Value, Strin
         .map(|dir| store::read(&dir.join("current.json")))
         .collect::<Result<Vec<_>, _>>()?;
     let states: Vec<(&PathBuf, Value)> = sessions.iter().zip(states).collect();
-    if let Some((_, state)) = states.iter().find(|(d, s)| s["packet"]["stage"] == "hero" && accepted_in(d, s)) {
+    if let Some((_, state)) = states
+        .iter()
+        .find(|(d, s)| s["packet"]["stage"] == "hero" && accepted_in(d, s))
+    {
         return Ok(terminal(state));
     }
     for stage in required {
@@ -68,8 +71,14 @@ pub fn inspect(sessions: &[PathBuf], required: &[String]) -> Result<Value, Strin
 /// Ordinary local sessions share a project identity. Hosted sessions transport
 /// their prior receipt directories explicitly because captures use snapshots.
 pub fn project_sessions(root: &Path, project: &Path) -> Result<Vec<PathBuf>, String> {
-    if !root.exists() { return Ok(vec![]); }
-    if root.canonicalize().map_err(|e| e.to_string())?.starts_with(project) {
+    if !root.exists() {
+        return Ok(vec![]);
+    }
+    if root
+        .canonicalize()
+        .map_err(|e| e.to_string())?
+        .starts_with(project)
+    {
         return Err("review store must be outside the builder project".into());
     }
     let mut sessions = Vec::new();
@@ -77,13 +86,22 @@ pub fn project_sessions(root: &Path, project: &Path) -> Result<Vec<PathBuf>, Str
         let entry = entry.map_err(|e| e.to_string())?;
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        if name.len() != 64 || !name.bytes().all(|b| b.is_ascii_hexdigit()) { continue; }
+        if name.len() != 64 || !name.bytes().all(|b| b.is_ascii_hexdigit()) {
+            continue;
+        }
         let path = entry.path();
-        if !path.join("current.json").exists() { continue; }
+        if !path.join("current.json").exists() {
+            continue;
+        }
         // A foreign or abandoned session must not disable review for every project.
-        let Ok(state) = store::read(&path.join("current.json")) else { continue; };
+        let Ok(state) = store::read(&path.join("current.json")) else {
+            continue;
+        };
         if string(&state, "project").ok() == Some(project.to_string_lossy().as_ref())
-            && state["journey"] == journey(project)? { sessions.push(path); }
+            && state["journey"] == journey(project)?
+        {
+            sessions.push(path);
+        }
     }
     Ok(sessions)
 }
@@ -92,7 +110,9 @@ pub fn project_sessions(root: &Path, project: &Path) -> Result<Vec<PathBuf>, Str
 /// Hosts pass their own session directories because their project is a snapshot.
 pub fn journey(project: &Path) -> Result<Value, String> {
     let path = project.join(".impeccable/build/state.json");
-    if !path.exists() { return Ok(Value::Null); }
+    if !path.exists() {
+        return Ok(Value::Null);
+    }
     let state = store::read(&path)?;
     let started = string(&state, "startedAt")?;
     Ok(json!({"startedAt":started,"artifact":state["artifact"],"sessionId":state["sessionId"]}))
@@ -101,7 +121,9 @@ pub fn journey(project: &Path) -> Result<Value, String> {
 pub fn final_session(root: &Path, project: &Path) -> Result<Option<PathBuf>, String> {
     for path in project_sessions(root, project)? {
         let state = store::read(&path.join("current.json"))?;
-        if state["packet"]["stage"] == "hero" && accepted_in(&path, &state) { return Ok(Some(path)); }
+        if state["packet"]["stage"] == "hero" && accepted_in(&path, &state) {
+            return Ok(Some(path));
+        }
     }
     Ok(None)
 }

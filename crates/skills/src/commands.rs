@@ -8,7 +8,10 @@ use serde_json::Value;
 
 use crate::bundle::{self, download};
 use crate::engine_binary::install_engine_binaries;
-use crate::hook_manifest::{self, copy_provider_hooks, hook_installed_for_provider, hook_installed_for_provider_at_scope, HOOK_EXPLAINER};
+use crate::hook_manifest::{
+    self, copy_provider_hooks, hook_installed_for_provider, hook_installed_for_provider_at_scope,
+    HOOK_EXPLAINER,
+};
 use crate::prompt::{CheckboxOption, Prompt, RadioOption};
 use crate::providers::*;
 use crate::util::{self, pad_end, utf16_len, utf16_prefix};
@@ -37,7 +40,10 @@ const SUBCOMMAND_HELP: &[(&str, &str)] = &[
 ];
 
 fn subcommand_help(sub: &str) -> Option<&'static str> {
-    SUBCOMMAND_HELP.iter().find(|(k, _)| *k == sub).map(|(_, v)| *v)
+    SUBCOMMAND_HELP
+        .iter()
+        .find(|(k, _)| *k == sub)
+        .map(|(_, v)| *v)
 }
 
 pub fn run(args: &[String], io: &mut Io) -> R<()> {
@@ -110,8 +116,16 @@ fn show_help(io: &mut Io) -> R<()> {
     let mut sorted: Vec<(String, String)> = commands
         .iter()
         .map(|c| {
-            let id = c.get("id").and_then(Value::as_str).unwrap_or("").to_string();
-            let desc = c.get("description").and_then(Value::as_str).unwrap_or("").to_string();
+            let id = c
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let desc = c
+                .get("description")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
             (id, desc)
         })
         .collect();
@@ -124,14 +138,22 @@ fn show_help(io: &mut Io) -> R<()> {
         };
         out(io, &format!("  {} {desc}", pad(&format!("/{id}"), 22)));
     }
-    out(io, &format!("\n  {} commands available. Run /<command> in your AI harness.\n", commands.len()));
+    out(
+        io,
+        &format!(
+            "\n  {} commands available. Run /<command> in your AI harness.\n",
+            commands.len()
+        ),
+    );
     Ok(())
 }
 
 /// `a.localeCompare(b)` for the ASCII command ids: case-insensitive first,
 /// then code point order as the tiebreak.
 fn locale_compare(a: &str, b: &str) -> std::cmp::Ordering {
-    a.to_lowercase().cmp(&b.to_lowercase()).then_with(|| a.cmp(b))
+    a.to_lowercase()
+        .cmp(&b.to_lowercase())
+        .then_with(|| a.cmp(b))
 }
 
 // ─── check ───────────────────────────────────────────────────────────────────
@@ -204,12 +226,25 @@ fn print_install_intro(prompt: &Prompt, io: &mut Io) {
     if !prompt.interactive() {
         return;
     }
-    out(io, &format!("{} {}", prompt.accent(&prompt.bold("impeccable")), prompt.dim("install")));
+    out(
+        io,
+        &format!(
+            "{} {}",
+            prompt.accent(&prompt.bold("impeccable")),
+            prompt.dim("install")
+        ),
+    );
     out(io, "");
 }
 
 /// JS: formatInstallDetectionLines(projectRoot, detections, home, {styled})
-pub fn format_install_detection_lines(sys: &Sys, prompt: &Prompt, project_root: &str, detections: &[Detection], styled: bool) -> Vec<String> {
+pub fn format_install_detection_lines(
+    sys: &Sys,
+    prompt: &Prompt,
+    project_root: &str,
+    detections: &[Detection],
+    styled: bool,
+) -> Vec<String> {
     if detections.is_empty() {
         let message = format!(
             "No harnesses detected under {} or {}.",
@@ -218,18 +253,32 @@ pub fn format_install_detection_lines(sys: &Sys, prompt: &Prompt, project_root: 
         );
         return if styled {
             vec![
-                format!("{} {}", prompt.accent("◇"), prompt.bold("Detected harnesses")),
+                format!(
+                    "{} {}",
+                    prompt.accent("◇"),
+                    prompt.bold("Detected harnesses")
+                ),
                 format!("  {}", prompt.dim(&message)),
             ]
         } else {
             vec![message]
         };
     }
-    let names: Vec<String> = detections.iter().map(|d| provider_display_name(d.provider)).collect();
-    let paths: Vec<String> = detections.iter().map(|d| sys.format_path_for_display(&d.found_path)).collect();
+    let names: Vec<String> = detections
+        .iter()
+        .map(|d| provider_display_name(d.provider))
+        .collect();
+    let paths: Vec<String> = detections
+        .iter()
+        .map(|d| sys.format_path_for_display(&d.found_path))
+        .collect();
     let name_width = names.iter().map(|n| utf16_len(n)).max().unwrap_or(0);
     let heading = if styled {
-        format!("{} {}", prompt.accent("◇"), prompt.bold("Detected harnesses"))
+        format!(
+            "{} {}",
+            prompt.accent("◇"),
+            prompt.bold("Detected harnesses")
+        )
     } else {
         "Detected harnesses:".to_string()
     };
@@ -237,16 +286,32 @@ pub fn format_install_detection_lines(sys: &Sys, prompt: &Prompt, project_root: 
     for (index, _) in detections.iter().enumerate() {
         let raw_name = pad_end(&names[index], name_width);
         let raw_found = &paths[index];
-        let name = if styled { prompt.bold(&raw_name) } else { raw_name.clone() };
-        let found = if styled { prompt.dim(raw_found) } else { raw_found.clone() };
+        let name = if styled {
+            prompt.bold(&raw_name)
+        } else {
+            raw_name.clone()
+        };
+        let found = if styled {
+            prompt.dim(raw_found)
+        } else {
+            raw_found.clone()
+        };
         lines.push(format!("  {name}  {found}"));
     }
     lines
 }
 
 /// JS: printInstallDetections(projectRoot, detections)
-fn print_install_detections(sys: &Sys, prompt: &Prompt, io: &mut Io, project_root: &str, detections: &[Detection]) {
-    for line in format_install_detection_lines(sys, prompt, project_root, detections, prompt.interactive()) {
+fn print_install_detections(
+    sys: &Sys,
+    prompt: &Prompt,
+    io: &mut Io,
+    project_root: &str,
+    detections: &[Detection],
+) {
+    for line in
+        format_install_detection_lines(sys, prompt, project_root, detections, prompt.interactive())
+    {
         out(io, &line);
     }
     out(io, "");
@@ -261,13 +326,24 @@ fn provider_prompt_options() -> Vec<(&'static str, CheckboxOption)> {
             let label = provider_display_name(provider);
             let hint = format!("({provider}/skills)");
             let search_text = format!("{label} {input} {provider} {hint}");
-            (provider, CheckboxOption { label, hint: Some(hint), search_text })
+            (
+                provider,
+                CheckboxOption {
+                    label,
+                    hint: Some(hint),
+                    search_text,
+                },
+            )
         })
         .collect()
 }
 
 /// JS: promptForProviders(defaultProviders)
-fn prompt_for_providers(prompt: &mut Prompt, io: &mut Io, default_providers: &[&'static str]) -> R<Vec<&'static str>> {
+fn prompt_for_providers(
+    prompt: &mut Prompt,
+    io: &mut Io,
+    default_providers: &[&'static str],
+) -> R<Vec<&'static str>> {
     if prompt.interactive() {
         let options = provider_prompt_options();
         let selected: Vec<usize> = options
@@ -278,7 +354,11 @@ fn prompt_for_providers(prompt: &mut Prompt, io: &mut Io, default_providers: &[&
             .collect();
         let boxes: Vec<CheckboxOption> = options
             .iter()
-            .map(|(_, o)| CheckboxOption { label: o.label.clone(), hint: o.hint.clone(), search_text: o.search_text.clone() })
+            .map(|(_, o)| CheckboxOption {
+                label: o.label.clone(),
+                hint: o.hint.clone(),
+                search_text: o.search_text.clone(),
+            })
             .collect();
         let chosen = prompt.checkbox(io, "Select harnesses", &boxes, &selected)?;
         return Ok(chosen.into_iter().map(|i| options[i].0).collect());
@@ -290,7 +370,10 @@ fn prompt_for_providers(prompt: &mut Prompt, io: &mut Io, default_providers: &[&
         String::new()
     };
     loop {
-        let answer = prompt.ask(io, &format!("Select harnesses (comma-separated: {choices}){suffix}: "))?;
+        let answer = prompt.ask(
+            io,
+            &format!("Select harnesses (comma-separated: {choices}){suffix}: "),
+        )?;
         if answer.is_empty() && !default_providers.is_empty() {
             return Ok(default_providers.to_vec());
         }
@@ -313,21 +396,60 @@ enum DetectedMode {
 }
 
 /// JS: promptDetectedInstallMode(detectedProviders)
-fn prompt_detected_install_mode(prompt: &mut Prompt, io: &mut Io, detected: &[&'static str]) -> R<DetectedMode> {
+fn prompt_detected_install_mode(
+    prompt: &mut Prompt,
+    io: &mut Io,
+    detected: &[&'static str],
+) -> R<DetectedMode> {
     if prompt.interactive() {
         let options = [
-            RadioOption { label: "Detected only".to_string(), hint: Some(format!("({})", format_provider_list(detected))) },
-            RadioOption { label: "Customize...".to_string(), hint: None },
+            RadioOption {
+                label: "Detected only".to_string(),
+                hint: Some(format!("({})", format_provider_list(detected))),
+            },
+            RadioOption {
+                label: "Customize...".to_string(),
+                hint: None,
+            },
         ];
-        let index = prompt.radio(io, "Install for detected harnesses only, or add more?", &options, 0)?;
-        return Ok(if index == 0 { DetectedMode::Detected } else { DetectedMode::Add });
+        let index = prompt.radio(
+            io,
+            "Install for detected harnesses only, or add more?",
+            &options,
+            0,
+        )?;
+        return Ok(if index == 0 {
+            DetectedMode::Detected
+        } else {
+            DetectedMode::Add
+        });
     }
     loop {
-        let answer = prompt.ask(io, &format!("Install target: [1] Detected only ({})  [2] Customize [1]: ", format_provider_list(detected)))?;
-        if answer.is_empty() || ["1", "detected", "detected only", "only", "d"].contains(&answer.as_str()) {
+        let answer = prompt.ask(
+            io,
+            &format!(
+                "Install target: [1] Detected only ({})  [2] Customize [1]: ",
+                format_provider_list(detected)
+            ),
+        )?;
+        if answer.is_empty()
+            || ["1", "detected", "detected only", "only", "d"].contains(&answer.as_str())
+        {
             return Ok(DetectedMode::Detected);
         }
-        if ["2", "customize", "customise", "add", "add more", "more", "a", "n", "no"].contains(&answer.as_str()) {
+        if [
+            "2",
+            "customize",
+            "customise",
+            "add",
+            "add more",
+            "more",
+            "a",
+            "n",
+            "no",
+        ]
+        .contains(&answer.as_str())
+        {
             return Ok(DetectedMode::Add);
         }
         out(io, "Choose 1 for detected only, or 2 to customize.");
@@ -342,38 +464,79 @@ struct ProviderChoice {
 
 /// JS: chooseInstallProviders(projectRoot, providersValue, {yes}). A thrown
 /// `Error` surfaces as `Err(Flow::Throw)`.
-fn choose_install_providers(sys: &Sys, prompt: &mut Prompt, io: &mut Io, project_root: &str, providers_value: Option<&str>, yes: bool) -> R<ProviderChoice> {
+fn choose_install_providers(
+    sys: &Sys,
+    prompt: &mut Prompt,
+    io: &mut Io,
+    project_root: &str,
+    providers_value: Option<&str>,
+    yes: bool,
+) -> R<ProviderChoice> {
     let detections = sys.collect_install_detections(project_root);
     if let Some(value) = providers_value {
         let (providers, invalid) = parse_provider_list(value);
         if !invalid.is_empty() {
-            return Err(Flow::Throw(format!("Unknown provider(s): {}", invalid.join(", "))));
+            return Err(Flow::Throw(format!(
+                "Unknown provider(s): {}",
+                invalid.join(", ")
+            )));
         }
-        return Ok(ProviderChoice { targets: providers, detections, explicit: true });
+        return Ok(ProviderChoice {
+            targets: providers,
+            detections,
+            explicit: true,
+        });
     }
     if yes {
-        return Ok(ProviderChoice { targets: sys.resolve_install_targets(project_root, None), detections, explicit: false });
+        return Ok(ProviderChoice {
+            targets: sys.resolve_install_targets(project_root, None),
+            detections,
+            explicit: false,
+        });
     }
     print_install_detections(sys, prompt, io, project_root, &detections);
     let detected = default_detected_providers(&detections);
     if detected.is_empty() {
         let targets = prompt_for_providers(prompt, io, &[])?;
-        return Ok(ProviderChoice { targets, detections, explicit: false });
+        return Ok(ProviderChoice {
+            targets,
+            detections,
+            explicit: false,
+        });
     }
     let mode = prompt_detected_install_mode(prompt, io, &detected)?;
     if mode == DetectedMode::Add {
         let targets = prompt_for_providers(prompt, io, &detected)?;
-        return Ok(ProviderChoice { targets, detections, explicit: false });
+        return Ok(ProviderChoice {
+            targets,
+            detections,
+            explicit: false,
+        });
     }
-    Ok(ProviderChoice { targets: detected, detections, explicit: false })
+    Ok(ProviderChoice {
+        targets: detected,
+        detections,
+        explicit: false,
+    })
 }
 
 /// JS: chooseInstallScope(projectRoot, targets, detections, {yes, scopeValue})
-fn choose_install_scope(sys: &Sys, prompt: &mut Prompt, io: &mut Io, project_root: &str, targets: &[&'static str], detections: &[Detection], yes: bool, scope_value: Option<&str>) -> R<Scope> {
+fn choose_install_scope(
+    sys: &Sys,
+    prompt: &mut Prompt,
+    io: &mut Io,
+    project_root: &str,
+    targets: &[&'static str],
+    detections: &[Detection],
+    yes: bool,
+    scope_value: Option<&str>,
+) -> R<Scope> {
     let explicit = scope_value.and_then(normalize_install_scope);
     if let Some(v) = scope_value {
         if explicit.is_none() {
-            return Err(Flow::Throw(format!("Unknown install scope: {v}. Use --scope=project or --scope=global.")));
+            return Err(Flow::Throw(format!(
+                "Unknown install scope: {v}. Use --scope=project or --scope=global."
+            )));
         }
     }
     if let Some(s) = explicit {
@@ -385,13 +548,32 @@ fn choose_install_scope(sys: &Sys, prompt: &mut Prompt, io: &mut Io, project_roo
     let fallback = default_install_scope(detections, targets);
     if prompt.interactive() {
         let options = [
-            RadioOption { label: "Project".to_string(), hint: Some(format!("({})", sys.format_path_for_display(project_root))) },
-            RadioOption { label: "Global".to_string(), hint: Some(format!("({})", sys.format_path_for_display(&sys.home))) },
+            RadioOption {
+                label: "Project".to_string(),
+                hint: Some(format!("({})", sys.format_path_for_display(project_root))),
+            },
+            RadioOption {
+                label: "Global".to_string(),
+                hint: Some(format!("({})", sys.format_path_for_display(&sys.home))),
+            },
         ];
-        let index = prompt.radio(io, "Install location", &options, if fallback == Scope::User { 1 } else { 0 })?;
-        return Ok(if index == 1 { Scope::User } else { Scope::Project });
+        let index = prompt.radio(
+            io,
+            "Install location",
+            &options,
+            if fallback == Scope::User { 1 } else { 0 },
+        )?;
+        return Ok(if index == 1 {
+            Scope::User
+        } else {
+            Scope::Project
+        });
     }
-    let fallback_label = if fallback == Scope::User { "global" } else { fallback.as_str() };
+    let fallback_label = if fallback == Scope::User {
+        "global"
+    } else {
+        fallback.as_str()
+    };
     let answer = prompt.ask(
         io,
         &format!(
@@ -406,7 +588,13 @@ fn choose_install_scope(sys: &Sys, prompt: &mut Prompt, io: &mut Io, project_roo
     match normalize_install_scope(&answer) {
         Some(s) => Ok(s),
         None => {
-            out(io, &format!("Unknown install location \"{answer}\", using {}.", fallback.as_str()));
+            out(
+                io,
+                &format!(
+                    "Unknown install location \"{answer}\", using {}.",
+                    fallback.as_str()
+                ),
+            );
             Ok(fallback)
         }
     }
@@ -421,20 +609,54 @@ struct InstallPlan {
 }
 
 /// JS: chooseInstallPlan(projectRoot, flags, {yes})
-fn choose_install_plan(sys: &Sys, prompt: &mut Prompt, io: &mut Io, project_root: &str, flags: &[String], yes: bool) -> R<InstallPlan> {
+fn choose_install_plan(
+    sys: &Sys,
+    prompt: &mut Prompt,
+    io: &mut Io,
+    project_root: &str,
+    flags: &[String],
+    yes: bool,
+) -> R<InstallPlan> {
     let providers_value = get_flag_value(flags, "--providers");
     let scope_value = get_install_scope_value(flags);
     let choice = choose_install_providers(sys, prompt, io, project_root, providers_value, yes)?;
     if choice.targets.is_empty() {
-        return Err(Flow::Throw("Could not determine a target harness folder.".to_string()));
+        return Err(Flow::Throw(
+            "Could not determine a target harness folder.".to_string(),
+        ));
     }
-    let scope = choose_install_scope(sys, prompt, io, project_root, &choice.targets, &choice.detections, yes, scope_value.as_deref())?;
-    let install_root = if scope == Scope::User { sys.home.clone() } else { project_root.to_string() };
-    Ok(InstallPlan { targets: choice.targets, scope, install_root, hook_root: project_root.to_string(), explicit: choice.explicit })
+    let scope = choose_install_scope(
+        sys,
+        prompt,
+        io,
+        project_root,
+        &choice.targets,
+        &choice.detections,
+        yes,
+        scope_value.as_deref(),
+    )?;
+    let install_root = if scope == Scope::User {
+        sys.home.clone()
+    } else {
+        project_root.to_string()
+    };
+    Ok(InstallPlan {
+        targets: choice.targets,
+        scope,
+        install_root,
+        hook_root: project_root.to_string(),
+        explicit: choice.explicit,
+    })
 }
 
 /// JS: decideHookInstall(root, targets, {yes})
-fn decide_hook_install(prompt: &mut Prompt, io: &mut Io, root: &str, targets: &[&'static str], yes: bool) -> R<bool> {
+fn decide_hook_install(
+    prompt: &mut Prompt,
+    io: &mut Io,
+    root: &str,
+    targets: &[&'static str],
+    yes: bool,
+) -> R<bool> {
     if targets.is_empty() {
         return Ok(false);
     }
@@ -452,7 +674,8 @@ fn decide_hook_install(prompt: &mut Prompt, io: &mut Io, root: &str, targets: &[
     io.out(HOOK_EXPLAINER);
     let ans = prompt.ask(io, "Install the design hook? (Y/n) ")?;
     let accepted = !(ans == "n" || ans == "no");
-    hook_manifest::set_hook_consent(root, if accepted { "accepted" } else { "declined" }).map_err(Flow::Throw)?;
+    hook_manifest::set_hook_consent(root, if accepted { "accepted" } else { "declined" })
+        .map_err(Flow::Throw)?;
     Ok(accepted)
 }
 
@@ -464,7 +687,12 @@ fn decide_hook_install(prompt: &mut Prompt, io: &mut Io, root: &str, targets: &[
 /// is global, so removing its entry would drop the hook from every other
 /// project. A home and a project hook firing for one edit is settled inside
 /// the hook (`hook_claim`).
-fn repair_update_hook_manifests(sys: &crate::providers::Sys, hook_root: &str, skill_root: &str, providers: &[&'static str]) -> Result<(), String> {
+fn repair_update_hook_manifests(
+    sys: &crate::providers::Sys,
+    hook_root: &str,
+    skill_root: &str,
+    providers: &[&'static str],
+) -> Result<(), String> {
     hook_manifest::repair_stale_hook_manifests(sys, hook_root, providers, Some(skill_root))?;
     if hook_root != skill_root {
         hook_manifest::repair_stale_hook_manifests(sys, skill_root, providers, None)?;
@@ -498,26 +726,52 @@ fn link(flags: &[String], io: &mut Io) -> R<()> {
     }
     if !yes {
         out(io, &format!("Source checkout: {}", source.checkout_root));
-        out(io, &format!("Target harness folder(s): {}", targets.join(", ")));
-        let ans = prompt.ask(io, &format!("Link impeccable skills into {} folder(s)? (Y/n) ", targets.len()))?;
+        out(
+            io,
+            &format!("Target harness folder(s): {}", targets.join(", ")),
+        );
+        let ans = prompt.ask(
+            io,
+            &format!(
+                "Link impeccable skills into {} folder(s)? (Y/n) ",
+                targets.len()
+            ),
+        )?;
         if ans == "n" || ans == "no" {
             out(io, "Aborted. Re-run with --providers=<names> to choose explicitly (e.g. --providers=claude,cursor).");
             return Err(Flow::Exit(0));
         }
     }
-    let result = bundle::link_provider_skills(io, &source.bundle_root, &root, &targets, force).map_err(Flow::Throw)?;
+    let result = bundle::link_provider_skills(io, &source.bundle_root, &root, &targets, force)
+        .map_err(Flow::Throw)?;
     // Linked installs are excluded from install/update refreshes (overwriting
     // a symlink would destroy the link), so this is the only path that can
     // deliver the OpenCode command bridge to them. A copy, not a symlink: the
     // bridge is static and OpenCode scans the real commands dir. No-ops when
     // the source checkout has no built commands (#483).
-    bundle::copy_provider_commands(&sys, &source.bundle_root, &root, &targets, Some(Scope::Project));
+    bundle::copy_provider_commands(
+        &sys,
+        &source.bundle_root,
+        &root,
+        &targets,
+        Some(Scope::Project),
+    );
     if result.linked == 0 && result.already == 0 {
         if result.skipped > 0 {
-            err(io, "Nothing was linked because matching skill folders already exist.");
+            err(
+                io,
+                "Nothing was linked because matching skill folders already exist.",
+            );
             err(io, "Existing skills were left untouched. Re-run with --force to replace them with links.");
         } else {
-            err(io, &format!("Nothing was linked: {} had no variants for {}.", source.bundle_root, targets.join(", ")));
+            err(
+                io,
+                &format!(
+                    "Nothing was linked: {} had no variants for {}.",
+                    source.bundle_root,
+                    targets.join(", ")
+                ),
+            );
         }
         return Err(Flow::Exit(1));
     }
@@ -543,7 +797,14 @@ fn link(flags: &[String], io: &mut Io) -> R<()> {
     if result.skipped > 0 {
         parts.push(format!("{} skipped", result.skipped));
     }
-    out(io, &format!("Linked impeccable into: {} ({}).", targets.join(", "), parts.join(", ")));
+    out(
+        io,
+        &format!(
+            "Linked impeccable into: {} ({}).",
+            targets.join(", "),
+            parts.join(", ")
+        ),
+    );
     out(io, "Update with `git submodule update --remote` from your project root, then rerun this command if new skills are added.\n");
     Ok(())
 }
@@ -568,12 +829,21 @@ fn install(flags: &[String], io: &mut Io) -> R<()> {
         Ok(p) => p,
         Err(Flow::Throw(msg)) => {
             err(io, &msg);
-            err(io, "Pass providers explicitly, e.g. --providers=claude,cursor");
+            err(
+                io,
+                "Pass providers explicitly, e.g. --providers=claude,cursor",
+            );
             return Err(Flow::Exit(1));
         }
         Err(other) => return Err(other),
     };
-    let InstallPlan { targets, scope, install_root, hook_root, explicit } = plan;
+    let InstallPlan {
+        targets,
+        scope,
+        install_root,
+        hook_root,
+        explicit,
+    } = plan;
     let scope_opt = Some(scope);
     let existing = sys.is_already_installed(&install_root, scope_opt);
     let installed_targets: Vec<&'static str> = if existing.is_some() {
@@ -582,25 +852,58 @@ fn install(flags: &[String], io: &mut Io) -> R<()> {
         Vec::new()
     };
     let missing_selected_targets: Vec<&'static str> = if existing.is_some() && !force && explicit {
-        targets.iter().copied().filter(|p| !installed_targets.contains(p)).collect()
+        targets
+            .iter()
+            .copied()
+            .filter(|p| !installed_targets.contains(p))
+            .collect()
     } else {
         Vec::new()
     };
 
-    if let (Some(existing), true) = (existing, !force && missing_selected_targets.len() < targets.len()) {
-        out(io, &format!("Impeccable skills are already installed (found in {existing}/)."));
-        let selected_installed: Vec<&'static str> = targets.iter().copied().filter(|p| installed_targets.contains(p)).collect();
-        let linked_targets = sys.find_linked_providers(&install_root, &selected_installed, scope_opt);
-        let copy_targets: Vec<&'static str> = selected_installed.iter().copied().filter(|p| !linked_targets.contains(p)).collect();
-        let hook_targets: Vec<&'static str> = selected_installed.iter().chain(missing_selected_targets.iter()).copied().collect();
-        let want_hooks = install_hooks && decide_hook_install(&mut prompt, io, &hook_root, &hook_targets, yes)?;
+    if let (Some(existing), true) = (
+        existing,
+        !force && missing_selected_targets.len() < targets.len(),
+    ) {
+        out(
+            io,
+            &format!("Impeccable skills are already installed (found in {existing}/)."),
+        );
+        let selected_installed: Vec<&'static str> = targets
+            .iter()
+            .copied()
+            .filter(|p| installed_targets.contains(p))
+            .collect();
+        let linked_targets =
+            sys.find_linked_providers(&install_root, &selected_installed, scope_opt);
+        let copy_targets: Vec<&'static str> = selected_installed
+            .iter()
+            .copied()
+            .filter(|p| !linked_targets.contains(p))
+            .collect();
+        let hook_targets: Vec<&'static str> = selected_installed
+            .iter()
+            .chain(missing_selected_targets.iter())
+            .copied()
+            .collect();
+        let want_hooks =
+            install_hooks && decide_hook_install(&mut prompt, io, &hook_root, &hook_targets, yes)?;
         let mut bundle_dir: Option<String> = None;
         let outcome: Result<(), String> = (|| {
             if !linked_targets.is_empty() {
-                out(io, &format!("Linked skills found in: {}", linked_targets.join(", ")));
+                out(
+                    io,
+                    &format!("Linked skills found in: {}", linked_targets.join(", ")),
+                );
                 out(io, "Update the source checkout with `git submodule update --remote`, then rerun `npx impeccable link --source=.impeccable` if new skills are added.");
                 if !copy_targets.is_empty() {
-                    out(io, &format!("Continuing with copied installs in: {}\n", copy_targets.join(", ")));
+                    out(
+                        io,
+                        &format!(
+                            "Continuing with copied installs in: {}\n",
+                            copy_targets.join(", ")
+                        ),
+                    );
                 }
             }
             let mut updated = 0usize;
@@ -609,66 +912,149 @@ fn install(flags: &[String], io: &mut Io) -> R<()> {
                     .iter()
                     .copied()
                     .filter(|p| {
-                        let manifest_root = if scope == Scope::User && *p == ".claude" { &install_root } else { &hook_root };
-                        !hook_installed_for_provider_at_scope(manifest_root, p, scope == Scope::User)
+                        let manifest_root = if scope == Scope::User && *p == ".claude" {
+                            &install_root
+                        } else {
+                            &hook_root
+                        };
+                        !hook_installed_for_provider_at_scope(
+                            manifest_root,
+                            p,
+                            scope == Scope::User,
+                        )
                     })
                     .collect()
             } else {
                 Vec::new()
             };
             let mut update_check_skipped = false;
-            if !copy_targets.is_empty() || !missing_hook_targets.is_empty() || !missing_selected_targets.is_empty() {
+            if !copy_targets.is_empty()
+                || !missing_hook_targets.is_empty()
+                || !missing_selected_targets.is_empty()
+            {
                 match bundle::download_and_extract_bundle(&sys) {
                     Ok(dir) => bundle_dir = Some(dir),
                     Err(e) => {
                         if e.is_fatal_over_existing_install()
-                            || !missing_hook_targets.is_empty() || !missing_selected_targets.is_empty() {
+                            || !missing_hook_targets.is_empty()
+                            || !missing_selected_targets.is_empty()
+                        {
                             return Err(e.into());
                         }
                         update_check_skipped = true;
-                        out(io, &format!("Could not check for skill updates: {}", e.summary()));
+                        out(
+                            io,
+                            &format!("Could not check for skill updates: {}", e.summary()),
+                        );
                     }
                 }
             }
             let bdir = bundle_dir.clone().unwrap_or_default();
 
-            if !update_check_skipped && !copy_targets.is_empty() && !bundle::is_up_to_date(&sys, &install_root, &copy_targets, &bdir, scope_opt, scope_opt)? {
+            if !update_check_skipped
+                && !copy_targets.is_empty()
+                && !bundle::is_up_to_date(
+                    &sys,
+                    &install_root,
+                    &copy_targets,
+                    &bdir,
+                    scope_opt,
+                    scope_opt,
+                )?
+            {
                 sys.migrate_unprefix_impeccable(&install_root, scope_opt);
-                let refreshed = bundle::refresh_provider_skills(&sys, &bdir, &install_root, &copy_targets, scope_opt)?;
+                let refreshed = bundle::refresh_provider_skills(
+                    &sys,
+                    &bdir,
+                    &install_root,
+                    &copy_targets,
+                    scope_opt,
+                )?;
                 updated = refreshed.len();
-                let agents = bundle::copy_provider_agents(&sys, &bdir, &install_root, &copy_targets, scope_opt)?;
+                let agents = bundle::copy_provider_agents(
+                    &sys,
+                    &bdir,
+                    &install_root,
+                    &copy_targets,
+                    scope_opt,
+                )?;
                 bundle::report_provider_agents(&sys, io, &agents);
-                bundle::copy_provider_commands(&sys, &bdir, &install_root, &copy_targets, scope_opt);
+                bundle::copy_provider_commands(
+                    &sys,
+                    &bdir,
+                    &install_root,
+                    &copy_targets,
+                    scope_opt,
+                );
                 let v = sys.get_skills_version(&install_root, scope_opt);
-                out(io, &format!("Updated {updated} skill(s){}.", to_version_suffix(&v)));
+                out(
+                    io,
+                    &format!("Updated {updated} skill(s){}.", to_version_suffix(&v)),
+                );
                 install_engine_binaries(&sys, io, &refreshed);
             }
 
             let mut fresh_written = 0usize;
             if !update_check_skipped && !missing_selected_targets.is_empty() {
-                let written = bundle::copy_provider_skills(&sys, &bdir, &install_root, &missing_selected_targets, scope_opt)?;
+                let written = bundle::copy_provider_skills(
+                    &sys,
+                    &bdir,
+                    &install_root,
+                    &missing_selected_targets,
+                    scope_opt,
+                )?;
                 fresh_written = written.len();
                 if fresh_written == 0 {
-                    err(io, &format!("Nothing was installed: the bundle had no variants for {}.", missing_selected_targets.join(", ")));
+                    err(
+                        io,
+                        &format!(
+                            "Nothing was installed: the bundle had no variants for {}.",
+                            missing_selected_targets.join(", ")
+                        ),
+                    );
                     return Err(EXIT_1.to_string());
                 }
-                out(io, &format!(
-                    "Installed impeccable into: {} ({})",
-                    missing_selected_targets.join(", "),
-                    if scope == Scope::User { "global" } else { "project" }
-                ));
+                out(
+                    io,
+                    &format!(
+                        "Installed impeccable into: {} ({})",
+                        missing_selected_targets.join(", "),
+                        if scope == Scope::User {
+                            "global"
+                        } else {
+                            "project"
+                        }
+                    ),
+                );
                 install_engine_binaries(&sys, io, &written);
-                let agents = bundle::copy_provider_agents(&sys, &bdir, &install_root, &missing_selected_targets, scope_opt)?;
+                let agents = bundle::copy_provider_agents(
+                    &sys,
+                    &bdir,
+                    &install_root,
+                    &missing_selected_targets,
+                    scope_opt,
+                )?;
                 bundle::report_provider_agents(&sys, io, &agents);
             }
 
             let written_hook_targets = if !missing_hook_targets.is_empty() {
-                copy_provider_hooks(&sys, &bdir, &hook_root, &missing_hook_targets, false, Some(&install_root), None)?
+                copy_provider_hooks(
+                    &sys,
+                    &bdir,
+                    &hook_root,
+                    &missing_hook_targets,
+                    false,
+                    Some(&install_root),
+                    None,
+                )?
             } else {
                 Vec::new()
             };
             if !written_hook_targets.is_empty() {
-                out(io, &format!("Installed hooks into: {}", written_hook_targets.join(", ")));
+                out(
+                    io,
+                    &format!("Installed hooks into: {}", written_hook_targets.join(", ")),
+                );
             }
             // A repeat user-scope install whose user hook is already current
             // never sends Claude through copy_provider_hooks, so the
@@ -682,7 +1068,12 @@ fn install(flags: &[String], io: &mut Io) -> R<()> {
             // Self-heal any pre-launcher (`node .../hook.mjs`) manifest left by a
             // v3 install into a present provider dir (triage E8). Independent of
             // hook consent: it repairs an existing hook rather than adding one.
-            hook_manifest::repair_stale_hook_manifests(&sys, &hook_root, &hook_targets, Some(&install_root))?;
+            hook_manifest::repair_stale_hook_manifests(
+                &sys,
+                &hook_root,
+                &hook_targets,
+                Some(&install_root),
+            )?;
 
             if update_check_skipped {
                 out(io, "Existing skills were left unchanged.");
@@ -715,7 +1106,8 @@ fn install(flags: &[String], io: &mut Io) -> R<()> {
         return Err(Flow::Exit(1));
     }
 
-    let want_hooks = install_hooks && decide_hook_install(&mut prompt, io, &hook_root, &targets, yes)?;
+    let want_hooks =
+        install_hooks && decide_hook_install(&mut prompt, io, &hook_root, &targets, yes)?;
 
     out(io, "\nDownloading impeccable skills...");
     let bundle_dir = match bundle::download_and_extract_bundle(&sys) {
@@ -728,17 +1120,38 @@ fn install(flags: &[String], io: &mut Io) -> R<()> {
 
     sys.migrate_unprefix_impeccable(&install_root, scope_opt);
 
-    let outcome: Result<(Vec<String>, Vec<bundle::AgentResult>, Vec<&'static str>), String> = (|| {
-        let written = bundle::copy_provider_skills(&sys, &bundle_dir, &install_root, &targets, scope_opt)?;
-        let agents = bundle::copy_provider_agents(&sys, &bundle_dir, &install_root, &targets, scope_opt)?;
-        bundle::copy_provider_commands(&sys, &bundle_dir, &install_root, &targets, scope_opt);
-        let hooks = if want_hooks {
-            copy_provider_hooks(&sys, &bundle_dir, &hook_root, &targets, force, Some(&install_root), None)?
-        } else {
-            Vec::new()
-        };
-        Ok((written, agents, hooks))
-    })();
+    let outcome: Result<(Vec<String>, Vec<bundle::AgentResult>, Vec<&'static str>), String> =
+        (|| {
+            let written = bundle::copy_provider_skills(
+                &sys,
+                &bundle_dir,
+                &install_root,
+                &targets,
+                scope_opt,
+            )?;
+            let agents = bundle::copy_provider_agents(
+                &sys,
+                &bundle_dir,
+                &install_root,
+                &targets,
+                scope_opt,
+            )?;
+            bundle::copy_provider_commands(&sys, &bundle_dir, &install_root, &targets, scope_opt);
+            let hooks = if want_hooks {
+                copy_provider_hooks(
+                    &sys,
+                    &bundle_dir,
+                    &hook_root,
+                    &targets,
+                    force,
+                    Some(&install_root),
+                    None,
+                )?
+            } else {
+                Vec::new()
+            };
+            Ok((written, agents, hooks))
+        })();
     let (written, agent_results, hook_targets) = match outcome {
         Ok(v) => v,
         Err(e) => {
@@ -750,18 +1163,34 @@ fn install(flags: &[String], io: &mut Io) -> R<()> {
     util::rm_rf(&bundle_dir);
 
     if written.is_empty() {
-        err(io, &format!("Nothing was installed: the bundle had no variants for {}.", targets.join(", ")));
+        err(
+            io,
+            &format!(
+                "Nothing was installed: the bundle had no variants for {}.",
+                targets.join(", ")
+            ),
+        );
         return Err(Flow::Exit(1));
     }
-    out(io, &format!(
-        "Installed impeccable into: {} ({})",
-        targets.join(", "),
-        if scope == Scope::User { "global" } else { "project" }
-    ));
+    out(
+        io,
+        &format!(
+            "Installed impeccable into: {} ({})",
+            targets.join(", "),
+            if scope == Scope::User {
+                "global"
+            } else {
+                "project"
+            }
+        ),
+    );
     install_engine_binaries(&sys, io, &written);
     bundle::report_provider_agents(&sys, io, &agent_results);
     if !hook_targets.is_empty() {
-        out(io, &format!("Installed hooks into: {}", hook_targets.join(", ")));
+        out(
+            io,
+            &format!("Installed hooks into: {}", hook_targets.join(", ")),
+        );
     }
     out(io, "\nDone! Now type /impeccable init in your AI coding agent's chat (not in this terminal) to set up design context.\n");
     Ok(())
@@ -779,7 +1208,10 @@ fn update(flags: &[String], io: &mut Io) -> R<()> {
     let explicit_scope = scope_value.as_deref().and_then(normalize_install_scope);
     if let Some(v) = &scope_value {
         if explicit_scope.is_none() {
-            err(io, &format!("Unknown update scope: {v}. Use --project or --user."));
+            err(
+                io,
+                &format!("Unknown update scope: {v}. Use --project or --user."),
+            );
             return Err(Flow::Exit(1));
         }
     }
@@ -796,20 +1228,51 @@ fn update(flags: &[String], io: &mut Io) -> R<()> {
                 } else {
                     format!("this project ({project_root})")
                 };
-                out(io, &format!("No impeccable skill folders found at the {where_}."));
+                out(
+                    io,
+                    &format!("No impeccable skill folders found at the {where_}."),
+                );
             }
-            None => out(io, "No impeccable skill folders found in this project or at the user level."),
+            None => out(
+                io,
+                "No impeccable skill folders found in this project or at the user level.",
+            ),
         }
         out(io, "Run `npx impeccable install` to install first.");
         return Err(Flow::Exit(1));
     };
 
     let (root, scope, agent_scope, providers, scope_label) = match target {
-        UpdateTarget::Resolved { root, scope, agent_scope, providers, scope_label } => (root, scope, agent_scope, providers, scope_label),
-        UpdateTarget::Ambiguous { project_providers, user_providers } => {
-            out(io, "Impeccable is installed both here and at the user level:");
-            out(io, &format!("  project    {project_root}  ({})", project_providers.join(", ")));
-            out(io, &format!("  user level {}  ({})", sys.format_path_for_display(&home), user_providers.join(", ")));
+        UpdateTarget::Resolved {
+            root,
+            scope,
+            agent_scope,
+            providers,
+            scope_label,
+        } => (root, scope, agent_scope, providers, scope_label),
+        UpdateTarget::Ambiguous {
+            project_providers,
+            user_providers,
+        } => {
+            out(
+                io,
+                "Impeccable is installed both here and at the user level:",
+            );
+            out(
+                io,
+                &format!(
+                    "  project    {project_root}  ({})",
+                    project_providers.join(", ")
+                ),
+            );
+            out(
+                io,
+                &format!(
+                    "  user level {}  ({})",
+                    sys.format_path_for_display(&home),
+                    user_providers.join(", ")
+                ),
+            );
             let mut pick_user = false;
             if !yes && prompt.stdin_tty {
                 let ans = prompt.ask(io, "Update which? [project]/user: ")?;
@@ -818,29 +1281,65 @@ fn update(flags: &[String], io: &mut Io) -> R<()> {
                 out(io, "Defaulting to the project. Re-run with --user to update the user-level install instead.");
             }
             if pick_user {
-                (home.clone(), Some(Scope::User), Some(Scope::User), user_providers, "user level")
+                (
+                    home.clone(),
+                    Some(Scope::User),
+                    Some(Scope::User),
+                    user_providers,
+                    "user level",
+                )
             } else {
-                (project_root.clone(), Some(Scope::Project), Some(Scope::Project), project_providers, "this project")
+                (
+                    project_root.clone(),
+                    Some(Scope::Project),
+                    Some(Scope::Project),
+                    project_providers,
+                    "this project",
+                )
             }
         }
     };
 
-    out(io, &format!("Updating the {scope_label} install: {} ({})", sys.format_path_for_display(&root), providers.join(", ")));
+    out(
+        io,
+        &format!(
+            "Updating the {scope_label} install: {} ({})",
+            sys.format_path_for_display(&root),
+            providers.join(", ")
+        ),
+    );
     // Hook manifests follow install's placement: a user-scope install keeps
     // the skill under home but writes every non-Claude manifest (Cursor,
     // Codex, Grok, ...) into the project, so update repairs and writes them
     // there too, against the home skill root.
-    let hook_root = if scope == Some(Scope::User) { project_root.clone() } else { root.clone() };
+    let hook_root = if scope == Some(Scope::User) {
+        project_root.clone()
+    } else {
+        root.clone()
+    };
     let linked_providers = sys.find_linked_providers(&root, &providers, scope);
-    let copy_providers: Vec<&'static str> = providers.iter().copied().filter(|p| !linked_providers.contains(p)).collect();
+    let copy_providers: Vec<&'static str> = providers
+        .iter()
+        .copied()
+        .filter(|p| !linked_providers.contains(p))
+        .collect();
 
     if !linked_providers.is_empty() {
-        out(io, &format!("Linked skills found in: {}", linked_providers.join(", ")));
+        out(
+            io,
+            &format!("Linked skills found in: {}", linked_providers.join(", ")),
+        );
         out(io, "Update the source checkout with `git submodule update --remote`, then rerun `npx impeccable link --source=.impeccable` if new skills are added.");
         if copy_providers.is_empty() {
             return Err(Flow::Exit(0));
         }
-        out(io, &format!("Continuing with copied installs in: {}\n", copy_providers.join(", ")));
+        out(
+            io,
+            &format!(
+                "Continuing with copied installs in: {}\n",
+                copy_providers.join(", ")
+            ),
+        );
     }
 
     out(io, "Checking for updates...");
@@ -853,21 +1352,33 @@ fn update(flags: &[String], io: &mut Io) -> R<()> {
         }
     };
 
-    let up_to_date = match bundle::is_up_to_date(&sys, &root, &copy_providers, &tmp_dir, scope, agent_scope) {
-        Ok(v) => v,
-        Err(e) => {
-            // JS: an fs error inside isUpToDate is uncaught (main's catch).
-            return Err(Flow::Throw(e));
-        }
-    };
+    let up_to_date =
+        match bundle::is_up_to_date(&sys, &root, &copy_providers, &tmp_dir, scope, agent_scope) {
+            Ok(v) => v,
+            Err(e) => {
+                // JS: an fs error inside isUpToDate is uncaught (main's catch).
+                return Err(Flow::Throw(e));
+            }
+        };
     if up_to_date {
         let outcome: R<Vec<&'static str>> = (|| {
             // Repair any stale pre-launcher (`node .../hook.mjs`) manifest a v3
             // install left behind, regardless of hook consent (triage E8).
-            repair_update_hook_manifests(&sys, &hook_root, &root, &copy_providers).map_err(Flow::Throw)?;
-            let want_hooks = install_hooks && decide_hook_install(&mut prompt, io, &hook_root, &copy_providers, yes)?;
+            repair_update_hook_manifests(&sys, &hook_root, &root, &copy_providers)
+                .map_err(Flow::Throw)?;
+            let want_hooks = install_hooks
+                && decide_hook_install(&mut prompt, io, &hook_root, &copy_providers, yes)?;
             let hook_targets = if want_hooks {
-                copy_provider_hooks(&sys, &tmp_dir, &hook_root, &copy_providers, force, Some(&root), Some(&project_root)).map_err(Flow::Throw)?
+                copy_provider_hooks(
+                    &sys,
+                    &tmp_dir,
+                    &hook_root,
+                    &copy_providers,
+                    force,
+                    Some(&root),
+                    Some(&project_root),
+                )
+                .map_err(Flow::Throw)?
             } else {
                 Vec::new()
             };
@@ -879,7 +1390,10 @@ fn update(flags: &[String], io: &mut Io) -> R<()> {
                 let v = sys.get_skills_version(&root, scope);
                 out(io, &format!("Skills are up to date{}.", version_suffix(&v)));
                 if !hook_targets.is_empty() {
-                    out(io, &format!("Installed hooks into: {}", hook_targets.join(", ")));
+                    out(
+                        io,
+                        &format!("Installed hooks into: {}", hook_targets.join(", ")),
+                    );
                 }
                 out(io, "Nothing else to do.");
                 Err(Flow::Exit(0))
@@ -898,10 +1412,19 @@ fn update(flags: &[String], io: &mut Io) -> R<()> {
         };
     }
 
-    out(io, &format!("Found skills in: {}", copy_providers.join(", ")));
+    out(
+        io,
+        &format!("Found skills in: {}", copy_providers.join(", ")),
+    );
 
     if !yes {
-        let ans = prompt.ask(io, &format!("Update skills in {} provider folder(s)? (Y/n) ", copy_providers.len()))?;
+        let ans = prompt.ask(
+            io,
+            &format!(
+                "Update skills in {} provider folder(s)? (Y/n) ",
+                copy_providers.len()
+            ),
+        )?;
         if ans == "n" || ans == "no" {
             util::rm_rf(&tmp_dir);
             out(io, "Aborted.");
@@ -914,25 +1437,50 @@ fn update(flags: &[String], io: &mut Io) -> R<()> {
         if migrated > 0 {
             out(io, "Migrated a prefixed install back to /impeccable (the i- prefix is no longer used).");
         }
-        let refreshed = bundle::refresh_provider_skills(&sys, &tmp_dir, &root, &copy_providers, scope).map_err(Flow::Throw)?;
-        let agents = bundle::copy_provider_agents(&sys, &tmp_dir, &root, &copy_providers, agent_scope).map_err(Flow::Throw)?;
+        let refreshed =
+            bundle::refresh_provider_skills(&sys, &tmp_dir, &root, &copy_providers, scope)
+                .map_err(Flow::Throw)?;
+        let agents =
+            bundle::copy_provider_agents(&sys, &tmp_dir, &root, &copy_providers, agent_scope)
+                .map_err(Flow::Throw)?;
         bundle::report_provider_agents(&sys, io, &agents);
         bundle::copy_provider_commands(&sys, &tmp_dir, &root, &copy_providers, scope);
         // Repair any stale pre-launcher (`node .../hook.mjs`) manifest a v3
         // install left behind, regardless of hook consent (triage E8).
-        repair_update_hook_manifests(&sys, &hook_root, &root, &copy_providers).map_err(Flow::Throw)?;
-        let want_hooks = install_hooks && decide_hook_install(&mut prompt, io, &hook_root, &providers, yes)?;
+        repair_update_hook_manifests(&sys, &hook_root, &root, &copy_providers)
+            .map_err(Flow::Throw)?;
+        let want_hooks =
+            install_hooks && decide_hook_install(&mut prompt, io, &hook_root, &providers, yes)?;
         let hook_targets = if want_hooks {
-            copy_provider_hooks(&sys, &tmp_dir, &hook_root, &providers, force, Some(&root), Some(&project_root)).map_err(Flow::Throw)?
+            copy_provider_hooks(
+                &sys,
+                &tmp_dir,
+                &hook_root,
+                &providers,
+                force,
+                Some(&root),
+                Some(&project_root),
+            )
+            .map_err(Flow::Throw)?
         } else {
             Vec::new()
         };
         util::rm_rf(&tmp_dir);
         let v = sys.get_skills_version(&root, scope);
-        out(io, &format!("Updated {} skill(s){}.", refreshed.len(), to_version_suffix(&v)));
+        out(
+            io,
+            &format!(
+                "Updated {} skill(s){}.",
+                refreshed.len(),
+                to_version_suffix(&v)
+            ),
+        );
         install_engine_binaries(&sys, io, &refreshed);
         if !hook_targets.is_empty() {
-            out(io, &format!("Installed hooks into: {}", hook_targets.join(", ")));
+            out(
+                io,
+                &format!("Installed hooks into: {}", hook_targets.join(", ")),
+            );
         }
         out(io, "Done!\n");
         Ok(())
@@ -978,8 +1526,14 @@ mod offline_install_tests {
     }
 
     fn fixture(name: &str) -> Fixture {
-        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-        let root = std::env::temp_dir().join(format!("impeccable-{name}-{}-{nanos}", std::process::id())).to_string_lossy().into_owned();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let root = std::env::temp_dir()
+            .join(format!("impeccable-{name}-{}-{nanos}", std::process::id()))
+            .to_string_lossy()
+            .into_owned();
         let project = format!("{root}/project");
         let home = format!("{root}/home");
         let tmp = format!("{root}/tmp");
@@ -987,10 +1541,15 @@ mod offline_install_tests {
             std::fs::create_dir_all(d).unwrap();
         }
         std::fs::create_dir_all(format!("{project}/.git")).unwrap();
-        let env: HashMap<String, String> = [("HOME", &home), ("USERPROFILE", &home), ("TMPDIR", &tmp), ("TEMP", &tmp)]
-            .into_iter()
-            .map(|(k, v)| (k.to_string(), v.clone()))
-            .collect();
+        let env: HashMap<String, String> = [
+            ("HOME", &home),
+            ("USERPROFILE", &home),
+            ("TMPDIR", &tmp),
+            ("TEMP", &tmp),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.clone()))
+        .collect();
         Fixture { root, project, env }
     }
 
@@ -1000,7 +1559,15 @@ mod offline_install_tests {
             env.insert((*k).into(), (*v).into());
         }
         let (mut io, captured) = Io::captured("", PathBuf::from(&fx.project), env);
-        let args: Vec<String> = ["install", "-y", "--providers=claude", "--scope=project", "--no-hooks"].map(String::from).into();
+        let args: Vec<String> = [
+            "install",
+            "-y",
+            "--providers=claude",
+            "--scope=project",
+            "--no-hooks",
+        ]
+        .map(String::from)
+        .into();
         let code = crate::run(&args, &mut io);
         let stdout = String::from_utf8_lossy(&captured.stdout.borrow()).into_owned();
         let stderr = String::from_utf8_lossy(&captured.stderr.borrow()).into_owned();
@@ -1013,51 +1580,102 @@ mod offline_install_tests {
         let bundle = format!("{}/bundle", fx.root);
         let skill = format!("{bundle}/.claude/skills/impeccable");
         std::fs::create_dir_all(format!("{skill}/scripts/bin/{os}-{arch}")).unwrap();
-        std::fs::write(format!("{skill}/SKILL.md"), "---\nname: impeccable\nversion: 9.9.9\n---\n# impeccable\n").unwrap();
+        std::fs::write(
+            format!("{skill}/SKILL.md"),
+            "---\nname: impeccable\nversion: 9.9.9\n---\n# impeccable\n",
+        )
+        .unwrap();
         // A staged engine binary keeps install_engine_binaries off the network.
-        std::fs::write(format!("{skill}/scripts/bin/{os}-{arch}/impeccable"), "#!/bin/sh\nexit 0\n").unwrap();
+        std::fs::write(
+            format!("{skill}/scripts/bin/{os}-{arch}/impeccable"),
+            "#!/bin/sh\nexit 0\n",
+        )
+        .unwrap();
         let (code, stdout, stderr) = run(fx, &[("IMPECCABLE_BUNDLE_PATH", &bundle)]);
-        assert_eq!(code, 0, "seed install failed.\nstdout:\n{stdout}\nstderr:\n{stderr}");
+        assert_eq!(
+            code, 0,
+            "seed install failed.\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        );
         Some(format!("{}/.claude/skills/impeccable/SKILL.md", fx.project))
     }
 
     #[test]
     fn offline_over_existing_skills_leaves_them_and_exits_zero() {
         let fx = fixture("offline-existing");
-        let Some(skill_md) = install_existing(&fx) else { return };
+        let Some(skill_md) = install_existing(&fx) else {
+            return;
+        };
         let before = std::fs::read(&skill_md).unwrap();
 
-        test_seam::force(Err(BundleError::Download("Network Error: Dns Failed: resolve dns name 'impeccable.style:443'".into())));
+        test_seam::force(Err(BundleError::Download(
+            "Network Error: Dns Failed: resolve dns name 'impeccable.style:443'".into(),
+        )));
         let (code, stdout, stderr) = run(&fx, &[]);
         assert_eq!(code, 0, "stdout:\n{stdout}\nstderr:\n{stderr}");
-        assert!(stdout.contains("Could not check for skill updates: Could not download skill bundle: Network Error"), "{stdout}");
-        assert!(stdout.contains("Existing skills were left unchanged."), "{stdout}");
-        assert!(!stdout.contains("verify") && !stdout.contains("report it"), "{stdout}");
-        assert_eq!(std::fs::read(&skill_md).unwrap(), before, "existing skill was modified");
+        assert!(
+            stdout.contains(
+                "Could not check for skill updates: Could not download skill bundle: Network Error"
+            ),
+            "{stdout}"
+        );
+        assert!(
+            stdout.contains("Existing skills were left unchanged."),
+            "{stdout}"
+        );
+        assert!(
+            !stdout.contains("verify") && !stdout.contains("report it"),
+            "{stdout}"
+        );
+        assert_eq!(
+            std::fs::read(&skill_md).unwrap(),
+            before,
+            "existing skill was modified"
+        );
     }
 
     #[test]
     fn failed_verification_over_existing_skills_is_fatal() {
         let fx = fixture("verify-existing");
-        let Some(skill_md) = install_existing(&fx) else { return };
+        let Some(skill_md) = install_existing(&fx) else {
+            return;
+        };
         let before = std::fs::read(&skill_md).unwrap();
 
-        test_seam::force(Err(BundleError::Verify("ZIP digest does not match the signed release".into())));
+        test_seam::force(Err(BundleError::Verify(
+            "ZIP digest does not match the signed release".into(),
+        )));
         let (code, stdout, stderr) = run(&fx, &[]);
         assert_eq!(code, 1, "stdout:\n{stdout}\nstderr:\n{stderr}");
-        assert!(stderr.contains("Install check failed: Could not verify skill bundle: ZIP digest"), "{stderr}");
-        assert!(!stdout.contains("Could not check for skill updates"), "{stdout}");
-        assert_eq!(std::fs::read(&skill_md).unwrap(), before, "existing skill was modified");
+        assert!(
+            stderr.contains("Install check failed: Could not verify skill bundle: ZIP digest"),
+            "{stderr}"
+        );
+        assert!(
+            !stdout.contains("Could not check for skill updates"),
+            "{stdout}"
+        );
+        assert_eq!(
+            std::fs::read(&skill_md).unwrap(),
+            before,
+            "existing skill was modified"
+        );
     }
 
     #[test]
     fn offline_fresh_install_fails_as_a_download() {
         let fx = fixture("offline-fresh");
-        test_seam::force(Err(BundleError::Download("Network Error: Dns Failed".into())));
+        test_seam::force(Err(BundleError::Download(
+            "Network Error: Dns Failed".into(),
+        )));
         let (code, stdout, stderr) = run(&fx, &[]);
         assert_eq!(code, 1, "stdout:\n{stdout}\nstderr:\n{stderr}");
-        assert!(stderr.contains("Download failed: Could not download skill bundle: Network Error"), "{stderr}");
+        assert!(
+            stderr.contains("Download failed: Could not download skill bundle: Network Error"),
+            "{stderr}"
+        );
         assert!(!stderr.contains("verify"), "{stderr}");
-        assert!(!std::path::Path::new(&format!("{}/.claude/skills/impeccable", fx.project)).exists());
+        assert!(
+            !std::path::Path::new(&format!("{}/.claude/skills/impeccable", fx.project)).exists()
+        );
     }
 }

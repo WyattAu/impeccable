@@ -15,9 +15,9 @@ use crate::checks::rules::{check_kicker_above_heading, KickerCandidate, RuleHit}
 use crate::checks::text_rules::{
     check_em_dash_overuse, check_numbered_section_labels, is_kicker_candidate,
     is_numbered_section_label_candidate, is_repeated_text_container, parse_numbered_label_text,
-    strip_edge_quotes, HEADING_TAGS, KICKER_CARD_CONTEXT_SELECTOR, KICKER_SKIP_SELECTOR, LEADING_DISPLAY_TYPE_PX,
-    KickerCandidateInput, NumberedLabel, NumberedLabelCandidate, NumberedLabelCandidateInput,
-    REPEATED_TEXT_CONTAINER_TAGS, REPEATED_TEXT_SKIP_SELECTOR,
+    strip_edge_quotes, KickerCandidateInput, NumberedLabel, NumberedLabelCandidate,
+    NumberedLabelCandidateInput, HEADING_TAGS, KICKER_CARD_CONTEXT_SELECTOR, KICKER_SKIP_SELECTOR,
+    LEADING_DISPLAY_TYPE_PX, REPEATED_TEXT_CONTAINER_TAGS, REPEATED_TEXT_SKIP_SELECTOR,
 };
 use crate::js::{self, parse_float, parse_int};
 use crate::js_ext_a::num_truthy;
@@ -80,7 +80,9 @@ pub fn is_kicker_card_context(dom: &dyn Dom, heading: ElId, kicker: ElId) -> boo
 /// a painted panel (redoubt.agency's h2 in the hero's side panel,
 /// vestra.ai's 40px h3 across a feature band) keeps its eyebrow reported.
 fn kicker_in_painted_card(dom: &dyn Dom, heading: ElId, kicker: ElId) -> bool {
-    if kicker_heading_level(dom, heading) < 3.0 || font_size_of(dom, heading) >= LEADING_DISPLAY_TYPE_PX {
+    if kicker_heading_level(dom, heading) < 3.0
+        || font_size_of(dom, heading) >= LEADING_DISPLAY_TYPE_PX
+    {
         return false;
     }
     let viewport = {
@@ -200,7 +202,9 @@ pub fn collect_kicker_candidates_with_elements(dom: &dyn Dom) -> Vec<(ElId, Kick
         if super::dom::closest_or_none(dom, kicker, KICKER_SKIP_SELECTOR).is_some() {
             continue;
         }
-        if is_kicker_card_context(dom, heading, kicker) || kicker_in_painted_card(dom, heading, kicker) {
+        if is_kicker_card_context(dom, heading, kicker)
+            || kicker_in_painted_card(dom, heading, kicker)
+        {
             continue;
         }
         let heading_tag = tag_lower(dom, heading);
@@ -351,7 +355,8 @@ pub fn collect_numbered_section_label_candidates(dom: &dyn Dom) -> Vec<NumberedL
         // (gig-connect's venue capacity, a people icon and "35" over the card
         // photo), not a section number. A plain "01" in a painted card stays:
         // numbered pricing and feature cards are the tell itself.
-        if (is_kicker_card_context(dom, heading, label) && !in_an_unpainted_article(dom, heading, label))
+        if (is_kicker_card_context(dom, heading, label)
+            && !in_an_unpainted_article(dom, heading, label))
             || numbered_label_holds_media(dom, label)
         {
             continue;
@@ -373,7 +378,8 @@ pub fn collect_numbered_section_label_candidates(dom: &dyn Dom) -> Vec<NumberedL
                 t
             }
         };
-        let Some(parsed) = parse_numbered_label_text(Some(&label_text)).or_else(|| parse_hash_numbered_label(&label_text))
+        let Some(parsed) = parse_numbered_label_text(Some(&label_text))
+            .or_else(|| parse_hash_numbered_label(&label_text))
         else {
             continue;
         };
@@ -410,9 +416,15 @@ pub fn collect_numbered_section_label_candidates(dom: &dyn Dom) -> Vec<NumberedL
     }
     // `#` labels that all carry the same word after the number ("#1 Rated",
     // "#2 Rated", "#3 Rated") are a ranked list, not named sections.
-    let hash_words: Vec<Option<String>> =
-        candidates.iter().filter(|c| c.label_text.starts_with('#')).map(|c| hash_label_word(&c.label_text)).collect();
-    if hash_words.len() >= 2 && hash_words[0].is_some() && hash_words.iter().all(|w| *w == hash_words[0]) {
+    let hash_words: Vec<Option<String>> = candidates
+        .iter()
+        .filter(|c| c.label_text.starts_with('#'))
+        .map(|c| hash_label_word(&c.label_text))
+        .collect();
+    if hash_words.len() >= 2
+        && hash_words[0].is_some()
+        && hash_words.iter().all(|w| *w == hash_words[0])
+    {
         candidates.retain(|c| !c.label_text.starts_with('#'));
     }
     candidates
@@ -448,17 +460,35 @@ static HASH_LABEL_RE: Lazy<Regex> =
 /// Words that make a `#` label a rank ("#1 Rated", "#2 Best seller"), not a
 /// section number.
 const RANKING_WORDS: &[&str] = &[
-    "rated", "ranked", "rank", "best", "top", "in", "pick", "choice", "overall", "seller", "bestseller",
-    "selling", "voted", "place", "trending",
+    "rated",
+    "ranked",
+    "rank",
+    "best",
+    "top",
+    "in",
+    "pick",
+    "choice",
+    "overall",
+    "seller",
+    "bestseller",
+    "selling",
+    "voted",
+    "place",
+    "trending",
 ];
 
 /// The first word after the number of a `#` label, lowercased: "#1 Connect"
 /// reads "connect", a bare "#03" reads none.
 fn hash_label_word(text: &str) -> Option<String> {
-    let rest = text.strip_prefix('#')?.trim_start_matches(|c: char| c.is_ascii_digit());
+    let rest = text
+        .strip_prefix('#')?
+        .trim_start_matches(|c: char| c.is_ascii_digit());
     rest.split_whitespace()
         .next()
-        .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase())
+        .map(|w| {
+            w.trim_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase()
+        })
         .filter(|w| !w.is_empty())
 }
 
@@ -506,7 +536,10 @@ fn in_an_unpainted_article(dom: &dyn Dom, heading: ElId, label: ElId) -> bool {
     if tag_lower(dom, item) != "article" {
         return false;
     }
-    if dom.parent(item).is_some_and(|p| super::dom::closest_or_none(dom, p, ARTICLE_HOLDER_SELECTOR).is_some()) {
+    if dom
+        .parent(item)
+        .is_some_and(|p| super::dom::closest_or_none(dom, p, ARTICLE_HOLDER_SELECTOR).is_some())
+    {
         return false;
     }
     let mut cur = dom.parent(heading);
@@ -553,12 +586,15 @@ fn in_an_unpainted_article(dom: &dyn Dom, heading: ElId, label: ElId) -> bool {
 /// surface under it, a shadow, or a border drawn on three sides or more (a
 /// square bordered card).
 fn draws_a_box(dom: &dyn Dom, el: ElId) -> bool {
-    if super::page_checks::is_card_like_dom(dom, el) || super::page_checks::fill_differs_from_surface(dom, el) {
+    if super::page_checks::is_card_like_dom(dom, el)
+        || super::page_checks::fill_differs_from_surface(dom, el)
+    {
         return true;
     }
     let shadow = crate::checks::measures::parse_shadow_layers(&dom.style(el, "boxShadow"));
     if shadow.iter().any(|l| {
-        l.alpha >= crate::checks::measures::FAINT_PAINT_ALPHA && (l.x != 0.0 || l.y != 0.0 || l.blur > 0.0 || l.spread != 0.0)
+        l.alpha >= crate::checks::measures::FAINT_PAINT_ALPHA
+            && (l.x != 0.0 || l.y != 0.0 || l.blur > 0.0 || l.spread != 0.0)
     }) {
         return true;
     }
@@ -575,7 +611,9 @@ pub const NUMBERED_LABEL_MEDIA_SELECTOR: &str = "img, picture, video, canvas";
 /// beside a card's "02" leaves the "02" a number.
 fn numbered_label_holds_media(dom: &dyn Dom, label: ElId) -> bool {
     let found = |selector: &str| dom.query_all(Some(label), selector).unwrap_or_default();
-    found(NUMBERED_LABEL_MEDIA_SELECTOR).iter().any(|&el| el != label)
+    found(NUMBERED_LABEL_MEDIA_SELECTOR)
+        .iter()
+        .any(|&el| el != label)
         || found("svg").iter().any(|&svg| {
             dom.parent(svg)
                 .is_some_and(|box_| holds_number_text(&super::dom::direct_text(dom, box_)))
@@ -637,7 +675,9 @@ fn without_choice_lines(dom: &dyn Dom, text: &str) -> String {
             dom.closest(o, "select")
                 .ok()
                 .flatten()
-                .is_some_and(|select| super::element_checks::is_painted_for_browser_rule(dom, select))
+                .is_some_and(|select| {
+                    super::element_checks::is_painted_for_browser_rule(dom, select)
+                })
         })
         .map(|o| collapsed_text_content(dom, o))
         .filter(|t| !t.is_empty())
@@ -891,7 +931,9 @@ pub fn collect_repeated_container_text_findings(
                 } else {
                     WS_RE
                         .split(raw_cls)
-                        .filter(|s| !s.is_empty() && !crate::checks::text_rules::is_id_like_class(s))
+                        .filter(|s| {
+                            !s.is_empty() && !crate::checks::text_rules::is_id_like_class(s)
+                        })
                         .collect()
                 };
                 cls.sort_by(|a, b| a.encode_utf16().cmp(b.encode_utf16()));
@@ -1037,7 +1079,11 @@ mod tests {
             d.add_text(kicker, "Runs");
             d.set_styles(
                 kicker,
-                &[("fontSize", "12px"), ("letterSpacing", "1.2px"), ("textTransform", "uppercase")],
+                &[
+                    ("fontSize", "12px"),
+                    ("letterSpacing", "1.2px"),
+                    ("textTransform", "uppercase"),
+                ],
             );
             d.set_rect(kicker, label.0, label.1, label.2, label.3);
             let parent = if wrapped {
@@ -1054,10 +1100,26 @@ mod tests {
             check_kicker_above_heading_dom(&d, None).len()
         };
         for wrapped in [false, true] {
-            assert_eq!(kicker_at((102.0, 894.0, 150.0, 23.0), wrapped), 0, "beside, wrapped {wrapped}");
-            assert_eq!(kicker_at((102.0, 940.0, 150.0, 23.0), wrapped), 0, "below, wrapped {wrapped}");
-            assert_eq!(kicker_at((292.0, 860.0, 150.0, 23.0), wrapped), 1, "stacked, wrapped {wrapped}");
-            assert_eq!(kicker_at((102.0, 862.0, 150.0, 23.0), wrapped), 1, "above left, wrapped {wrapped}");
+            assert_eq!(
+                kicker_at((102.0, 894.0, 150.0, 23.0), wrapped),
+                0,
+                "beside, wrapped {wrapped}"
+            );
+            assert_eq!(
+                kicker_at((102.0, 940.0, 150.0, 23.0), wrapped),
+                0,
+                "below, wrapped {wrapped}"
+            );
+            assert_eq!(
+                kicker_at((292.0, 860.0, 150.0, 23.0), wrapped),
+                1,
+                "stacked, wrapped {wrapped}"
+            );
+            assert_eq!(
+                kicker_at((102.0, 862.0, 150.0, 23.0), wrapped),
+                1,
+                "above left, wrapped {wrapped}"
+            );
         }
     }
 
@@ -1067,36 +1129,51 @@ mod tests {
     /// uppercase goes to the hero rule.
     #[test]
     fn kicker_hands_off_only_what_the_hero_rule_reports() {
-        let hero = |d: &mut FakeDom, body: ElId, y: f64, variant: &str, transform: &str, heading: &str| {
-            let sec = d.add(Some(body), "section");
-            let kicker = d.add(Some(sec), "p");
-            d.add_text(kicker, "new in version four");
-            d.set_styles(
-                kicker,
-                &[
-                    ("fontSize", "13px"),
-                    ("letterSpacing", "1.3px"),
-                    ("textTransform", transform),
-                    ("fontVariant", variant),
-                    ("fontVariantCaps", variant),
-                ],
-            );
-            d.set_rect(kicker, 40.0, y, 240.0, 18.0);
-            let h = d.add(Some(sec), "h1");
-            d.add_text(h, heading);
-            d.set_style(h, "fontSize", "56px");
-            d.set_rect(h, 40.0, y + 30.0, 900.0, 64.0);
-        };
+        let hero =
+            |d: &mut FakeDom, body: ElId, y: f64, variant: &str, transform: &str, heading: &str| {
+                let sec = d.add(Some(body), "section");
+                let kicker = d.add(Some(sec), "p");
+                d.add_text(kicker, "new in version four");
+                d.set_styles(
+                    kicker,
+                    &[
+                        ("fontSize", "13px"),
+                        ("letterSpacing", "1.3px"),
+                        ("textTransform", transform),
+                        ("fontVariant", variant),
+                        ("fontVariantCaps", variant),
+                    ],
+                );
+                d.set_rect(kicker, 40.0, y, 240.0, 18.0);
+                let h = d.add(Some(sec), "h1");
+                d.add_text(h, heading);
+                d.set_style(h, "fontSize", "56px");
+                d.set_rect(h, 40.0, y + 30.0, 900.0, 64.0);
+            };
         let mut d = FakeDom::new();
         let (_html, body) = d.with_page();
-        hero(&mut d, body, 100.0, "small-caps", "none", "The workspace that thinks");
+        hero(
+            &mut d,
+            body,
+            100.0,
+            "small-caps",
+            "none",
+            "The workspace that thinks",
+        );
         let hits = check_kicker_above_heading_dom(&d, None);
         assert_eq!(hits.len(), 1, "{hits:?}");
         assert!(hits[0].finding.detail.contains("new in version four"));
 
         let mut d = FakeDom::new();
         let (_html, body) = d.with_page();
-        hero(&mut d, body, 100.0, "normal", "uppercase", "The workspace that thinks");
+        hero(
+            &mut d,
+            body,
+            100.0,
+            "normal",
+            "uppercase",
+            "The workspace that thinks",
+        );
         assert!(check_kicker_above_heading_dom(&d, None).is_empty());
     }
 
@@ -1109,7 +1186,11 @@ mod tests {
             d.add_text(kicker, "Channel battle");
             d.set_styles(
                 kicker,
-                &[("fontSize", "12px"), ("letterSpacing", "1.3px"), ("textTransform", "uppercase")],
+                &[
+                    ("fontSize", "12px"),
+                    ("letterSpacing", "1.3px"),
+                    ("textTransform", "uppercase"),
+                ],
             );
             d.set_rect(kicker, 40.0, y, 240.0, 16.0);
             let h = d.add(Some(parent), "h2");
@@ -1143,7 +1224,10 @@ mod tests {
 
         let hits = check_kicker_above_heading_dom(&d, None);
         let snippets: Vec<&str> = hits.iter().map(|h| h.finding.detail.as_str()).collect();
-        assert_eq!(snippets, vec!["kicker \"Channel battle\" above h2 \"Which would you try\""]);
+        assert_eq!(
+            snippets,
+            vec!["kicker \"Channel battle\" above h2 \"Which would you try\""]
+        );
     }
 
     #[test]
@@ -1229,21 +1313,35 @@ mod tests {
         // heading) or the heading itself keeps its box and lays out none of
         // its words.
         let labels = |d: &FakeDom| -> Vec<ElId> {
-            d.query_all(None, "span").unwrap_or_default().into_iter().filter_map(|s| d.parent(s)).collect()
+            d.query_all(None, "span")
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|s| d.parent(s))
+                .collect()
         };
         for on_heading in [false, true] {
             let mut d = build(false);
-            let els = if on_heading { d.query_all(None, "h3").unwrap_or_default() } else { labels(&d) };
+            let els = if on_heading {
+                d.query_all(None, "h3").unwrap_or_default()
+            } else {
+                labels(&d)
+            };
             assert_eq!(els.len(), 3);
             for el in els {
                 d.set_styles(el, &[("display", "block"), ("contentVisibility", "hidden")]);
             }
-            assert!(check_numbered_section_labels_dom(&d).is_empty(), "on heading: {on_heading}");
+            assert!(
+                check_numbered_section_labels_dom(&d).is_empty(),
+                "on heading: {on_heading}"
+            );
         }
         // On a plain inline box it does nothing.
         let mut d = build(false);
         for el in labels(&d) {
-            d.set_styles(el, &[("display", "inline"), ("contentVisibility", "hidden")]);
+            d.set_styles(
+                el,
+                &[("display", "inline"), ("contentVisibility", "hidden")],
+            );
         }
         assert_eq!(check_numbered_section_labels_dom(&d).len(), 3);
 
@@ -1251,9 +1349,7 @@ mod tests {
         // scroll-driven stage at opacity 0, which a visitor scrolls into
         // view, still count.
         let mut d = build(false);
-        let stage_labels: Vec<ElId> = d
-            .query_all(None, "span")
-            .unwrap_or_default();
+        let stage_labels: Vec<ElId> = d.query_all(None, "span").unwrap_or_default();
         for label in stage_labels {
             let mobile = d.parent(label).unwrap();
             d.set_style(mobile, "opacity", "0");
@@ -1307,11 +1403,23 @@ mod tests {
         };
         let hits = build(false, ["#1 Connect", "#2 Remember"]);
         assert_eq!(hits.len(), 2, "{hits:?}");
-        assert_eq!(hits[0].snippet, "tiny numbered label \"#1 Connect\" beside h3 \"Feature 1\" (2 on page)");
-        assert!(build(true, ["#1 Connect", "#2 Remember"]).is_empty(), "drawn as cards");
+        assert_eq!(
+            hits[0].snippet,
+            "tiny numbered label \"#1 Connect\" beside h3 \"Feature 1\" (2 on page)"
+        );
+        assert!(
+            build(true, ["#1 Connect", "#2 Remember"]).is_empty(),
+            "drawn as cards"
+        );
         assert_eq!(build(false, ["#01", "#02"]).len(), 2, "a bare hash index");
-        assert!(build(false, ["#1Connect", "#2Remember"]).is_empty(), "no space after the number");
-        assert!(build(false, ["#123 Connect", "#124 Remember"]).is_empty(), "three digits");
+        assert!(
+            build(false, ["#1Connect", "#2Remember"]).is_empty(),
+            "no space after the number"
+        );
+        assert!(
+            build(false, ["#123 Connect", "#124 Remember"]).is_empty(),
+            "three digits"
+        );
     }
 
     /// Review of round 11: a card drawn outside the article (a link or a
@@ -1365,12 +1473,36 @@ mod tests {
             check_numbered_section_labels_dom(&d).len()
         };
         assert_eq!(build(None, ["01", "02", "03"]), 3, "bare articles");
-        assert_eq!(build(Some("a"), ["01", "02", "03"]), 0, "a link around each article");
-        assert_eq!(build(Some("div"), ["#1", "#2", "#3"]), 0, "a drawn div around each article");
-        assert_eq!(build(Some("div+img"), ["01", "02", "03"]), 0, "a drawn card holding an image and the article");
-        assert_eq!(build(None, ["#1 Rated", "#2 Rated", "#3 Rated"]), 0, "a ranking word");
-        assert_eq!(build(None, ["#1 Fast", "#2 Fast", "#3 Fast"]), 0, "one word repeated");
-        assert_eq!(build(None, ["#1 Plan", "#2 Build", "#3 Ship"]), 3, "named sections");
+        assert_eq!(
+            build(Some("a"), ["01", "02", "03"]),
+            0,
+            "a link around each article"
+        );
+        assert_eq!(
+            build(Some("div"), ["#1", "#2", "#3"]),
+            0,
+            "a drawn div around each article"
+        );
+        assert_eq!(
+            build(Some("div+img"), ["01", "02", "03"]),
+            0,
+            "a drawn card holding an image and the article"
+        );
+        assert_eq!(
+            build(None, ["#1 Rated", "#2 Rated", "#3 Rated"]),
+            0,
+            "a ranking word"
+        );
+        assert_eq!(
+            build(None, ["#1 Fast", "#2 Fast", "#3 Fast"]),
+            0,
+            "one word repeated"
+        );
+        assert_eq!(
+            build(None, ["#1 Plan", "#2 Build", "#3 Ship"]),
+            3,
+            "named sections"
+        );
     }
 
     /// gig-connect-six.vercel.app: a capacity badge, a people icon and a
@@ -1415,7 +1547,10 @@ mod tests {
         assert!(check_numbered_section_labels_dom(&build(Some("beside"))).is_empty());
         // An icon in a tile of its own beside a card's number leaves the
         // number a number (arbiproseller-app.vercel.app's feature cards).
-        assert_eq!(check_numbered_section_labels_dom(&build(Some("tile"))).len(), 2);
+        assert_eq!(
+            check_numbered_section_labels_dom(&build(Some("tile"))).len(),
+            2
+        );
     }
 
     #[test]
@@ -1447,7 +1582,10 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].snippet, "8 em-dashes in body text");
         assert_eq!(without_lone_dash_cells("x\t—\ty\n -- \n"), "x\t\ty\n\n");
-        assert_eq!(without_lone_dash_cells("no cells — here"), "no cells — here");
+        assert_eq!(
+            without_lone_dash_cells("no cells — here"),
+            "no cells — here"
+        );
     }
 
     /// vaultlykeep.com: a currency picker lists "USD — US Dollar" and a
@@ -1457,7 +1595,9 @@ mod tests {
         let mut d = FakeDom::new();
         let (_html, body) = d.with_page();
         let select = d.add(Some(body), "select");
-        let codes = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "CNY", "INR", "CHF"];
+        let codes = [
+            "USD", "EUR", "GBP", "CAD", "AUD", "JPY", "CNY", "INR", "CHF",
+        ];
         let mut lines = vec!["Prices shown in USD".to_string()];
         for code in codes {
             let option = d.add(Some(select), "option");
@@ -1467,9 +1607,15 @@ mod tests {
         d.el_mut(body).inner_text = Some(lines.join("\n"));
         assert!(check_em_dash_overuse_dom(&d).is_empty());
         // The same lines written as copy outside the control still count.
-        let prose: Vec<String> = codes.iter().map(|c| format!("{c} — said once more")).collect();
+        let prose: Vec<String> = codes
+            .iter()
+            .map(|c| format!("{c} — said once more"))
+            .collect();
         d.el_mut(body).inner_text = Some(format!("{}\n{}", lines.join("\n"), prose.join("\n")));
-        assert_eq!(check_em_dash_overuse_dom(&d)[0].snippet, "9 em-dashes in body text");
+        assert_eq!(
+            check_em_dash_overuse_dom(&d)[0].snippet,
+            "9 em-dashes in body text"
+        );
 
         // A hidden picker writes nothing into `innerText`: its options do
         // not erase the same words written as copy.
@@ -1483,7 +1629,10 @@ mod tests {
             d.add_text(option, &format!("{code} — said once more"));
         }
         d.el_mut(body).inner_text = Some(prose.join("\n"));
-        assert_eq!(check_em_dash_overuse_dom(&d)[0].snippet, "9 em-dashes in body text");
+        assert_eq!(
+            check_em_dash_overuse_dom(&d)[0].snippet,
+            "9 em-dashes in body text"
+        );
     }
 
     #[test]
@@ -1501,7 +1650,10 @@ mod tests {
         let h6 = d.add(Some(at), "h6");
         assert_eq!(
             label_before_heading(&d, h6),
-            Some(LabelBefore { label: tile, levels: 4 })
+            Some(LabelBefore {
+                label: tile,
+                levels: 4
+            })
         );
         // One wrapper more is past the limit.
         let row = d.add(Some(body), "div");
@@ -1518,7 +1670,10 @@ mod tests {
         let h3 = d.add(Some(wrap), "h3");
         assert_eq!(
             label_before_heading(&d, h3),
-            Some(LabelBefore { label: note, levels: 0 })
+            Some(LabelBefore {
+                label: note,
+                levels: 0
+            })
         );
         // The climb ends at body.
         let top = d.add(Some(body), "h2");
@@ -1654,7 +1809,10 @@ mod tests {
         // cannot see repeats nothing. With one of the three unpainted, two
         // are left.
         d.set_style(spots[2], "visibility", "hidden");
-        assert!(check_repeated_container_text_dom(&d).is_empty(), "a hidden spot");
+        assert!(
+            check_repeated_container_text_dom(&d).is_empty(),
+            "a hidden spot"
+        );
         d.set_style(spots[2], "visibility", "visible");
         assert_eq!(check_repeated_container_text_dom(&d).len(), 1);
         // Classes that carry an id name an instance, not a spot: three
@@ -1663,16 +1821,33 @@ mod tests {
             d.el_mut(*e).tag = "P".to_string();
             d.set_attr(*e, "class", &format!("term jet-listing-dynamic-{id}"));
         }
-        assert!(check_repeated_container_text_dom(&d).is_empty(), "id-like classes");
-        for (e, class) in spots.iter().zip(["term title", "term badge", "term footer"]) {
+        assert!(
+            check_repeated_container_text_dom(&d).is_empty(),
+            "id-like classes"
+        );
+        for (e, class) in spots
+            .iter()
+            .zip(["term title", "term badge", "term footer"])
+        {
             d.set_attr(*e, "class", class);
         }
-        assert_eq!(check_repeated_container_text_dom(&d).len(), 1, "three named spots");
+        assert_eq!(
+            check_repeated_container_text_dom(&d).len(),
+            1,
+            "three named spots"
+        );
         use crate::checks::text_rules::is_id_like_class;
         assert!(is_id_like_class("elementor-element-a565c83"));
         assert!(is_id_like_class("elementor-dcss-67254963955209192"));
         assert!(is_id_like_class("jet_listing_43268"));
-        for plain in ["grid-col-desk-2", "elementor-col-50", "text-gray-500", "card", "face-cafe", "w-1/2"] {
+        for plain in [
+            "grid-col-desk-2",
+            "elementor-col-50",
+            "text-gray-500",
+            "card",
+            "face-cafe",
+            "w-1/2",
+        ] {
             assert!(!is_id_like_class(plain), "{plain}");
         }
 

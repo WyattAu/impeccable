@@ -63,7 +63,9 @@ fn what_a_timed_change_is_about_to_move_is_not_scored() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/{FIXTURE}");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     let flagged: Vec<(String, String, String)> = findings
         .iter()
         .filter(|f| {
@@ -75,12 +77,17 @@ fn what_a_timed_change_is_about_to_move_is_not_scored() {
         .map(|f| {
             (
                 f.antipattern.clone(),
-                f.extras.get("selector").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                f.extras
+                    .get("selector")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
                 f.snippet.clone(),
             )
         })
         .collect();
-    let on = |rule: &str, selector: &str| flagged.iter().any(|(r, s, _)| r == rule && s == selector);
+    let on =
+        |rule: &str, selector: &str| flagged.iter().any(|(r, s, _)| r == rule && s == selector);
 
     for want in [
         ("undersized-ui-text", "#flag-url-old"),
@@ -94,10 +101,15 @@ fn what_a_timed_change_is_about_to_move_is_not_scored() {
         .iter()
         .filter(|(_, s, _)| s.starts_with("#pass-"))
         .collect();
-    assert!(passed.is_empty(), "unexpected should-pass findings: {passed:#?}");
+    assert!(
+        passed.is_empty(),
+        "unexpected should-pass findings: {passed:#?}"
+    );
     // The delayed fade-in and the slid-off menu hold most of the page's
     // text; neither is hidden content.
-    let hidden: Vec<&(String, String, String)> =
-        flagged.iter().filter(|(r, _, _)| r == "content-hidden-at-rest").collect();
+    let hidden: Vec<&(String, String, String)> = flagged
+        .iter()
+        .filter(|(r, _, _)| r == "content-hidden-at-rest")
+        .collect();
     assert!(hidden.is_empty(), "{hidden:#?}");
 }

@@ -58,7 +58,13 @@ fn serve() -> u16 {
     port
 }
 
-fn respond(stream: &mut TcpStream, status: &str, extra_headers: &str, content_type: &str, body: &[u8]) {
+fn respond(
+    stream: &mut TcpStream,
+    status: &str,
+    extra_headers: &str,
+    content_type: &str,
+    body: &[u8],
+) {
     let head = format!(
         "HTTP/1.0 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\n{extra_headers}Connection: close\r\n\r\n",
         body.len()
@@ -89,13 +95,23 @@ fn handle(mut stream: TcpStream) {
             "text/html; charset=utf-8",
             CHALLENGE.as_bytes(),
         ),
-        "/missing" => respond(&mut stream, "404 Not Found", "", "text/html; charset=utf-8", NOT_FOUND.as_bytes()),
+        "/missing" => respond(
+            &mut stream,
+            "404 Not Found",
+            "",
+            "text/html; charset=utf-8",
+            NOT_FOUND.as_bytes(),
+        ),
         _ => {
             let rel = path.trim_start_matches('/');
             let file = fixtures_dir().join(rel);
             match std::fs::read(&file) {
                 Ok(body) => {
-                    let ct = if rel.ends_with(".css") { "text/css" } else { "text/html; charset=utf-8" };
+                    let ct = if rel.ends_with(".css") {
+                        "text/css"
+                    } else {
+                        "text/html; charset=utf-8"
+                    };
                     respond(&mut stream, "200 OK", "", ct, &body)
                 }
                 Err(_) => respond(&mut stream, "404 Not Found", "", "text/plain", b"missing"),
@@ -120,25 +136,43 @@ fn blocked_pages_are_refused_by_the_cli_path_and_recorded_by_evidence() {
     let options = ScanOptions::default();
 
     let blocked = format!("http://127.0.0.1:{port}/blocked");
-    let err = engine.detect_url(&blocked, &options).expect_err("challenge page must not scan");
+    let err = engine
+        .detect_url(&blocked, &options)
+        .expect_err("challenge page must not scan");
     assert!(err.message.contains("bot challenge"), "{}", err.message);
     assert!(err.message.contains("HTTP 405"), "{}", err.message);
-    assert!(err.message.contains("x-amzn-waf-action: captcha"), "{}", err.message);
+    assert!(
+        err.message.contains("x-amzn-waf-action: captcha"),
+        "{}",
+        err.message
+    );
 
     let missing = format!("http://127.0.0.1:{port}/missing");
-    let err = engine.detect_url(&missing, &options).expect_err("error page must not scan");
+    let err = engine
+        .detect_url(&missing, &options)
+        .expect_err("error page must not scan");
     assert!(err.message.contains("HTTP 404"), "{}", err.message);
 
     let mut browser = engine.launch().expect("launch");
-    let (findings, evidence) =
-        detect_url_evidence(&mut browser, &blocked, &options, "load", 100, &EvidenceRequest::default())
-            .expect("evidence scan of a blocked page is Ok");
+    let (findings, evidence) = detect_url_evidence(
+        &mut browser,
+        &blocked,
+        &options,
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("evidence scan of a blocked page is Ok");
     browser.close();
     assert!(findings.is_empty());
     assert!(evidence.validity.as_ref().unwrap().is_blocked());
     assert_eq!(evidence.response.as_ref().unwrap().status, 405);
     assert!(evidence.scan_snapshot.is_none());
-    assert!(evidence.screenshot.is_some(), "{:?}", evidence.screenshot_error);
+    assert!(
+        evidence.screenshot.is_some(),
+        "{:?}",
+        evidence.screenshot_error
+    );
 }
 
 /// The rule pass reads the page after the reveal sweep, so a section that is
@@ -189,7 +223,9 @@ fn the_rule_pass_measures_the_revealed_page() {
     }
     // Everything reveals, so nothing is hidden at rest.
     assert!(
-        !flagged.iter().any(|(id, _)| *id == "content-hidden-at-rest"),
+        !flagged
+            .iter()
+            .any(|(id, _)| *id == "content-hidden-at-rest"),
         "{flagged:?}"
     );
 }
@@ -326,16 +362,23 @@ fn evidence_matches_the_cli_path_and_replay_matches_live() {
         }
         let url = format!("http://127.0.0.1:{port}/{name}");
         let cli = engine.detect_url(&url, &options).expect("cli scan");
-        let (live, evidence) =
-            detect_url_evidence(&mut browser, &url, &options, "networkidle0", 0, &EvidenceRequest::default())
-                .expect("evidence scan");
+        let (live, evidence) = detect_url_evidence(
+            &mut browser,
+            &url,
+            &options,
+            "networkidle0",
+            0,
+            &EvidenceRequest::default(),
+        )
+        .expect("evidence scan");
 
-        let strip = |f: &impeccable_core::findings::Finding| {
-            (f.antipattern.clone(), f.snippet.clone())
-        };
+        let strip =
+            |f: &impeccable_core::findings::Finding| (f.antipattern.clone(), f.snippet.clone());
         // The visual-contrast pass samples pixels, so compare the passes that
         // do not: everything but visual-contrast must match the CLI path.
-        let non_visual = |fs: &[impeccable_core::findings::Finding], origins: Option<&[&str]>| -> Vec<(String, String)> {
+        let non_visual = |fs: &[impeccable_core::findings::Finding],
+                          origins: Option<&[&str]>|
+         -> Vec<(String, String)> {
             fs.iter()
                 .enumerate()
                 .filter(|(i, f)| match origins {
@@ -349,16 +392,33 @@ fn evidence_matches_the_cli_path_and_replay_matches_live() {
         let live_scan: Vec<(String, String)> = non_visual(&live, Some(&evidence.origins));
         let cli_all: Vec<(String, String)> = cli.iter().map(strip).collect();
         for item in &live_scan {
-            assert!(cli_all.contains(item), "{name}: evidence finding {item:?} missing from the CLI path");
+            assert!(
+                cli_all.contains(item),
+                "{name}: evidence finding {item:?} missing from the CLI path"
+            );
         }
 
-        let scan_findings = live.iter().zip(&evidence.origins).filter(|(_, o)| **o == origin::SCAN);
+        let scan_findings = live
+            .iter()
+            .zip(&evidence.origins)
+            .filter(|(_, o)| **o == origin::SCAN);
         for (f, _) in scan_findings {
-            assert!(f.extras.get("selector").is_some(), "{name}: {} has no selector", f.antipattern);
+            assert!(
+                f.extras.get("selector").is_some(),
+                "{name}: {} has no selector",
+                f.antipattern
+            );
         }
-        assert!(evidence.screenshot.is_some(), "{name}: {:?}", evidence.screenshot_error);
+        assert!(
+            evidence.screenshot.is_some(),
+            "{name}: {:?}",
+            evidence.screenshot_error
+        );
         if live.iter().any(|f| f.extras.get("selector").is_some()) {
-            assert!(!evidence.element_rects.is_empty(), "{name}: no element rects");
+            assert!(
+                !evidence.element_rects.is_empty(),
+                "{name}: no element rects"
+            );
         }
 
         let replay = replay_url_scan(
@@ -379,8 +439,14 @@ fn evidence_matches_the_cli_path_and_replay_matches_live() {
             .map(|(f, _)| f)
             .collect();
         let replayed: Vec<&impeccable_core::findings::Finding> = replay.findings.iter().collect();
-        assert_eq!(replayed, replayable, "{name}: replay differs from the live scan");
-        assert_eq!(replay.unanswered_hit_tests, 0, "{name}: unanswered hit tests");
+        assert_eq!(
+            replayed, replayable,
+            "{name}: replay differs from the live scan"
+        );
+        assert_eq!(
+            replay.unanswered_hit_tests, 0,
+            "{name}: unanswered hit tests"
+        );
     }
     browser.close();
 }
@@ -406,12 +472,18 @@ fn evidence_measures_the_element_the_scan_flagged_when_an_id_repeats() {
         .map(|f| {
             (
                 f.antipattern.as_str(),
-                f.extras.get("selector").and_then(|v| v.as_str()).unwrap_or(""),
+                f.extras
+                    .get("selector")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(""),
             )
         })
         .collect();
     for selector in ["#dup-note", "#dup-first-note", "#solo-note"] {
-        assert!(flagged.contains(&("low-contrast", selector)), "{selector} not flagged: {flagged:?}");
+        assert!(
+            flagged.contains(&("low-contrast", selector)),
+            "{selector} not flagged: {flagged:?}"
+        );
     }
     let rect = |s: &str| -> Vec<f64> {
         evidence
@@ -423,7 +495,12 @@ fn evidence_measures_the_element_the_scan_flagged_when_an_id_repeats() {
             .filter_map(|n| n.as_f64())
             .collect()
     };
-    let text = |s: &str| evidence.element_details[s]["text"].as_str().unwrap_or("").to_string();
+    let text = |s: &str| {
+        evidence.element_details[s]["text"]
+            .as_str()
+            .unwrap_or("")
+            .to_string()
+    };
 
     // Should flag: the copy the scan scored sits below two collapsed copies
     // and a 320px spacer. `querySelector` would name the first collapsed copy.
@@ -455,7 +532,10 @@ fn evidence_measures_the_element_the_scan_flagged_when_an_id_repeats() {
             hi = hi.max(l);
         }
     }
-    assert!(hi.saturating_sub(lo) > 20, "the flagged copy is blank at its rect");
+    assert!(
+        hi.saturating_sub(lo) > 20,
+        "the flagged copy is blank at its rect"
+    );
 }
 
 /// round 9: the evidence step measures the element the scan flagged, marks
@@ -488,7 +568,12 @@ fn evidence_follows_the_scanned_element_after_the_page_changes() {
             .to_string()
     };
     let rect = |s: &str| -> Vec<f64> {
-        evidence.element_rects[s].as_array().unwrap().iter().filter_map(|n| n.as_f64()).collect()
+        evidence.element_rects[s]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|n| n.as_f64())
+            .collect()
     };
 
     // The paragraph the scan flagged, not the one the class moved to.
@@ -521,7 +606,12 @@ fn evidence_follows_the_scanned_element_after_the_page_changes() {
     let bounce = selector("bounce-note");
     assert!(rect(&bounce)[0] >= 0.0, "{:?}", rect(&bounce));
     assert!(evidence.element_drift.get(&bounce).is_none());
-    assert_eq!(evidence.element_drift.len(), 1, "{:?}", evidence.element_drift);
+    assert_eq!(
+        evidence.element_drift.len(),
+        1,
+        "{:?}",
+        evidence.element_drift
+    );
 
     // The halo is reported on the page, and anchored on the orb.
     assert_eq!(evidence.page_anchors.len(), findings.len());
@@ -529,10 +619,21 @@ fn evidence_follows_the_scanned_element_after_the_page_changes() {
         .iter()
         .position(|f| f.antipattern == "radial-halo")
         .unwrap_or_else(|| panic!("no radial-halo: {findings:#?}"));
-    assert_eq!(findings[halo].extras.get("selector").and_then(|v| v.as_str()), Some("body"));
+    assert_eq!(
+        findings[halo]
+            .extras
+            .get("selector")
+            .and_then(|v| v.as_str()),
+        Some("body")
+    );
     let anchor = &evidence.page_anchors[halo];
     assert_eq!(anchor["class"].as_str(), Some("orb"), "{anchor}");
-    let r: Vec<f64> = anchor["rect"].as_array().unwrap().iter().filter_map(|n| n.as_f64()).collect();
+    let r: Vec<f64> = anchor["rect"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|n| n.as_f64())
+        .collect();
     assert_eq!(r, vec![700.0, 300.0, 400.0, 400.0]);
     for (f, a) in findings.iter().zip(&evidence.page_anchors) {
         if f.antipattern != "radial-halo" {

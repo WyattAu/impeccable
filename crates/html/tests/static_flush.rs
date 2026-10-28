@@ -135,7 +135,10 @@ fn row_or_shadowed_shells_are_not_seen_through() {
          <main><h1>Heading</h1><p>Body text.</p></main></div></div>";
     let expect =
         vec!["<div> \"page\": children flush against bg on all sides (no inset)".to_string()];
-    for inner in ["display: flex;", "box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);"] {
+    for inner in [
+        "display: flex;",
+        "box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);",
+    ] {
         let style = format!(
             "body {{ margin: 0; background: #eee; }}
              .page {{ background: #fff; }}
@@ -331,10 +334,7 @@ fn the_flush_fixture_reports_its_flag_column() {
     }
     // Every flag case the file scan can reach; the rest of the flag column
     // needs layout and is covered by the URL scan.
-    assert!(
-        flagged.len() >= 5,
-        "file scan lost flag cases: {flagged:?}"
-    );
+    assert!(flagged.len() >= 5, "file scan lost flag cases: {flagged:?}");
 }
 
 /// `cramped-padding-shell.html` (PR #1059): a shell's relative offset carries

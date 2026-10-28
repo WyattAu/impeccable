@@ -89,7 +89,12 @@ fn findings(engine: &BrowserEngine, port: u16, fixture: &str, rule: &str) -> Vec
         .into_iter()
         .filter(|f| f.antipattern == rule)
         .map(|f| {
-            let selector = f.extras.get("selector").and_then(|s| s.as_str()).unwrap_or("").to_string();
+            let selector = f
+                .extras
+                .get("selector")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string();
             (f.snippet, selector)
         })
         .collect()
@@ -153,10 +158,18 @@ fn the_text_geometry_rules_measure_the_text() {
             .and_then(|(n, _)| n.parse().ok())
             .unwrap_or_else(|| panic!("{selector}: unexpected snippet {snippet:?}"));
         assert!(chars >= 85, "{selector}: {snippet}");
-        assert!(snippet.ends_with("rendered lines (aim for <80)"), "{selector}: {snippet}");
+        assert!(
+            snippet.ends_with("rendered lines (aim for <80)"),
+            "{selector}: {snippet}"
+        );
     }
 
-    let edges = findings(&engine, port, "body-text-viewport-edge.html", "body-text-viewport-edge");
+    let edges = findings(
+        &engine,
+        port,
+        "body-text-viewport-edge.html",
+        "body-text-viewport-edge",
+    );
     let (page, edges): (Vec<_>, Vec<_>) = edges.into_iter().partition(|(_, sel)| sel == "body");
     assert_cases(
         &edges,
@@ -188,8 +201,14 @@ fn the_text_geometry_rules_measure_the_text() {
         "two paragraphs, the list item, the inline prose, and the 8px left gutter of the paragraph \
          that also runs past the right edge: {edges:?}"
     );
-    let gutter = edges.iter().find(|(_, sel)| sel.contains("flag-gutter-beside-overflow")).unwrap();
-    assert!(gutter.0.ends_with("(left 8px)"), "only the gutter side: {gutter:?}");
+    let gutter = edges
+        .iter()
+        .find(|(_, sel)| sel.contains("flag-gutter-beside-overflow"))
+        .unwrap();
+    assert!(
+        gutter.0.ends_with("(left 8px)"),
+        "only the gutter side: {gutter:?}"
+    );
     assert_eq!(
         page.iter().map(|(s, _)| s.as_str()).collect::<Vec<_>>(),
         vec![
@@ -236,7 +255,12 @@ fn the_text_geometry_rules_measure_the_text() {
     // The same short runs in a row that does not wrap, and in grid cells,
     // wrap inside their items and keep the floor.
     let runs = findings(&engine, port, "tight-leading-runs.html", "tight-leading");
-    assert_cases(&runs, &["nowrap-runs-row", "grid-runs-row"], &[], "tight-leading");
+    assert_cases(
+        &runs,
+        &["nowrap-runs-row", "grid-runs-row"],
+        &[],
+        "tight-leading",
+    );
     assert_eq!(runs.len(), 2, "the two flag cases: {runs:?}");
 
     // A chip under 27.5px tall is measured by its glyphs (taste call r3-20):
@@ -252,11 +276,21 @@ fn the_text_geometry_rules_measure_the_text() {
     let cramped = findings(&engine, port, "cramped-padding.html", "cramped-padding");
     assert_cases(
         &cramped,
-        &["flag-card-4", "flag-touching-chip", "flag-price-chip", "flag-price-chip-subpixel"],
+        &[
+            "flag-card-4",
+            "flag-touching-chip",
+            "flag-price-chip",
+            "flag-price-chip-subpixel",
+        ],
         &["pass-highlight", "pass-step-chip", "pass-price-chip"],
         "cramped-padding",
     );
-    let edges = findings(&engine, port, "cramped-padding-edges.html", "cramped-padding");
+    let edges = findings(
+        &engine,
+        port,
+        "cramped-padding-edges.html",
+        "cramped-padding",
+    );
     assert_cases(
         &edges,
         &["flag-scroll-start", "flag-band-next-differs"],
@@ -273,7 +307,10 @@ fn the_text_geometry_rules_measure_the_text() {
     for chip in ["flag-price-chip", "flag-price-chip-subpixel"] {
         let (snippet, _) = cramped
             .iter()
-            .find(|(_, sel)| sel.split(|c: char| !(c.is_alphanumeric() || c == '-' || c == '_')).any(|t| t == chip))
+            .find(|(_, sel)| {
+                sel.split(|c: char| !(c.is_alphanumeric() || c == '-' || c == '_'))
+                    .any(|t| t == chip)
+            })
             .expect(chip);
         assert!(snippet.ends_with("on top (no inset)"), "{chip}: {snippet}");
     }
@@ -327,7 +364,9 @@ fn text_overflow_and_edge_flush_cards_read_the_x_axis() {
         "text-overflow",
     );
     assert!(
-        overflow.iter().all(|(snippet, _)| snippet.contains("flag-")),
+        overflow
+            .iter()
+            .all(|(snippet, _)| snippet.contains("flag-")),
         "only flag cases report: {overflow:?}"
     );
 
@@ -356,7 +395,12 @@ fn findings_at(
         .into_iter()
         .filter(|f| f.antipattern == rule)
         .map(|f| {
-            let selector = f.extras.get("selector").and_then(|s| s.as_str()).unwrap_or("").to_string();
+            let selector = f
+                .extras
+                .get("selector")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string();
             (f.snippet, selector)
         })
         .collect()
@@ -380,7 +424,13 @@ fn viewport_edge_at_phone_width() {
     assert_cases(
         &edges,
         &["flag-phone-8", "flag-phone-11", "flag-header-first-screen"],
-        &["pass-phone-12", "pass-phone-14", "pass-phone-24", "past-wide-item", "pass-site-header"],
+        &[
+            "pass-phone-12",
+            "pass-phone-14",
+            "pass-phone-24",
+            "past-wide-item",
+            "pass-site-header",
+        ],
         "body-text-viewport-edge",
     );
     assert_eq!(edges.len(), 3, "{edges:?}");

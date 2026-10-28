@@ -136,11 +136,14 @@ fn has_part(class_or_id: &str, set: &[&str]) -> bool {
 
 fn is_heading(n: &impl ContextNode) -> bool {
     matches!(n.tag().as_str(), "h1" | "h2" | "h3" | "h4" | "h5" | "h6")
-        || n.attr("role").is_some_and(|r| r.trim().eq_ignore_ascii_case("heading"))
+        || n.attr("role")
+            .is_some_and(|r| r.trim().eq_ignore_ascii_case("heading"))
 }
 
 fn siblings<N: ContextNode>(n: &N) -> (Option<N>, Option<N>, Vec<N>) {
-    let Some(parent) = n.parent() else { return (None, None, Vec::new()) };
+    let Some(parent) = n.parent() else {
+        return (None, None, Vec::new());
+    };
     let all = parent.children();
     let Some(i) = all.iter().position(|c| c.key() == n.key()) else {
         return (None, None, all);
@@ -220,7 +223,11 @@ fn angle_rad(arg: &str) -> Option<f64> {
     } else {
         (a.as_str(), std::f64::consts::PI / 180.0)
     };
-    n.trim().parse::<f64>().ok().map(|n| n * to_rad).filter(|r| r.is_finite())
+    n.trim()
+        .parse::<f64>()
+        .ok()
+        .map(|n| n * to_rad)
+        .filter(|r| r.is_finite())
 }
 
 /// Read a `transform` value, computed (`matrix(...)`, `matrix3d(...)`) or as
@@ -244,14 +251,19 @@ pub fn read_transform(value: &str) -> TransformRead {
                 scale = Some(scale.map_or((sx, sy), |(a, b)| (a * sx, b * sy)));
             }
             "matrix3d" if n.len() == 16 => {
-                let tilt = [n[2], n[6], n[8], n[9]].iter().fold(0.0f64, |m, v| m.max(v.abs()));
+                let tilt = [n[2], n[6], n[8], n[9]]
+                    .iter()
+                    .fold(0.0f64, |m, v| m.max(v.abs()));
                 if tilt >= TILT_MIN_SIN {
                     out.tilt_3d = true;
                 }
                 // The browser folds a 2D scale under a 3D function
                 // (`translate3d(0,0,0) scale(0.7)`) into one matrix3d; read
                 // its scale the way `matrix` is read when nothing tilts it.
-                if [n[2], n[6], n[8], n[9], n[11]].iter().all(|v| v.abs() <= 0.01) {
+                if [n[2], n[6], n[8], n[9], n[11]]
+                    .iter()
+                    .all(|v| v.abs() <= 0.01)
+                {
                     if n[1].abs() > 0.01 || n[4].abs() > 0.01 {
                         rotated = true;
                     }
@@ -281,7 +293,11 @@ pub fn read_transform(value: &str) -> TransformRead {
                 let rad = angle_rad(c[2].split(',').next().unwrap_or("")).unwrap_or(0.0);
                 if rad.sin().abs() > 0.01 {
                     rotated = true;
-                    angle = if name.starts_with("rotate") { angle.map(|a| a + rad) } else { None };
+                    angle = if name.starts_with("rotate") {
+                        angle.map(|a| a + rad)
+                    } else {
+                        None
+                    };
                 }
             }
             "scale" if !n.is_empty() => {
@@ -296,7 +312,11 @@ pub fn read_transform(value: &str) -> TransformRead {
     }
     // A turn in the page plane keeps the scale readable; a tilt or a skew
     // does not.
-    let flat_turn = if rotated { angle.filter(|_| !out.tilt_3d) } else { Some(0.0) };
+    let flat_turn = if rotated {
+        angle.filter(|_| !out.tilt_3d)
+    } else {
+        Some(0.0)
+    };
     if let Some(turn) = flat_turn {
         out.turn_rad = turn;
         if let Some((sx, sy)) = scale {
@@ -316,7 +336,9 @@ fn rotate_property(value: &str) -> Option<f64> {
     match parts.as_slice() {
         [a] => angle_rad(a),
         [axis, a] if axis.eq_ignore_ascii_case("z") => angle_rad(a),
-        [x, y, z, a] if x.parse::<f64>().ok() == Some(0.0) && y.parse::<f64>().ok() == Some(0.0) => {
+        [x, y, z, a]
+            if x.parse::<f64>().ok() == Some(0.0) && y.parse::<f64>().ok() == Some(0.0) =>
+        {
             let z: f64 = z.parse().ok()?;
             angle_rad(a).map(|r| if z < 0.0 { -r } else { r })
         }
@@ -342,7 +364,10 @@ fn plane_turn(angle: Option<f64>, a: f64, b: f64, c: f64, d: f64) -> Option<f64>
 
 /// The standalone `scale` property (`0.7`, `0.7 0.7`), when uniform.
 fn scale_property(value: &str) -> Option<f64> {
-    let n: Vec<f64> = value.split_whitespace().filter_map(|p| p.parse().ok()).collect();
+    let n: Vec<f64> = value
+        .split_whitespace()
+        .filter_map(|p| p.parse().ok())
+        .collect();
     match n.as_slice() {
         [s] => Some(*s),
         [x, y] | [x, y, _] if (x - y).abs() < 0.02 => Some(*x),
@@ -355,7 +380,10 @@ fn scale_property(value: &str) -> Option<f64> {
 pub fn is_preview_caption(text: &str) -> bool {
     let words: Vec<String> = text
         .split_whitespace()
-        .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase())
+        .map(|w| {
+            w.trim_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase()
+        })
         .filter(|w| !w.is_empty())
         .collect();
     (1..=3).contains(&words.len()) && words.iter().any(|w| w == "preview")
@@ -376,8 +404,17 @@ const SAMPLE_NOUNS: &[&str] = &["data", "figures", "numbers", "values"];
 const SAMPLE_CAPTION_MAX_WORDS: usize = 16;
 /// Tags a sample caption is read from: text boxes, never a control, a
 /// heading, a table cell, a list item or code.
-const SAMPLE_CAPTION_TAGS: &[&str] =
-    &["p", "span", "div", "small", "em", "i", "strong", "b", "figcaption"];
+const SAMPLE_CAPTION_TAGS: &[&str] = &[
+    "p",
+    "span",
+    "div",
+    "small",
+    "em",
+    "i",
+    "strong",
+    "b",
+    "figcaption",
+];
 /// How far above a frame a caption beside it is looked for. ascenix.co's
 /// "Sample data" note closes a tab set three wrappers above each panel.
 const SAMPLE_CAPTION_BESIDE_LEVELS: usize = 4;
@@ -407,7 +444,9 @@ pub fn is_sample_caption(text: &str) -> bool {
         if SEPARATORS.contains(&raw) {
             break;
         }
-        let word = raw.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase();
+        let word = raw
+            .trim_matches(|c: char| !c.is_alphanumeric())
+            .to_lowercase();
         if !word.is_empty() {
             words.push(word);
         }
@@ -442,9 +481,12 @@ fn is_sample_caption_node<N: ContextNode>(n: &N) -> bool {
     for depth in 0..3 {
         let Some(p) = up else { break };
         let tag = p.tag();
-        if matches!(tag.as_str(), "code" | "pre" | "kbd" | "samp" | "a" | "button" | "label" | "summary")
-            || is_heading(&p)
-            || p.attr("role").is_some_and(|r| DEMO_CONTROL_ROLES.contains(&r.trim().to_lowercase().as_str()))
+        if matches!(
+            tag.as_str(),
+            "code" | "pre" | "kbd" | "samp" | "a" | "button" | "label" | "summary"
+        ) || is_heading(&p)
+            || p.attr("role")
+                .is_some_and(|r| DEMO_CONTROL_ROLES.contains(&r.trim().to_lowercase().as_str()))
             || (depth == 0 && !collapse(&p.direct_text()).is_empty())
         {
             return false;
@@ -469,32 +511,36 @@ fn has_sample_caption_on<N: ContextNode>(panel: &N) -> bool {
     if kids.len() < 2 {
         return false;
     }
-    [kids[0].clone(), kids[kids.len() - 1].clone()].into_iter().any(|edge| {
-        let mut level = vec![edge];
-        let mut visited = 0usize;
-        for _ in 0..4 {
-            let mut next = Vec::new();
-            for n in &level {
-                visited += 1;
-                if visited > 40 {
-                    return false;
+    [kids[0].clone(), kids[kids.len() - 1].clone()]
+        .into_iter()
+        .any(|edge| {
+            let mut level = vec![edge];
+            let mut visited = 0usize;
+            for _ in 0..4 {
+                let mut next = Vec::new();
+                for n in &level {
+                    visited += 1;
+                    if visited > 40 {
+                        return false;
+                    }
+                    if is_sample_caption_node(n) {
+                        return true;
+                    }
+                    next.extend(n.children());
                 }
-                if is_sample_caption_node(n) {
-                    return true;
-                }
-                next.extend(n.children());
+                level = next;
             }
-            level = next;
-        }
-        false
-    })
+            false
+        })
 }
 
 /// A sample caption beside the box: the sibling before or after it, or the
 /// first or the last child of its parent. Children of the page's own shell
 /// (`body`, `main`) are not beside anything.
 fn has_sample_caption_beside<N: ContextNode>(c: &N) -> bool {
-    let Some(parent) = c.parent() else { return false };
+    let Some(parent) = c.parent() else {
+        return false;
+    };
     if FRAME_STOP_TAGS.contains(&parent.tag().as_str()) {
         return false;
     }
@@ -512,8 +558,14 @@ const SLIDE_PARTS: &[&str] = &[
     "splide", "swiper",
 ];
 /// Parts that name a row of dots as slider pagination, not window chrome.
-const PAGINATION_PARTS: &[&str] =
-    &["bullet", "bullets", "indicator", "indicators", "pager", "pagination"];
+const PAGINATION_PARTS: &[&str] = &[
+    "bullet",
+    "bullets",
+    "indicator",
+    "indicators",
+    "pager",
+    "pagination",
+];
 /// Tags a demo frame is never read from, and where the walk up ends.
 const FRAME_STOP_TAGS: &[&str] = &["html", "body", "main"];
 /// Landmarks that are never themselves a frame by scale, tilt, size or a
@@ -611,8 +663,10 @@ fn bar_has_preview_caption<N: ContextNode>(bar: &N) -> bool {
                 return false;
             }
             let tag = n.tag();
-            if matches!(tag.as_str(), "a" | "button" | "label" | "select" | "summary")
-                || is_heading(n)
+            if matches!(
+                tag.as_str(),
+                "a" | "button" | "label" | "select" | "summary"
+            ) || is_heading(n)
                 || n.attr("role").is_some()
             {
                 continue;
@@ -669,7 +723,9 @@ fn bar_leads_with_traffic_lights<N: ContextNode>(bar: &N) -> Option<bool> {
 /// A box whose first child is a title bar carrying three dots at its left,
 /// or a preview caption (then the box must be drawn as a frame).
 fn is_demo_window<N: ContextNode>(c: &N) -> bool {
-    let Some(bar) = title_bar(c) else { return false };
+    let Some(bar) = title_bar(c) else {
+        return false;
+    };
     if let Some(leads) = bar_leads_with_traffic_lights(&bar) {
         return leads;
     }
@@ -686,7 +742,9 @@ fn is_demo_window<N: ContextNode>(c: &N) -> bool {
 /// its box, its bar and the dots all have rects, so the bar's size and
 /// place and the dots' leading edge are read, not assumed.
 fn is_traffic_light_window<N: ContextNode>(c: &N) -> bool {
-    let Some(bar) = title_bar(c) else { return false };
+    let Some(bar) = title_bar(c) else {
+        return false;
+    };
     let measured = c.rect().is_some()
         && bar.rect().is_some()
         && find_dot_trio(&bar).is_some_and(|trio| trio.iter().all(|d| d.rect().is_some()));
@@ -741,7 +799,11 @@ fn rendered_text_chars<N: ContextNode>(n: &N, cap: usize) -> usize {
         if SOURCE_TEXT_TAGS.contains(&e.tag().as_str()) {
             continue;
         }
-        count += e.direct_text().chars().filter(|ch| !ch.is_whitespace()).count();
+        count += e
+            .direct_text()
+            .chars()
+            .filter(|ch| !ch.is_whitespace())
+            .count();
         stack.extend(e.children());
     }
     count
@@ -800,7 +862,9 @@ fn is_scaled_wrapper(c: &impl ContextNode) -> bool {
 
 /// A frame-sized box drawn as a frame, its size known.
 fn is_sized_frame_box(c: &impl ContextNode) -> bool {
-    c.size().is_some_and(|(w, h)| w >= FRAME_MIN_WIDTH_PX && h >= FRAME_MIN_HEIGHT_PX) && is_frame_box(c)
+    c.size()
+        .is_some_and(|(w, h)| w >= FRAME_MIN_WIDTH_PX && h >= FRAME_MIN_HEIGHT_PX)
+        && is_frame_box(c)
 }
 
 /// Whether an element's text sits inside a framed HTML demo, read from
@@ -862,7 +926,8 @@ fn framed_walk<N: ContextNode>(el: &N, mut passed_frame: bool) -> Option<Frame> 
         // buttons in its terminal card are clicked.
         if (tag == "a" && c.attr("href").is_some())
             || DEMO_CONTROL_TAGS.contains(&tag.as_str())
-            || c.attr("role").is_some_and(|r| DEMO_CONTROL_ROLES.contains(&r.trim().to_lowercase().as_str()))
+            || c.attr("role")
+                .is_some_and(|r| DEMO_CONTROL_ROLES.contains(&r.trim().to_lowercase().as_str()))
         {
             return None;
         }
@@ -871,7 +936,9 @@ fn framed_walk<N: ContextNode>(el: &N, mut passed_frame: bool) -> Option<Frame> 
         }
         if depth > 0
             && !FRAME_SKIP_TAGS.contains(&tag.as_str())
-            && (is_transformed_frame(&c) || is_demo_window(&c) || (passed_frame && is_scaled_wrapper(&c)))
+            && (is_transformed_frame(&c)
+                || is_demo_window(&c)
+                || (passed_frame && is_scaled_wrapper(&c)))
         {
             return Some(Frame::Chrome);
         }
@@ -952,7 +1019,9 @@ pub const FINE_PRINT_MARKER_DEPTH: usize = 3;
 /// Tags whose class says nothing about one paragraph being fine print.
 const FINE_PRINT_SKIP_TAGS: &[&str] = &["html", "body", "main", "article", "form"];
 /// A mark a footnote opens with.
-const FOOTNOTE_MARKS: &[char] = &['*', '†', '‡', '§', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'];
+const FOOTNOTE_MARKS: &[char] = &[
+    '*', '†', '‡', '§', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹',
+];
 
 /// The markers that name a legal or footnote block outright (decision 3,
 /// round 13): text under one of them is exempt from `line-length` and
@@ -1021,14 +1090,19 @@ fn fine_print_marker(class_or_id: &str) -> FinePrint {
                 .collect()
         };
         let strict = LEGAL_BLOCK_MARKERS.iter().any(|m| {
-            starts(m, false).into_iter().any(|i| {
-                !(*m == "footnote" && i > 0 && TYPE_SCALE_WORDS.contains(&words[i - 1]))
-            })
-        }) || LEGAL_PLURAL_ONLY.iter().any(|m| !starts(m, true).is_empty());
+            starts(m, false)
+                .into_iter()
+                .any(|i| !(*m == "footnote" && i > 0 && TYPE_SCALE_WORDS.contains(&words[i - 1])))
+        }) || LEGAL_PLURAL_ONLY
+            .iter()
+            .any(|m| !starts(m, true).is_empty());
         if strict {
             return FinePrint::Exempt;
         }
-        if FINE_PRINT_MARKERS.iter().any(|m| !starts(m, false).is_empty()) {
+        if FINE_PRINT_MARKERS
+            .iter()
+            .any(|m| !starts(m, false).is_empty())
+        {
             found = FinePrint::Advisory;
         }
     }
@@ -1041,7 +1115,9 @@ fn fine_print_marker(class_or_id: &str) -> FinePrint {
 /// marker stays advisory (freenet.de's `footer-footnote-accordion` keeps
 /// its advisory, not silence).
 fn is_disclosure_widget<N: ContextNode>(c: &N) -> bool {
-    let widget = |k: &N| matches!(k.tag().as_str(), "details" | "summary") || k.attr("aria-expanded").is_some();
+    let widget = |k: &N| {
+        matches!(k.tag().as_str(), "details" | "summary") || k.attr("aria-expanded").is_some()
+    };
     widget(c) || c.children().iter().any(widget)
 }
 
@@ -1068,12 +1144,17 @@ fn visible_text_chars<N: ContextNode>(n: &N, cap: usize) -> usize {
         });
         if SOURCE_TEXT_TAGS.contains(&e.tag().as_str())
             || hidden_attr
-            || e.attr("aria-hidden").is_some_and(|v| v.trim().eq_ignore_ascii_case("true"))
+            || e.attr("aria-hidden")
+                .is_some_and(|v| v.trim().eq_ignore_ascii_case("true"))
             || display == "none"
         {
             continue;
         }
-        count += e.direct_text().chars().filter(|ch| !ch.is_whitespace()).count();
+        count += e
+            .direct_text()
+            .chars()
+            .filter(|ch| !ch.is_whitespace())
+            .count();
         stack.extend(e.children());
     }
     count
@@ -1089,7 +1170,10 @@ fn is_legal_page_body<N: ContextNode>(el: &N, marked: &N) -> bool {
     let mut cur = Some(el.clone());
     let mut root = el.clone();
     while let Some(c) = cur {
-        if c.tag() == "footer" || c.attr("role").is_some_and(|r| r.trim().eq_ignore_ascii_case("contentinfo")) {
+        if c.tag() == "footer"
+            || c.attr("role")
+                .is_some_and(|r| r.trim().eq_ignore_ascii_case("contentinfo"))
+        {
             return false;
         }
         root = c.clone();
@@ -1126,7 +1210,9 @@ fn opens_with_footnote_mark(el: &impl ContextNode) -> bool {
     // A leading `<sup>1</sup>`: the block's text starts with the mark, and
     // the block's own words follow it.
     let kids = el.children();
-    let Some(sup) = kids.first().filter(|k| k.tag() == "sup") else { return false };
+    let Some(sup) = kids.first().filter(|k| k.tag() == "sup") else {
+        return false;
+    };
     let mark = collapse(&sup.text());
     !mark.is_empty()
         && mark.chars().count() <= 3
@@ -1199,19 +1285,28 @@ pub fn fine_print<N: ContextNode>(el: &N) -> FinePrint {
     // row); a control elsewhere in the container is unrelated.
     let check = |k: &N| {
         k.tag() == "input"
-            && k.attr("type").is_some_and(|t| matches!(t.trim().to_ascii_lowercase().as_str(), "checkbox" | "radio"))
+            && k.attr("type").is_some_and(|t| {
+                matches!(t.trim().to_ascii_lowercase().as_str(), "checkbox" | "radio")
+            })
     };
     // A sibling with no text of its own that holds a checkbox (a styled
     // wrapper around the input) labels it the same way.
     fn wraps_check<N: ContextNode>(k: &N, check: &impl Fn(&N) -> bool, depth: usize) -> bool {
-        check(k) || (depth > 0 && k.children().iter().any(|c| wraps_check(c, check, depth - 1)))
+        check(k)
+            || (depth > 0
+                && k.children()
+                    .iter()
+                    .any(|c| wraps_check(c, check, depth - 1)))
     }
-    let check_beside = |k: &N| check(k) || (collapse(&k.text()).is_empty() && wraps_check(k, &check, 3));
+    let check_beside =
+        |k: &N| check(k) || (collapse(&k.text()).is_empty() && wraps_check(k, &check, 3));
     let beside = el.parent().is_some_and(|p| {
         let kids = p.children();
-        kids.iter().position(|k| k.key() == el.key()).is_some_and(|i| {
-            (i > 0 && check_beside(&kids[i - 1])) || kids.get(i + 1).is_some_and(|k| check_beside(k))
-        })
+        kids.iter()
+            .position(|k| k.key() == el.key())
+            .is_some_and(|i| {
+                (i > 0 && check_beside(&kids[i - 1])) || kids.get(i + 1).is_some_and(check_beside)
+            })
     });
     if el.children().iter().any(control) || beside {
         return FinePrint::No;
@@ -1273,17 +1368,54 @@ pub const PLOT_MIN_HEIGHT_PX: f64 = 40.0;
 /// Tags a micro-label never sits in: a control, navigation, a form, a table
 /// cell (data a visitor reads), a definition.
 const MICRO_LABEL_STOP_TAGS: &[&str] = &[
-    "a", "button", "label", "summary", "select", "option", "textarea", "nav", "form", "td", "th",
-    "dt", "dd", "legend", "figcaption", "caption", "time",
+    "a",
+    "button",
+    "label",
+    "summary",
+    "select",
+    "option",
+    "textarea",
+    "nav",
+    "form",
+    "td",
+    "th",
+    "dt",
+    "dd",
+    "legend",
+    "figcaption",
+    "caption",
+    "time",
 ];
 const MICRO_LABEL_STOP_ROLES: &[&str] = &[
-    "button", "link", "tab", "menuitem", "option", "checkbox", "radio", "switch", "navigation",
-    "cell", "gridcell", "tooltip", "alert", "status",
+    "button",
+    "link",
+    "tab",
+    "menuitem",
+    "option",
+    "checkbox",
+    "radio",
+    "switch",
+    "navigation",
+    "cell",
+    "gridcell",
+    "tooltip",
+    "alert",
+    "status",
 ];
 /// Class or id parts that name a chart's own furniture.
 const CHART_PARTS: &[&str] = &[
-    "axis", "chart", "charts", "gauge", "graph", "histogram", "plot", "sparkline", "tick",
-    "ticks", "xaxis", "yaxis",
+    "axis",
+    "chart",
+    "charts",
+    "gauge",
+    "graph",
+    "histogram",
+    "plot",
+    "sparkline",
+    "tick",
+    "ticks",
+    "xaxis",
+    "yaxis",
 ];
 /// How far up a chart marker is read.
 const CHART_MARKER_DEPTH: usize = 4;
@@ -1292,9 +1424,9 @@ const UNITS: &[&str] = &[
     "%", "d", "day", "days", "h", "hr", "hrs", "hour", "hours", "m", "min", "mins", "minute",
     "minutes", "s", "sec", "secs", "second", "seconds", "ms", "wk", "wks", "week", "weeks", "mo",
     "mos", "month", "months", "yr", "yrs", "year", "years", "kb", "mb", "gb", "tb", "px", "pt",
-    "hz", "khz", "mhz", "ghz", "fps", "bpm", "rpm", "km", "cm", "mm", "mi", "ft", "kg", "g",
-    "mg", "lb", "lbs", "oz", "ml", "l", "kwh", "kw", "w", "v", "mph", "kph", "°c", "°f", "°",
-    "x", "pts", "일", "시간", "분", "초", "日", "時間", "分", "秒", "天", "小时", "分钟",
+    "hz", "khz", "mhz", "ghz", "fps", "bpm", "rpm", "km", "cm", "mm", "mi", "ft", "kg", "g", "mg",
+    "lb", "lbs", "oz", "ml", "l", "kwh", "kw", "w", "v", "mph", "kph", "°c", "°f", "°", "x", "pts",
+    "일", "시간", "분", "초", "日", "時間", "分", "秒", "天", "小时", "分钟",
 ];
 
 static NUMBER_RE: Lazy<Regex> =
@@ -1304,7 +1436,8 @@ static STEP_RE: Lazy<Regex> = Lazy::new(|| {
 });
 
 fn has_money(text: &str) -> bool {
-    text.chars().any(|c| matches!(c, '$' | '€' | '£' | '¥' | '₩' | '₹' | '₽' | '₺' | '₫' | '฿'))
+    text.chars()
+        .any(|c| matches!(c, '$' | '€' | '£' | '¥' | '₩' | '₹' | '₽' | '₺' | '₫' | '฿'))
 }
 
 /// Text small enough to be a label: a few words, no sentence end, no price.
@@ -1375,9 +1508,13 @@ fn beside_heading<N: ContextNode>(el: &N) -> bool {
             .take_while(|s| s.key() != n.key())
             .all(|s| collapse(&s.text()).is_empty());
         (opens
-            && next.as_ref().is_some_and(|n| holds_heading(n, true, 2) || is_display_title(n, label_px)))
+            && next
+                .as_ref()
+                .is_some_and(|n| holds_heading(n, true, 2) || is_display_title(n, label_px)))
             || ((pill || is_pill(n))
-                && prev.as_ref().is_some_and(|p| holds_heading(p, false, 2) || is_display_title(p, label_px)))
+                && prev
+                    .as_ref()
+                    .is_some_and(|p| holds_heading(p, false, 2) || is_display_title(p, label_px)))
     };
     if beside(el) {
         return true;
@@ -1411,7 +1548,11 @@ fn is_step_marker<N: ContextNode>(el: &N, text: &str) -> bool {
     let (_, _, all) = siblings(el);
     all.iter().filter(|s| s.key() != el.key()).any(|s| {
         s.font_size() > label_px
-            && collapse(&s.text()).chars().filter(|c| c.is_alphabetic()).count() >= 2
+            && collapse(&s.text())
+                .chars()
+                .filter(|c| c.is_alphabetic())
+                .count()
+                >= 2
     })
 }
 
@@ -1430,7 +1571,9 @@ fn is_chart_label<N: ContextNode>(el: &N, text: &str) -> bool {
     let mut cur = Some(el.clone());
     for _ in 0..=CHART_MARKER_DEPTH {
         let Some(c) = cur else { break };
-        if FRAME_STOP_TAGS.contains(&c.tag().as_str()) || FRAME_SKIP_TAGS.contains(&c.tag().as_str()) {
+        if FRAME_STOP_TAGS.contains(&c.tag().as_str())
+            || FRAME_SKIP_TAGS.contains(&c.tag().as_str())
+        {
             break;
         }
         if has_part(&c.class_list(), CHART_PARTS) || has_part(&c.id_attr(), CHART_PARTS) {
@@ -1460,7 +1603,11 @@ fn is_chart_label<N: ContextNode>(el: &N, text: &str) -> bool {
                 && s.class_list() == class
                 && s.children().is_empty()
                 && s.style("position") == "absolute"
-                && is_few_words(&collapse(&s.text()), CHART_LABEL_MAX_WORDS, CHART_LABEL_MAX_CHARS)
+                && is_few_words(
+                    &collapse(&s.text()),
+                    CHART_LABEL_MAX_WORDS,
+                    CHART_LABEL_MAX_CHARS,
+                )
         })
         .filter_map(|s| s.rect())
         .collect();
@@ -1490,7 +1637,8 @@ pub fn is_micro_label<N: ContextNode>(el: &N) -> bool {
     while let Some(c) = cur {
         let tag = c.tag();
         if MICRO_LABEL_STOP_TAGS.contains(&tag.as_str())
-            || c.attr("role").is_some_and(|r| MICRO_LABEL_STOP_ROLES.contains(&r.trim().to_lowercase().as_str()))
+            || c.attr("role")
+                .is_some_and(|r| MICRO_LABEL_STOP_ROLES.contains(&r.trim().to_lowercase().as_str()))
             || is_heading(&c)
         {
             return false;
@@ -1546,7 +1694,11 @@ mod tests {
 
     impl Tree {
         fn new() -> (Tree, N) {
-            let t = Tree(Rc::new(RefCell::new(vec![Raw { tag: "body".into(), font: 16.0, ..Default::default() }])));
+            let t = Tree(Rc::new(RefCell::new(vec![Raw {
+                tag: "body".into(),
+                font: 16.0,
+                ..Default::default()
+            }])));
             (t.clone(), N(t, 0))
         }
     }
@@ -1556,7 +1708,12 @@ mod tests {
             let mut v = (self.0).0.borrow_mut();
             let font = v[self.1].font;
             let i = v.len();
-            v.push(Raw { tag: tag.into(), parent: Some(self.1), font, ..Default::default() });
+            v.push(Raw {
+                tag: tag.into(),
+                parent: Some(self.1),
+                font,
+                ..Default::default()
+            });
             v[self.1].children.push(i);
             N(self.0.clone(), i)
         }
@@ -1605,10 +1762,16 @@ mod tests {
             (self.0).0.borrow()[self.1].attrs.get(name).cloned()
         }
         fn parent(&self) -> Option<Self> {
-            (self.0).0.borrow()[self.1].parent.map(|p| N(self.0.clone(), p))
+            (self.0).0.borrow()[self.1]
+                .parent
+                .map(|p| N(self.0.clone(), p))
         }
         fn children(&self) -> Vec<Self> {
-            (self.0).0.borrow()[self.1].children.iter().map(|c| N(self.0.clone(), *c)).collect()
+            (self.0).0.borrow()[self.1]
+                .children
+                .iter()
+                .map(|c| N(self.0.clone(), *c))
+                .collect()
         }
         fn text(&self) -> String {
             let (own, tail) = {
@@ -1626,7 +1789,11 @@ mod tests {
             (self.0).0.borrow()[self.1].text.clone()
         }
         fn style(&self, prop: &str) -> String {
-            (self.0).0.borrow()[self.1].styles.get(prop).cloned().unwrap_or_default()
+            (self.0).0.borrow()[self.1]
+                .styles
+                .get(prop)
+                .cloned()
+                .unwrap_or_default()
         }
         fn font_size(&self) -> f64 {
             (self.0).0.borrow()[self.1].font
@@ -1674,10 +1841,21 @@ mod tests {
         assert!(!read_transform("rotateY(180deg)").tilt_3d);
         assert!(!read_transform("rotate3d(0, 0, 1, 30deg)").tilt_3d);
         assert!(!read_transform("rotateX(0deg) rotateY(0deg)").tilt_3d);
-        assert_eq!(read_transform("matrix(0.7, 0, 0, 0.7, 0, 0)").uniform_scale, Some(0.7));
+        assert_eq!(
+            read_transform("matrix(0.7, 0, 0, 0.7, 0, 0)").uniform_scale,
+            Some(0.7)
+        );
         // A 2D scale the browser folded into matrix3d (translate3d + scale).
-        assert_eq!(read_transform("matrix3d(0.7, 0, 0, 0, 0, 0.7, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)").uniform_scale, Some(0.7));
-        assert_eq!(read_transform("matrix3d(0.7, 0, 0.3, 0, 0, 0.7, 0, 0, -0.3, 0, 1, 0, 0, 0, 0, 1)").uniform_scale, None);
+        assert_eq!(
+            read_transform("matrix3d(0.7, 0, 0, 0, 0, 0.7, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)")
+                .uniform_scale,
+            Some(0.7)
+        );
+        assert_eq!(
+            read_transform("matrix3d(0.7, 0, 0.3, 0, 0, 0.7, 0, 0, -0.3, 0, 1, 0, 0, 0, 0, 1)")
+                .uniform_scale,
+            None
+        );
         assert!(has_fine_print_marker("site-legal"));
         assert!(has_fine_print_marker("fine-print note"));
         assert!(has_fine_print_marker("copyright_notice"));
@@ -1688,7 +1866,10 @@ mod tests {
         assert!(has_fine_print_marker("FinePrint"));
         assert!(!has_fine_print_marker("illegalMoves"));
         assert_eq!(read_transform("scale(0.75)").uniform_scale, Some(0.75));
-        assert_eq!(read_transform("matrix(1, 0, 0, 1, -5.4, 0)").uniform_scale, Some(1.0));
+        assert_eq!(
+            read_transform("matrix(1, 0, 0, 1, -5.4, 0)").uniform_scale,
+            Some(1.0)
+        );
         assert_eq!(read_transform("scale(0.7, 1)").uniform_scale, None);
         // A turn in the page plane keeps the scale; a skew does not.
         let turned = read_transform("rotate(-4deg) scale(0.7)");
@@ -1700,11 +1881,23 @@ mod tests {
         let deck = read_transform("matrix(0.762955, -0.162171, 0.162171, 0.762955, -466.4, 106)");
         assert!((deck.uniform_scale.unwrap() - 0.78).abs() < 0.01);
         assert!((deck.turn_rad - (-12f64).to_radians()).abs() < 0.01);
-        let flat = read_transform("matrix3d(0.762955, -0.162171, 0, 0, 0.162171, 0.762955, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)");
+        let flat = read_transform(
+            "matrix3d(0.762955, -0.162171, 0, 0, 0.162171, 0.762955, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)",
+        );
         assert!((flat.uniform_scale.unwrap() - 0.78).abs() < 0.01);
-        assert_eq!(read_transform("matrix(0.7, 0, 0.3, 0.7, 0, 0)").uniform_scale, None);
-        assert_eq!(read_transform("rotate(10deg) skewX(10deg) scale(0.7)").uniform_scale, None);
-        assert_eq!(read_transform("perspective(900px) rotateX(8deg) rotate(10deg) scale(0.7)").uniform_scale, None);
+        assert_eq!(
+            read_transform("matrix(0.7, 0, 0.3, 0.7, 0, 0)").uniform_scale,
+            None
+        );
+        assert_eq!(
+            read_transform("rotate(10deg) skewX(10deg) scale(0.7)").uniform_scale,
+            None
+        );
+        assert_eq!(
+            read_transform("perspective(900px) rotateX(8deg) rotate(10deg) scale(0.7)")
+                .uniform_scale,
+            None
+        );
         assert_eq!(read_transform("scale(0.7)").turn_rad, 0.0);
         // The turn is read without a scale in the same value.
         assert!((read_transform("rotate(2deg)").turn_rad - 2f64.to_radians()).abs() < 1e-9);
@@ -1737,13 +1930,20 @@ mod tests {
         (win.0).0.borrow_mut()[win.1].tag = "article".into();
         assert!(!in_framed_demo(&label), "the only text on the page");
         // A script bundle or a style sheet is not text on the page.
-        body.add("script").text(&"window.__APP_STATE__ = {};".repeat(200));
+        body.add("script")
+            .text(&"window.__APP_STATE__ = {};".repeat(200));
         body.add("style").text(&".a { color: red; }".repeat(200));
-        assert!(!in_framed_demo(&label), "the only words on the page, beside a bundle");
+        assert!(
+            !in_framed_demo(&label),
+            "the only words on the page, beside a bundle"
+        );
         // A section whose title bar carries a preview caption but no dots
         // stays a landmark the walk passes through.
         let (_t, body) = Tree::new();
-        let sec = body.add("section").rect(0.0, 0.0, 600.0, 400.0).style("borderTopWidth", "1px");
+        let sec = body
+            .add("section")
+            .rect(0.0, 0.0, 600.0, 400.0)
+            .style("borderTopWidth", "1px");
         let head = sec.add("div").rect(0.0, 0.0, 600.0, 36.0);
         head.add("span").text("Live preview").font(10.0);
         let pane = sec.add("div").rect(0.0, 36.0, 600.0, 364.0);
@@ -1795,7 +1995,12 @@ mod tests {
         assert!(!in_framed_demo(&linked));
         let tab = pane.add("button").text("Any agent").font(10.5);
         assert!(!in_framed_demo(&tab));
-        let role = pane.add("div").attr("role", "tab").add("span").text("Codex").font(10.5);
+        let role = pane
+            .add("div")
+            .attr("role", "tab")
+            .add("span")
+            .text("Codex")
+            .font(10.5);
         assert!(!in_framed_demo(&role));
     }
 
@@ -1816,7 +2021,12 @@ mod tests {
                     .style("borderRadius", "9999px")
                     .style("backgroundColor", "rgb(238, 58, 58)");
             }
-            let label = win.add("div").rect(0.0, 20.0, 330.0, 219.0).add("span").text("-4.2%").font(10.0);
+            let label = win
+                .add("div")
+                .rect(0.0, 20.0, 330.0, 219.0)
+                .add("span")
+                .text("-4.2%")
+                .font(10.0);
             in_framed_demo(&label)
         };
         assert!(short_window(11.0, 8.0), "an 11px bar holding 8px dots");
@@ -1829,8 +2039,16 @@ mod tests {
             .rect(0.0, 0.0, 600.0, 400.0)
             .style("borderRadius", "12px")
             .style("boxShadow", "rgba(0, 0, 0, 0.2) 0px 8px 24px");
-        frame.add("div").rect(0.0, 0.0, 600.0, 11.0).add("span").text("Live preview");
-        let label = frame.add("div").rect(0.0, 11.0, 600.0, 389.0).add("span").text("Draft saved");
+        frame
+            .add("div")
+            .rect(0.0, 0.0, 600.0, 11.0)
+            .add("span")
+            .text("Live preview");
+        let label = frame
+            .add("div")
+            .rect(0.0, 11.0, 600.0, 389.0)
+            .add("span")
+            .text("Draft saved");
         assert!(!in_framed_demo(&label), "an 11px caption bar");
     }
 
@@ -1845,12 +2063,19 @@ mod tests {
             for i in 0..n {
                 dot(&bar, 12.0 + 16.0 * i as f64);
             }
-            let label = win.add("div").rect(0.0, 36.0, 600.0, 364.0).add("span").text("Ready");
+            let label = win
+                .add("div")
+                .rect(0.0, 36.0, 600.0, 364.0)
+                .add("span")
+                .text("Ready");
             assert!(!in_framed_demo(&label), "{n} dots");
         }
         let (_t, body) = Tree::new();
         let win = body.add("div").rect(0.0, 0.0, 600.0, 400.0);
-        let pager = win.add("div").class("swiper-pagination").rect(0.0, 0.0, 600.0, 36.0);
+        let pager = win
+            .add("div")
+            .class("swiper-pagination")
+            .rect(0.0, 0.0, 600.0, 36.0);
         for i in 0..3 {
             dot(&pager, 12.0 + 16.0 * i as f64);
         }
@@ -1896,12 +2121,20 @@ mod tests {
             .style("boxShadow", "rgba(0, 0, 0, 0.2) 0px 8px 24px");
         let bar = frame.add("div").rect(0.0, 0.0, 600.0, 36.0);
         bar.add("span").text("Live preview");
-        let label = frame.add("div").rect(0.0, 36.0, 600.0, 364.0).add("span").text("Draft saved");
+        let label = frame
+            .add("div")
+            .rect(0.0, 36.0, 600.0, 364.0)
+            .add("span")
+            .text("Draft saved");
         assert!(in_framed_demo(&label));
         // The same caption over an unframed block says nothing.
         let (_t, body) = Tree::new();
         let plain = body.add("div").rect(0.0, 0.0, 600.0, 400.0);
-        plain.add("div").rect(0.0, 0.0, 600.0, 36.0).add("span").text("Live preview");
+        plain
+            .add("div")
+            .rect(0.0, 0.0, 600.0, 36.0)
+            .add("span")
+            .text("Live preview");
         let label = plain.add("div").add("span").text("Draft saved");
         assert!(!in_framed_demo(&label));
         // A Preview tab is a control, and a sentence is not a caption.
@@ -1995,17 +2228,23 @@ mod tests {
 
         let (_t, body) = Tree::new();
         let (frame, _head, label) = panel(&body);
-        let note = frame.add("div").text("Illustrative example. Figures shown are not customer data.");
+        let note = frame
+            .add("div")
+            .text("Illustrative example. Figures shown are not customer data.");
         assert!(in_framed_demo(&label));
         assert!(!in_framed_demo(&note));
 
         // A panel whose header and footer sit in its one wrapper.
         let (_t2, body2) = Tree::new();
-        let inner = framed(body2.add("div").rect(0.0, 0.0, 600.0, 400.0)).add("div").add("div");
+        let inner = framed(body2.add("div").rect(0.0, 0.0, 600.0, 400.0))
+            .add("div")
+            .add("div");
         inner.add("div").add("span").text("Decision Center");
         let wrapped = inner.add("div").add("span").text("Confidence");
         assert!(!in_framed_demo(&wrapped));
-        inner.add("p").text("Illustrative example. Figures shown are not customer data.");
+        inner
+            .add("p")
+            .text("Illustrative example. Figures shown are not customer data.");
         assert!(in_framed_demo(&wrapped));
 
         // A control in the panel keeps its severity.
@@ -2015,12 +2254,30 @@ mod tests {
         // The word in a heading, a link, a sentence or a paragraph's bold
         // lead-in is not a caption.
         for build in [
-            (|head: &N| { head.add("h3").text("Sample data"); }) as fn(&N),
-            |head| { head.add("a").attr("href", "/demo").text("Sample data"); },
-            |head| { head.add("p").text("An example project mid-migration."); },
-            |head| { head.add("p").text("shows what a report holds.").add("b").text("Sample data"); },
-            |head| { head.add("pre").add("span").text("Sample data"); },
-            |head| { head.add("div").attr("role", "button").add("span").text("Sample data"); },
+            (|head: &N| {
+                head.add("h3").text("Sample data");
+            }) as fn(&N),
+            |head| {
+                head.add("a").attr("href", "/demo").text("Sample data");
+            },
+            |head| {
+                head.add("p").text("An example project mid-migration.");
+            },
+            |head| {
+                head.add("p")
+                    .text("shows what a report holds.")
+                    .add("b")
+                    .text("Sample data");
+            },
+            |head| {
+                head.add("pre").add("span").text("Sample data");
+            },
+            |head| {
+                head.add("div")
+                    .attr("role", "button")
+                    .add("span")
+                    .text("Sample data");
+            },
         ] {
             let (_t, body) = Tree::new();
             let (frame, head, label) = panel(&body);
@@ -2058,11 +2315,16 @@ mod tests {
         let (frame, _head, label) = panel(&pane.add("article").add("div"));
         let outside = wrap.add("div").add("span").text("Ask us the rest");
         assert!(!in_framed_demo(&label));
-        let note = wrap.add("p").text("Sample data. No real resident information appears on this site.");
+        let note = wrap
+            .add("p")
+            .text("Sample data. No real resident information appears on this site.");
         assert!(in_framed_demo(&label));
         assert!(is_demo_frame(&frame));
         assert!(!in_framed_demo(&note));
-        assert!(!in_framed_demo(&heading), "text outside every frame is the page's own");
+        assert!(
+            !in_framed_demo(&heading),
+            "text outside every frame is the page's own"
+        );
         assert!(!in_framed_demo(&outside));
 
         // Directly after the panel.
@@ -2075,7 +2337,13 @@ mod tests {
         // Too far above the panel, or a child of the page shell.
         let (_t, body) = Tree::new();
         let wrap = body.add("div");
-        let deep = wrap.add("div").add("div").add("div").add("div").add("div").add("div");
+        let deep = wrap
+            .add("div")
+            .add("div")
+            .add("div")
+            .add("div")
+            .add("div")
+            .add("div");
         let (_frame, _head, label) = panel(&deep);
         wrap.add("p").text("Sample data");
         assert!(!in_framed_demo(&label));
@@ -2088,26 +2356,34 @@ mod tests {
     #[test]
     fn device_frames_scaled_or_tilted() {
         let (_t, body) = Tree::new();
-        let tilted = body
-            .add("div")
-            .rect(0.0, 0.0, 400.0, 300.0)
-            .style("transform", "matrix3d(1, 0, 0, 0, 0, 0.99, 0.15, 0, 0, -0.15, 0.99, 0, 0, 0, 0, 1)");
+        let tilted = body.add("div").rect(0.0, 0.0, 400.0, 300.0).style(
+            "transform",
+            "matrix3d(1, 0, 0, 0, 0, 0.99, 0.15, 0, 0, -0.15, 0.99, 0, 0, 0, 0, 1)",
+        );
         let label = tilted.add("div").add("span").text("coldtea.ai");
         assert!(in_framed_demo(&label));
         // The same tilt on a box of unknown size (the static engine without px
         // dimensions) is no evidence of a frame, unless the box is drawn as one.
         let (_t, body) = Tree::new();
-        let unknown = body
-            .add("div")
-            .style("transform", "matrix3d(1, 0, 0, 0, 0, 0.99, 0.15, 0, 0, -0.15, 0.99, 0, 0, 0, 0, 1)");
-        assert!(!in_framed_demo(&unknown.add("div").add("span").text("coldtea.ai")));
+        let unknown = body.add("div").style(
+            "transform",
+            "matrix3d(1, 0, 0, 0, 0, 0.99, 0.15, 0, 0, -0.15, 0.99, 0, 0, 0, 0, 1)",
+        );
+        assert!(!in_framed_demo(
+            &unknown.add("div").add("span").text("coldtea.ai")
+        ));
         let (_t, body) = Tree::new();
         let drawn = body
             .add("div")
-            .style("transform", "matrix3d(1, 0, 0, 0, 0, 0.99, 0.15, 0, 0, -0.15, 0.99, 0, 0, 0, 0, 1)")
+            .style(
+                "transform",
+                "matrix3d(1, 0, 0, 0, 0, 0.99, 0.15, 0, 0, -0.15, 0.99, 0, 0, 0, 0, 1)",
+            )
             .style("borderRadius", "12px")
             .style("boxShadow", "rgba(0, 0, 0, 0.12) 0px 8px 24px");
-        assert!(in_framed_demo(&drawn.add("div").add("span").text("coldtea.ai")));
+        assert!(in_framed_demo(
+            &drawn.add("div").add("span").text("coldtea.ai")
+        ));
         // A scaled card drawn as a frame needs a known size.
         let (_t, body) = Tree::new();
         let scaled_card = body
@@ -2115,7 +2391,9 @@ mod tests {
             .style("transform", "matrix(0.7, 0, 0, 0.7, 0, 0)")
             .style("borderRadius", "16px")
             .style("boxShadow", "rgba(0, 0, 0, 0.1) 0px 20px 25px");
-        assert!(!in_framed_demo(&scaled_card.add("div").add("span").text("8:24 AM")));
+        assert!(!in_framed_demo(
+            &scaled_card.add("div").add("span").text("8:24 AM")
+        ));
 
         let (_t, body) = Tree::new();
         let scaled = body
@@ -2130,7 +2408,10 @@ mod tests {
         // transform caught mid-animation, a small tilted badge and a slide
         // in a coverflow keep their severity.
         let (_t, body) = Tree::new();
-        let bare = body.add("div").rect(0.0, 0.0, 224.0, 196.0).style("transform", "matrix(0.7, 0, 0, 0.7, 0, 0)");
+        let bare = body
+            .add("div")
+            .rect(0.0, 0.0, 224.0, 196.0)
+            .style("transform", "matrix(0.7, 0, 0, 0.7, 0, 0)");
         assert!(!in_framed_demo(&bare.add("span").text("8:24 AM")));
         let card = body
             .add("div")
@@ -2145,7 +2426,10 @@ mod tests {
             .style("transform", "perspective(900px) rotateX(8deg)")
             .with(|r| r.running = true);
         assert!(!in_framed_demo(&moving.add("span").text("Ready")));
-        let badge = body.add("div").rect(0.0, 0.0, 60.0, 24.0).style("transform", "rotateY(12deg)");
+        let badge = body
+            .add("div")
+            .rect(0.0, 0.0, 60.0, 24.0)
+            .style("transform", "rotateY(12deg)");
         assert!(!in_framed_demo(&badge.add("span").text("New")));
         let slide = body
             .add("div")
@@ -2154,7 +2438,11 @@ mod tests {
             .style("transform", "rotateY(40deg)");
         assert!(!in_framed_demo(&slide.add("span").text("Jane Doe")));
         // The frame's own text is not inside a frame.
-        let own = body.add("div").rect(0.0, 0.0, 400.0, 300.0).style("transform", "rotateY(12deg)").text("Tilted");
+        let own = body
+            .add("div")
+            .rect(0.0, 0.0, 400.0, 300.0)
+            .style("transform", "rotateY(12deg)")
+            .text("Tilted");
         assert!(!in_framed_demo(&own));
     }
 
@@ -2175,24 +2463,41 @@ mod tests {
         // maritime.sh: a `scale: 0.85` wrapper with no border, two plain
         // boxes down a bordered, rounded window with no transform.
         let (_t, body) = Tree::new();
-        let wrapper = body.add("div").rect(77.0, 1176.0, 507.0, 323.0).style("scale", "0.85");
+        let wrapper = body
+            .add("div")
+            .rect(77.0, 1176.0, 507.0, 323.0)
+            .style("scale", "0.85");
         let stage = wrapper.add("div").rect(130.0, 1210.0, 400.0, 255.0);
         let win = framed(stage.add("div").rect(322.0, 1366.0, 201.0, 99.0));
         let bar = win.add("div").rect(323.0, 1367.0, 199.0, 31.0);
-        let url = bar.add("span").add("span").text("mail.google.com").font(10.5);
+        let url = bar
+            .add("span")
+            .add("span")
+            .text("mail.google.com")
+            .font(10.5);
         assert!(in_framed_demo(&url));
         // nested-cards asks it of the window itself.
         assert!(is_demo_frame(&win));
-        assert!(!is_demo_frame(&framed(body.add("div").rect(0.0, 0.0, 400.0, 300.0))));
+        assert!(!is_demo_frame(&framed(
+            body.add("div").rect(0.0, 0.0, 400.0, 300.0)
+        )));
         // ascenix.co: the frame box sits right under the scaled wrapper.
         let (_t, body) = Tree::new();
-        let pop = body.add("div").rect(349.0, 843.0, 583.0, 333.0).style("transform", "matrix(0.594738, 0, 0, 0.594738, 0, 0)");
+        let pop = body
+            .add("div")
+            .rect(349.0, 843.0, 583.0, 333.0)
+            .style("transform", "matrix(0.594738, 0, 0, 0.594738, 0, 0)");
         let app = pop
             .add("div")
             .rect(349.0, 843.0, 583.0, 333.0)
             .style("borderRadius", "20px")
             .style("boxShadow", "rgba(11, 18, 32, 0.1) 0px 24px 60px 0px");
-        let foot = app.add("div").add("div").add("div").text("Previous period incidents: 0").font(10.5);
+        let foot = app
+            .add("div")
+            .add("div")
+            .add("div")
+            .text("Previous period incidents: 0")
+            .font(10.5);
         assert!(in_framed_demo(&foot));
 
         // A scaled wrapper with no frame box under it, a frame box too small
@@ -2200,35 +2505,74 @@ mod tests {
         // not in the frame range, one caught mid-animation, and a frame of
         // unknown size keep their severity.
         let (_t, body) = Tree::new();
-        let bare = body.add("div").rect(0.0, 0.0, 600.0, 400.0).style("scale", "0.85");
-        assert!(!in_framed_demo(&bare.add("div").rect(0.0, 0.0, 300.0, 200.0).add("span").text("Ready")));
+        let bare = body
+            .add("div")
+            .rect(0.0, 0.0, 600.0, 400.0)
+            .style("scale", "0.85");
+        assert!(!in_framed_demo(
+            &bare
+                .add("div")
+                .rect(0.0, 0.0, 300.0, 200.0)
+                .add("span")
+                .text("Ready")
+        ));
         let (_t, body) = Tree::new();
-        let small = body.add("div").rect(0.0, 0.0, 600.0, 400.0).style("scale", "0.6");
+        let small = body
+            .add("div")
+            .rect(0.0, 0.0, 600.0, 400.0)
+            .style("scale", "0.6");
         let card = framed(small.add("div").rect(0.0, 0.0, 174.0, 65.0));
         assert!(!in_framed_demo(&card.add("span").text("Previous period")));
-        for (prop, value) in [("scale", "0.9"), ("transform", "matrix(0.95, 0, 0, 0.95, 0, 0)"), ("scale", "0.2")] {
+        for (prop, value) in [
+            ("scale", "0.9"),
+            ("transform", "matrix(0.95, 0, 0, 0.95, 0, 0)"),
+            ("scale", "0.2"),
+        ] {
             let (_t, body) = Tree::new();
-            let w = body.add("div").rect(0.0, 0.0, 600.0, 400.0).style(prop, value);
+            let w = body
+                .add("div")
+                .rect(0.0, 0.0, 600.0, 400.0)
+                .style(prop, value);
             let f = framed(w.add("div").rect(0.0, 0.0, 400.0, 300.0));
-            assert!(!in_framed_demo(&f.add("span").text("Ready")), "{prop}: {value}");
+            assert!(
+                !in_framed_demo(&f.add("span").text("Ready")),
+                "{prop}: {value}"
+            );
         }
         let (_t, body) = Tree::new();
-        let moving = body.add("div").rect(0.0, 0.0, 600.0, 400.0).style("scale", "0.85").with(|r| r.running = true);
+        let moving = body
+            .add("div")
+            .rect(0.0, 0.0, 600.0, 400.0)
+            .style("scale", "0.85")
+            .with(|r| r.running = true);
         let f = framed(moving.add("div").rect(0.0, 0.0, 400.0, 300.0));
         assert!(!in_framed_demo(&f.add("span").text("Ready")));
         let (_t, body) = Tree::new();
-        let w = body.add("div").rect(0.0, 0.0, 600.0, 400.0).style("scale", "0.85");
+        let w = body
+            .add("div")
+            .rect(0.0, 0.0, 600.0, 400.0)
+            .style("scale", "0.85");
         let unknown = framed(w.add("div"));
         assert!(!in_framed_demo(&unknown.add("span").text("Ready")));
         // The frame box is the text's own box: not passed on the way up.
         let (_t, body) = Tree::new();
-        let w = body.add("div").rect(0.0, 0.0, 600.0, 400.0).style("scale", "0.85");
+        let w = body
+            .add("div")
+            .rect(0.0, 0.0, 600.0, 400.0)
+            .style("scale", "0.85");
         let own = framed(w.add("div").rect(0.0, 0.0, 400.0, 300.0)).text("Starter plan");
         assert!(!in_framed_demo(&own));
         // A control and a carousel slide between the text and the wrapper.
         let (_t, body) = Tree::new();
-        let w = body.add("div").rect(0.0, 0.0, 600.0, 400.0).style("scale", "0.8");
-        let slide = framed(w.add("div").class("swiper-slide").rect(0.0, 0.0, 400.0, 300.0));
+        let w = body
+            .add("div")
+            .rect(0.0, 0.0, 600.0, 400.0)
+            .style("scale", "0.8");
+        let slide = framed(
+            w.add("div")
+                .class("swiper-slide")
+                .rect(0.0, 0.0, 400.0, 300.0),
+        );
         assert!(!in_framed_demo(&slide.add("span").text("Jane Doe")));
     }
 
@@ -2244,47 +2588,81 @@ mod tests {
             .style("transform", deck)
             .style("borderRadius", "16px")
             .style("boxShadow", "rgba(16, 24, 40, 0.38) 0px 26px 60px -28px");
-        let inner = framed(screen.add("div").rect(-44.0, 675.0, 384.0, 307.0).add("div").rect(-25.0, 706.0, 335.0, 186.0));
+        let inner = framed(
+            screen
+                .add("div")
+                .rect(-44.0, 675.0, 384.0, 307.0)
+                .add("div")
+                .rect(-25.0, 706.0, 335.0, 186.0),
+        );
         assert!(in_framed_demo(&inner));
         assert!(is_demo_frame(&screen));
         // A polaroid fanned at full size, a turned box not drawn as a frame,
         // a turn under 3 degrees and a skewed card keep their severity.
         for (transform, frame) in [
-            ("matrix(0.978148, -0.207912, 0.207912, 0.978148, 0, 0)", true),
+            (
+                "matrix(0.978148, -0.207912, 0.207912, 0.978148, 0, 0)",
+                true,
+            ),
             ("rotate(-6deg)", true),
             (deck, false),
             ("rotate(2deg) scale(0.78)", true),
             ("matrix(0.78, 0, 0.2, 0.78, 0, 0)", true),
         ] {
             let (_t, body) = Tree::new();
-            let card = body.add("div").rect(0.0, 0.0, 320.0, 360.0).style("transform", transform);
+            let card = body
+                .add("div")
+                .rect(0.0, 0.0, 320.0, 360.0)
+                .style("transform", transform);
             let card = if frame {
-                card.style("borderRadius", "12px").style("boxShadow", "rgba(0, 0, 0, 0.2) 0px 8px 24px")
+                card.style("borderRadius", "12px")
+                    .style("boxShadow", "rgba(0, 0, 0, 0.2) 0px 8px 24px")
             } else {
                 card
             };
-            let quote = card.add("p").text("Best tool we bought this year").font(10.0);
+            let quote = card
+                .add("p")
+                .text("Best tool we bought this year")
+                .font(10.0);
             assert!(!in_framed_demo(&quote), "{transform}, framed: {frame}");
         }
         // The turn and the scale may come from `transform`, `rotate` and
         // `scale` in any mix; the turn is read whole either way.
         for (props, demo) in [
             (&[("rotate", "10deg"), ("scale", "0.78")][..], true),
-            (&[("transform", "rotate(10deg)"), ("scale", "0.78")][..], true),
-            (&[("transform", "rotate(2deg)"), ("scale", "0.78")][..], false),
+            (
+                &[("transform", "rotate(10deg)"), ("scale", "0.78")][..],
+                true,
+            ),
+            (
+                &[("transform", "rotate(2deg)"), ("scale", "0.78")][..],
+                false,
+            ),
             (&[("rotate", "2deg"), ("scale", "0.78")][..], false),
-            (&[("rotate", "1deg"), ("transform", "rotate(1.5deg) scale(0.78)")][..], false),
+            (
+                &[
+                    ("rotate", "1deg"),
+                    ("transform", "rotate(1.5deg) scale(0.78)"),
+                ][..],
+                false,
+            ),
         ] {
             let (_t, body) = Tree::new();
             let mut card = framed(body.add("div").rect(0.0, 0.0, 320.0, 360.0));
             for (k, v) in props {
                 card = card.style(k, v);
             }
-            let quote = card.add("p").text("Best tool we bought this year").font(10.0);
+            let quote = card
+                .add("p")
+                .text("Best tool we bought this year")
+                .font(10.0);
             assert_eq!(in_framed_demo(&quote), demo, "{props:?}");
         }
         // A wrapper that turns as well as scales is not read as a stage.
-        for props in [&[("transform", "rotate(12deg)"), ("scale", "0.8")][..], &[("rotate", "12deg"), ("scale", "0.8")][..]] {
+        for props in [
+            &[("transform", "rotate(12deg)"), ("scale", "0.8")][..],
+            &[("rotate", "12deg"), ("scale", "0.8")][..],
+        ] {
             let (_t, body) = Tree::new();
             let mut w = body.add("div").rect(0.0, 0.0, 600.0, 400.0);
             for (k, v) in props {
@@ -2341,51 +2719,100 @@ mod tests {
         let (_t, body) = Tree::new();
         let body = body.font(12.0);
         // A footnote list item two levels up (apple's `li#footnote-3 > p`).
-        let li = body.add("ol").add("li").with(|r| r.id = "footnote-3".into());
-        let p = li.add("p").text("Trade-in values vary based on the condition, year and configuration.");
+        let li = body
+            .add("ol")
+            .add("li")
+            .with(|r| r.id = "footnote-3".into());
+        let p = li
+            .add("p")
+            .text("Trade-in values vary based on the condition, year and configuration.");
         assert_eq!(fine_print(&p), FinePrint::Exempt);
         // A `small` inside a disclaimer banner: the walk climbs past the
         // `small` to the marker (mercury's `#disclaimer-banner > small > p`).
         let banner = body.add("div").with(|r| r.id = "disclaimer-banner".into());
-        let p = banner.add("small").add("p").text("Mercury is a fintech company, not an FDIC-insured bank.");
+        let p = banner
+            .add("small")
+            .add("p")
+            .text("Mercury is a fintech company, not an FDIC-insured bank.");
         assert_eq!(fine_print(&p), FinePrint::Exempt);
         // Weaker evidence stays advisory: a bare `small`, `terms`,
         // `copyright` and a leading mark with no marker around it.
-        let small = body.add("div").add("small").text("Use 8 or more characters with a number and a symbol.");
+        let small = body
+            .add("div")
+            .add("small")
+            .text("Use 8 or more characters with a number and a symbol.");
         assert_eq!(fine_print(&small), FinePrint::Advisory);
-        let terms = body.add("p").class("offer-terms").text("Monthly price reflects the net monthly payment.");
+        let terms = body
+            .add("p")
+            .class("offer-terms")
+            .text("Monthly price reflects the net monthly payment.");
         assert_eq!(fine_print(&terms), FinePrint::Advisory);
-        let credit = body.add("p").class("copyright").text("Photograph by the studio, used with permission.");
+        let credit = body
+            .add("p")
+            .class("copyright")
+            .text("Photograph by the studio, used with permission.");
         assert_eq!(fine_print(&credit), FinePrint::Advisory);
-        let star = body.add("p").text("* for free flu shot: select vaccines are no cost with most insurance.");
+        let star = body
+            .add("p")
+            .text("* for free flu shot: select vaccines are no cost with most insurance.");
         assert_eq!(fine_print(&star), FinePrint::Advisory);
         // The strict tier keeps every gate of the advisory one: size,
         // heading, label, a control.
-        let big = body.add("p").class("disclaimer-intro").font(16.0).text("Read these disclosures before you open an account.");
+        let big = body
+            .add("p")
+            .class("disclaimer-intro")
+            .font(16.0)
+            .text("Read these disclosures before you open an account.");
         assert_eq!(fine_print(&big), FinePrint::No);
-        let h = body.add("h4").class("disclaimers").text("Disclaimers and footnotes");
+        let h = body
+            .add("h4")
+            .class("disclaimers")
+            .text("Disclaimers and footnotes");
         assert_eq!(fine_print(&h), FinePrint::No);
-        let consent = body.add("div").class("disclaimer").add("label").text("I agree to receive the newsletter.");
+        let consent = body
+            .add("div")
+            .class("disclaimer")
+            .add("label")
+            .text("I agree to receive the newsletter.");
         assert_eq!(fine_print(&consent), FinePrint::No);
         let far = body.add("div").class("legal-page");
-        let deep = far.add("div").add("div").add("div").add("p").text("You agree to the following terms of service.");
+        let deep = far
+            .add("div")
+            .add("div")
+            .add("div")
+            .add("p")
+            .text("You agree to the following terms of service.");
         assert_eq!(fine_print(&deep), FinePrint::No);
         // An accordion panel under a strict marker is demoted, not dropped:
         // the marked box is a `details`, or holds an `aria-expanded` toggle.
         let acc = body.add("details").class("footer-footnote-accordion");
-        let p = acc.add("p").text("Rates apply to new customers and may change at any time.");
+        let p = acc
+            .add("p")
+            .text("Rates apply to new customers and may change at any time.");
         assert_eq!(fine_print(&p), FinePrint::Advisory);
         let faq = body.add("div").class("legal-faq");
-        faq.add("button").attr("aria-expanded", "true").text("How do refunds work?");
-        let p = faq.add("div").add("p").text("Refunds go back to the card you paid with.");
+        faq.add("button")
+            .attr("aria-expanded", "true")
+            .text("How do refunds work?");
+        let p = faq
+            .add("div")
+            .add("p")
+            .text("Refunds go back to the card you paid with.");
         assert_eq!(fine_print(&p), FinePrint::Advisory);
         // An inner marker does not hide the marked accordion around it.
         let acc = body.add("details").class("footer-footnote-accordion");
         acc.add("summary").text("Rates");
-        let p = acc.add("p").class("footnote").text("Rates apply to new customers and may change at any time.");
+        let p = acc
+            .add("p")
+            .class("footnote")
+            .text("Rates apply to new customers and may change at any time.");
         assert_eq!(fine_print(&p), FinePrint::Advisory);
         // Should-flag twin: the same inner marker under a plain box is exempt.
-        let p = body.add("div").add("p").class("footnote").text("Rates apply to new customers and may change at any time.");
+        let p = body
+            .add("div")
+            .add("p")
+            .class("footnote")
+            .text("Rates apply to new customers and may change at any time.");
         assert_eq!(fine_print(&p), FinePrint::Exempt);
     }
 
@@ -2401,12 +2828,21 @@ mod tests {
         // The same block in a footer is a legal block.
         let (_t, body) = Tree::new();
         let body = body.font(14.0);
-        let p = body.add("footer").add("div").class("legal-content").add("p").text(&long);
+        let p = body
+            .add("footer")
+            .add("div")
+            .class("legal-content")
+            .add("p")
+            .text(&long);
         assert_eq!(fine_print(&p), FinePrint::Exempt);
         // A short legal block on a page is a legal block.
         let (_t, body) = Tree::new();
         let body = body.font(14.0);
-        let p = body.add("div").class("legal-content").add("p").text("Offer subject to credit approval.");
+        let p = body
+            .add("div")
+            .class("legal-content")
+            .add("p")
+            .text("Offer subject to credit approval.");
         assert_eq!(fine_print(&p), FinePrint::Exempt);
         // A long legal block under half of the page's text is a block too.
         let (_t, body) = Tree::new();
@@ -2420,7 +2856,10 @@ mod tests {
         let body = body.font(14.0);
         body.add("h1").font(32.0).text("Privacy policy");
         let policy = body.add("div").class("legal-content");
-        let p = policy.add("p").class("legal-paragraph").text("Offer subject to credit approval.");
+        let p = policy
+            .add("p")
+            .class("legal-paragraph")
+            .text("Offer subject to credit approval.");
         policy.add("p").class("legal-paragraph").text(&long);
         assert_eq!(fine_print(&p), FinePrint::Advisory);
         // A hidden copy of the policy is not page text.
@@ -2428,14 +2867,22 @@ mod tests {
         let body = body.font(14.0);
         body.add("h1").font(32.0).text("Privacy policy");
         let p = body.add("div").class("legal-content").add("p").text(&long);
-        body.add("div").attr("hidden", "").class("legal-content-mobile").add("p").text(&long);
+        body.add("div")
+            .attr("hidden", "")
+            .class("legal-content-mobile")
+            .add("p")
+            .text(&long);
         assert_eq!(fine_print(&p), FinePrint::Advisory);
         // A `hidden` policy that author CSS reveals is page text: it keeps
         // the policy-page demotion.
         let (_t, body) = Tree::new();
         let body = body.font(14.0);
         body.add("h1").font(32.0).text("Privacy policy");
-        let shown = body.add("div").attr("hidden", "").class("legal-content").style("display", "block");
+        let shown = body
+            .add("div")
+            .attr("hidden", "")
+            .class("legal-content")
+            .style("display", "block");
         let p = shown.add("p").text(&long);
         assert_eq!(fine_print(&p), FinePrint::Advisory);
         // Should-flag twin: the same copy left visible is half the page, and
@@ -2444,7 +2891,10 @@ mod tests {
         let body = body.font(14.0);
         body.add("h1").font(32.0).text("Privacy policy");
         let p = body.add("div").class("legal-content").add("p").text(&long);
-        body.add("div").class("legal-content-mobile").add("p").text(&long);
+        body.add("div")
+            .class("legal-content-mobile")
+            .add("p")
+            .text(&long);
         assert_eq!(fine_print(&p), FinePrint::Exempt);
     }
 
@@ -2453,46 +2903,89 @@ mod tests {
         let (_t, body) = Tree::new();
         let body = body.font(12.0);
         let list = body.add("ul").class("disclaimers");
-        let p = list.add("li").add("p").text("Offer available while supplies last. Terms apply.");
+        let p = list
+            .add("li")
+            .add("p")
+            .text("Offer available while supplies last. Terms apply.");
         assert!(is_fine_print(&p));
-        let by_id = body.add("div").with(|r| r.id = "card-61-legal_Legal".into()).add("span").text("Req. 0% APR 36-mo. agrmt.");
+        let by_id = body
+            .add("div")
+            .with(|r| r.id = "card-61-legal_Legal".into())
+            .add("span")
+            .text("Req. 0% APR 36-mo. agrmt.");
         assert!(is_fine_print(&by_id));
-        let small = body.add("small").text("Prices exclude tax and may change without notice.");
+        let small = body
+            .add("small")
+            .text("Prices exclude tax and may change without notice.");
         assert!(is_fine_print(&small));
-        let star = body.add("p").text("* for free flu shot: select vaccines are no cost with most insurance.");
+        let star = body
+            .add("p")
+            .text("* for free flu shot: select vaccines are no cost with most insurance.");
         assert!(is_fine_print(&star));
-        let dagger = body.add("p").text("†Trade-in values vary by condition, year and configuration of the device.");
+        let dagger = body
+            .add("p")
+            .text("†Trade-in values vary by condition, year and configuration of the device.");
         assert!(is_fine_print(&dagger));
-        let noted = body.add("p").text("Battery life varies by use, configuration and many other factors.").with(|r| r.tail = true);
+        let noted = body
+            .add("p")
+            .text("Battery life varies by use, configuration and many other factors.")
+            .with(|r| r.tail = true);
         noted.add("sup").text("1");
         assert!(is_fine_print(&noted));
         // Unmarked copy, a marker too far up, a marked page wrapper, a
         // consent label, a block with a checkbox, a form hint and a heading.
-        let plain = body.add("p").text("Every plan includes unlimited projects and guests.");
+        let plain = body
+            .add("p")
+            .text("Every plan includes unlimited projects and guests.");
         assert!(!is_fine_print(&plain));
         let far = body.add("div").class("legal-page");
-        let deep = far.add("div").add("div").add("div").add("p").text("You agree to the following terms of service.");
+        let deep = far
+            .add("div")
+            .add("div")
+            .add("div")
+            .add("p")
+            .text("You agree to the following terms of service.");
         assert!(!is_fine_print(&deep));
         let (_t2, body2) = Tree::new();
         let main = body2.font(12.0).add("main").class("legal");
-        assert!(!is_fine_print(&main.add("p").text("You agree to the following terms of service.")));
-        let consent = body.add("div").class("disclaimer").add("label").text("I agree to receive the newsletter.");
+        assert!(!is_fine_print(
+            &main
+                .add("p")
+                .text("You agree to the following terms of service.")
+        ));
+        let consent = body
+            .add("div")
+            .class("disclaimer")
+            .add("label")
+            .text("I agree to receive the newsletter.");
         assert!(!is_fine_print(&consent));
         let boxed = body.add("p").class("legal").text("I agree to the terms.");
         boxed.add("input");
         assert!(!is_fine_print(&boxed));
         // A checkbox wrapped in a styled box beside the statement.
         let row = body.add("div").class("legal");
-        row.add("span").class("box").add("input").attr("type", "checkbox");
+        row.add("span")
+            .class("box")
+            .add("input")
+            .attr("type", "checkbox");
         let statement = row.add("span").text("I agree to the terms of sale.");
         assert!(!is_fine_print(&statement));
-        let required = body.add("p").text("* Indicates a required field in this form");
+        let required = body
+            .add("p")
+            .text("* Indicates a required field in this form");
         assert!(!is_fine_print(&required));
         let h = body.add("h3").class("legal").text("Legal notice");
         assert!(!is_fine_print(&h));
         // A legal document set at body size is read.
-        let rules = body.add("div").class("legal-body").add("section").add("p").font(17.0);
-        let rules = rules.text("The contest is an ongoing, skill-based contest conducted in a series of rounds.");
+        let rules = body
+            .add("div")
+            .class("legal-body")
+            .add("section")
+            .add("p")
+            .font(17.0);
+        let rules = rules.text(
+            "The contest is an ongoing, skill-based contest conducted in a series of rounds.",
+        );
         assert!(!is_fine_print(&rules));
     }
 
@@ -2506,7 +2999,10 @@ mod tests {
         // An eyebrow above a wrapped heading.
         let head = body.add("div");
         let eyebrow = head.add("span").text("What's Inside").font(10.0);
-        head.add("div").add("h2").text("Formula & Benefits").font(36.0);
+        head.add("div")
+            .add("h2")
+            .text("Formula & Benefits")
+            .font(36.0);
         assert!(is_micro_label(&eyebrow));
         // A pill above an untagged title.
         let tier = body.add("div");
@@ -2557,11 +3053,16 @@ mod tests {
         // a sentence, a link, a nav item, a form hint and a table cell.
         let lone = body.add("div");
         let label = lone.add("p").text("Also included").font(10.0);
-        lone.add("div").add("span").text("Multi-step sequences").font(12.0);
+        lone.add("div")
+            .add("span")
+            .text("Multi-step sequences")
+            .font(12.0);
         assert!(!is_micro_label(&label));
         let para = body.add("div");
         let kicker = para.add("div").text("Noticed on its own").font(10.5);
-        para.add("p").text("Four tickets have gone 48 hours with no reply from anyone on the team.").font(17.5);
+        para.add("p")
+            .text("Four tickets have gone 48 hours with no reply from anyone on the team.")
+            .font(17.5);
         assert!(!is_micro_label(&kicker));
         for (text, why) in [
             ("From $9", "price"),
@@ -2593,7 +3094,9 @@ mod tests {
         // A label under a stat set large is what the stat means.
         let fleet = body.add("div");
         fleet.add("div").text("1-3").font(30.0);
-        assert!(!is_micro_label(&fleet.add("div").text("Truck Fleets").font(10.0)));
+        assert!(!is_micro_label(
+            &fleet.add("div").text("Truck Fleets").font(10.0)
+        ));
         // A stat's label is what the number means, not its unit.
         let stat = body.add("div");
         stat.add("strong").text("10,000").font(32.0);
@@ -2614,7 +3117,9 @@ mod tests {
         assert!(!is_micro_label(&count));
         let row = body.add("button");
         let in_btn = row.add("span").text("01").font(10.5);
-        row.add("span").text("Triage this morning's queue").font(15.5);
+        row.add("span")
+            .text("Triage this morning's queue")
+            .font(15.5);
         assert!(!is_micro_label(&in_btn));
     }
 
@@ -2627,10 +3132,18 @@ mod tests {
         // A caption drawn over a sibling canvas.
         let cell = body.add("div");
         cell.add("canvas").rect(790.0, 48.0, 418.0, 116.0);
-        let hz = cell.add("span").text("60 Hz display").font(9.5).rect(1126.0, 147.0, 74.0, 11.0);
+        let hz = cell
+            .add("span")
+            .text("60 Hz display")
+            .font(9.5)
+            .rect(1126.0, 147.0, 74.0, 11.0);
         assert!(is_micro_label(&hz));
         // The same label beside the canvas, not over it.
-        let beside = cell.add("span").text("60 Hz display").font(9.5).rect(790.0, 200.0, 74.0, 11.0);
+        let beside = cell
+            .add("span")
+            .text("60 Hz display")
+            .font(9.5)
+            .rect(790.0, 200.0, 74.0, 11.0);
         assert!(!is_micro_label(&beside));
         // A run of absolutely placed labels lined up along an axis.
         let cal = body.add("div");
@@ -2648,17 +3161,40 @@ mod tests {
         assert!(is_micro_label(&ticks[0]));
         // Two labels are not an axis, and neither is a row of static tags.
         let pair = body.add("div");
-        let a = pair.add("span").class("t").text("Low").font(9.0).style("position", "absolute").rect(0.0, 0.0, 30.0, 12.0);
-        pair.add("span").class("t").text("High").font(9.0).style("position", "absolute").rect(0.0, 90.0, 30.0, 12.0);
+        let a = pair
+            .add("span")
+            .class("t")
+            .text("Low")
+            .font(9.0)
+            .style("position", "absolute")
+            .rect(0.0, 0.0, 30.0, 12.0);
+        pair.add("span")
+            .class("t")
+            .text("High")
+            .font(9.0)
+            .style("position", "absolute")
+            .rect(0.0, 90.0, 30.0, 12.0);
         assert!(!is_micro_label(&a));
         let tags = body.add("div");
-        let first = tags.add("span").class("tag").text("How-To").font(10.0).rect(0.0, 0.0, 40.0, 14.0);
+        let first = tags
+            .add("span")
+            .class("tag")
+            .text("How-To")
+            .font(10.0)
+            .rect(0.0, 0.0, 40.0, 14.0);
         for i in 1..4 {
-            tags.add("span").class("tag").text("Hot Take").font(10.0).rect(50.0 * i as f64, 0.0, 40.0, 14.0);
+            tags.add("span")
+                .class("tag")
+                .text("Hot Take")
+                .font(10.0)
+                .rect(50.0 * i as f64, 0.0, 40.0, 14.0);
         }
         assert!(!is_micro_label(&first));
         // A chart's title is longer than a tick.
-        let long = chart.add("span").text("Revenue by quarter, all regions").font(10.0);
+        let long = chart
+            .add("span")
+            .text("Revenue by quarter, all regions")
+            .font(10.0);
         assert!(!is_micro_label(&long));
     }
 }

@@ -71,7 +71,9 @@ fn covered_text_and_unread_surfaces_are_not_scored() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/{FIXTURE}");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     let flagged: Vec<(String, String, String)> = findings
         .iter()
         .map(|f| {
@@ -86,7 +88,8 @@ fn covered_text_and_unread_surfaces_are_not_scored() {
             )
         })
         .collect();
-    let has = |rule: &str, selector: &str| flagged.iter().any(|(r, s, _)| r == rule && s == selector);
+    let has =
+        |rule: &str, selector: &str| flagged.iter().any(|(r, s, _)| r == rule && s == selector);
 
     for (rule, selector) in [
         ("low-contrast", "#flag-visible-copy"),
@@ -98,7 +101,10 @@ fn covered_text_and_unread_surfaces_are_not_scored() {
         ("low-contrast", "#flag-uncovered-link"),
         ("text-occlusion", "#flag-covered-caption"),
     ] {
-        assert!(has(rule, selector), "missing {rule} on {selector} in {flagged:#?}");
+        assert!(
+            has(rule, selector),
+            "missing {rule} on {selector} in {flagged:#?}"
+        );
     }
     for (rule, selector) in [
         ("low-contrast", "#pass-banner-copy"),
@@ -111,6 +117,9 @@ fn covered_text_and_unread_surfaces_are_not_scored() {
         ("low-contrast", "#pass-hero-photo-title"),
         ("text-occlusion", "#pass-advancing-caption"),
     ] {
-        assert!(!has(rule, selector), "{rule} on {selector} was flagged in {flagged:#?}");
+        assert!(
+            !has(rule, selector),
+            "{rule} on {selector} was flagged in {flagged:#?}"
+        );
     }
 }

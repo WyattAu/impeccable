@@ -152,7 +152,10 @@ impl DesignSystemHook for DetectDesignSystemHook<'_> {
     }
 
     fn drop_switched_off(&self, findings: &mut Vec<Finding>) {
-        impeccable_detect::design_system::drop_declared_purple_findings(findings, Some(self.design_system));
+        impeccable_detect::design_system::drop_declared_purple_findings(
+            findings,
+            Some(self.design_system),
+        );
     }
 }
 

@@ -33,16 +33,30 @@ fn f(v: &Value) -> f64 {
 }
 fn approx(a: f64, b: &Value, tol: f64, what: &str) {
     let bf = f(b);
-    assert!((a - bf).abs() <= tol, "{what}: rust {a} vs golden {bf} (|d|={})", (a - bf).abs());
+    assert!(
+        (a - bf).abs() <= tol,
+        "{what}: rust {a} vs golden {bf} (|d|={})",
+        (a - bf).abs()
+    );
 }
 
 #[test]
 fn png_decode_pixel_parity() {
     let g = golden();
     let sample = load("sample.png");
-    assert_eq!(sample.width, g["sample"]["width"].as_u64().unwrap() as usize);
-    assert_eq!(sample.height, g["sample"]["height"].as_u64().unwrap() as usize);
-    assert_eq!(crc32(&sample.data), u(&g["sample"]["crc"]), "sample.png RGBA crc");
+    assert_eq!(
+        sample.width,
+        g["sample"]["width"].as_u64().unwrap() as usize
+    );
+    assert_eq!(
+        sample.height,
+        g["sample"]["height"].as_u64().unwrap() as usize
+    );
+    assert_eq!(
+        crc32(&sample.data),
+        u(&g["sample"]["crc"]),
+        "sample.png RGBA crc"
+    );
     for (name, key) in [
         ("comp.png", "comp"),
         ("build_flat.png", "flat"),
@@ -67,16 +81,38 @@ fn png_encode_roundtrip() {
 fn raster_op_parity() {
     let g = golden();
     let comp = load("comp.png");
-    assert_eq!(crc32(&r::resize(&comp, 256.0, 170.0).data), u(&g["raster"]["resize_down"]));
+    assert_eq!(
+        crc32(&r::resize(&comp, 256.0, 170.0).data),
+        u(&g["raster"]["resize_down"])
+    );
     let up = r::resize(&r::crop(&comp, 24.0, 60.0, 300.0, 90.0), 600.0, 180.0);
     assert_eq!(crc32(&up.data), u(&g["raster"]["resize_up"]));
-    assert_eq!(crc32(&r::crop(&comp, 340.0, 48.0, 400.0, 192.0).data), u(&g["raster"]["crop"]));
-    assert_eq!(crc32(&r::fit(&comp, 300.0, 300.0, false).data), u(&g["raster"]["fit"]));
+    assert_eq!(
+        crc32(&r::crop(&comp, 340.0, 48.0, 400.0, 192.0).data),
+        u(&g["raster"]["crop"])
+    );
+    assert_eq!(
+        crc32(&r::fit(&comp, 300.0, 300.0, false).data),
+        u(&g["raster"]["fit"])
+    );
 
     let mut c = r::create_image(200, 60, [10, 10, 10, 255]);
     r::stroke_rect(&mut c, 10.0, 10.0, 180.0, 40.0, rgb([255, 0, 0]), 3.0);
-    r::draw_label(&mut c, "HELLO 42%", 20.0, 20.0, rgb([255, 255, 255]), [0.0, 0.0, 0.0, 220.0], 2.0, 4.0);
-    assert_eq!(crc32(&c.data), u(&g["raster"]["label"]), "drawLabel/strokeRect");
+    r::draw_label(
+        &mut c,
+        "HELLO 42%",
+        20.0,
+        20.0,
+        rgb([255, 255, 255]),
+        [0.0, 0.0, 0.0, 220.0],
+        2.0,
+        4.0,
+    );
+    assert_eq!(
+        crc32(&c.data),
+        u(&g["raster"]["label"]),
+        "drawLabel/strokeRect"
+    );
 
     let mut b = r::create_image(120, 80, [255, 255, 255, 255]);
     r::blit(&mut b, &r::crop(&comp, 0.0, 0.0, 60.0, 40.0), 30.0, 20.0);
@@ -84,20 +120,49 @@ fn raster_op_parity() {
 }
 
 fn check_scores(a: &Image, b: &Image, gs: &Value) {
-    approx(m::structure_score(a, b, 256), &gs["structure"], 1e-6, "structure");
+    approx(
+        m::structure_score(a, b, 256),
+        &gs["structure"],
+        1e-6,
+        "structure",
+    );
     let cs = m::color_score(a, b);
     approx(cs.score, &gs["color"]["score"], 1e-6, "color.score");
-    approx(cs.intersection, &gs["color"]["intersection"], 1e-6, "color.intersection");
-    approx(cs.palette_match, &gs["color"]["paletteMatch"], 1e-6, "color.paletteMatch");
+    approx(
+        cs.intersection,
+        &gs["color"]["intersection"],
+        1e-6,
+        "color.intersection",
+    );
+    approx(
+        cs.palette_match,
+        &gs["color"]["paletteMatch"],
+        1e-6,
+        "color.paletteMatch",
+    );
     let ds = m::detail_score(a, b, 12, 8);
     approx(ds.score, &gs["detail"]["score"], 1e-6, "detail.score");
-    approx(ds.raw_score, &gs["detail"]["rawScore"], 1e-6, "detail.rawScore");
-    approx(ds.added_fraction, &gs["detail"]["addedFraction"], 1e-6, "detail.addedFraction");
+    approx(
+        ds.raw_score,
+        &gs["detail"]["rawScore"],
+        1e-6,
+        "detail.rawScore",
+    );
+    approx(
+        ds.added_fraction,
+        &gs["detail"]["addedFraction"],
+        1e-6,
+        "detail.addedFraction",
+    );
     let ba = m::horizontal_bands(a, 128, 0.02);
     let bb = m::horizontal_bands(b, 128, 0.02);
     approx(m::band_score(&ba, &bb, 0.04), &gs["bands"], 1e-7, "bands");
     let dm = m::diff_map(a, b, 384);
-    assert_eq!(crc32_f32(&dm.data), u(&gs["diffMapCrc"]), "diffMap f32 crc (bit-exact)");
+    assert_eq!(
+        crc32_f32(&dm.data),
+        u(&gs["diffMapCrc"]),
+        "diffMap f32 crc (bit-exact)"
+    );
 }
 
 #[test]
@@ -115,7 +180,11 @@ fn metrics_score_parity() {
     let sr = r::resize(&sample, 300.0, 200.0);
     check_scores(&sample, &sr, &g["scores"]["sample_resized"]);
 
-    assert_eq!(crc32_f32(&m::to_gray(&comp).data), u(&g["gray"]["comp_toGray"]), "toGray f32 crc");
+    assert_eq!(
+        crc32_f32(&m::to_gray(&comp).data),
+        u(&g["gray"]["comp_toGray"]),
+        "toGray f32 crc"
+    );
     assert_eq!(
         crc32_f32(&m::blur_gray(&m::to_gray(&comp), 2).data),
         u(&g["gray"]["comp_blur"]),
@@ -172,14 +241,39 @@ fn cmp_fp(fp: Option<&ff::Fingerprint>, gold: &Value, what: &str) {
         assert!(fp.is_none(), "{what}: expected null fingerprint");
         return;
     }
-    let fp = fp.expect(&format!("{what}: expected some fingerprint"));
-    assert_eq!(fp.lines as u64, gold["lines"].as_u64().unwrap(), "{what}.lines");
+    let fp = fp.unwrap_or_else(|| panic!("{what}: expected some fingerprint"));
+    assert_eq!(
+        fp.lines as u64,
+        gold["lines"].as_u64().unwrap(),
+        "{what}.lines"
+    );
     assert_eq!(fp.glyphs, gold["glyphs"].as_i64().unwrap(), "{what}.glyphs");
-    approx(fp.cap_height_px, &gold["capHeightPx"], 1e-9, &format!("{what}.capHeightPx"));
-    assert_eq!(fp.ink_is_dark, gold["inkIsDark"].as_bool().unwrap(), "{what}.inkIsDark");
-    assert_eq!(fp.upsampled, gold["upsampled"].as_bool().unwrap(), "{what}.upsampled");
-    assert_eq!(fp.all_caps, gold["allCaps"].as_bool().unwrap(), "{what}.allCaps");
-    assert_eq!(fp.isolated_from, gold["isolatedFrom"].as_i64().unwrap(), "{what}.isolatedFrom");
+    approx(
+        fp.cap_height_px,
+        &gold["capHeightPx"],
+        1e-9,
+        &format!("{what}.capHeightPx"),
+    );
+    assert_eq!(
+        fp.ink_is_dark,
+        gold["inkIsDark"].as_bool().unwrap(),
+        "{what}.inkIsDark"
+    );
+    assert_eq!(
+        fp.upsampled,
+        gold["upsampled"].as_bool().unwrap(),
+        "{what}.upsampled"
+    );
+    assert_eq!(
+        fp.all_caps,
+        gold["allCaps"].as_bool().unwrap(),
+        "{what}.allCaps"
+    );
+    assert_eq!(
+        fp.isolated_from,
+        gold["isolatedFrom"].as_i64().unwrap(),
+        "{what}.isolatedFrom"
+    );
     match (fp.weight, gold["weight"].as_f64()) {
         (Some(w), Some(_)) => approx(w, &gold["weight"], 1e-12, &format!("{what}.weight")),
         (None, None) => {}
@@ -223,11 +317,31 @@ fn distance_parity() {
     let heavy = ff::fingerprint(&load("text_heavy.png"), &o).unwrap();
     let d = |a: &ff::Fingerprint, b: &ff::Fingerprint| ff::distance(&|k| a.get(k), &|k| b.get(k));
     approx(d(&s6, &s6), &g["distance"]["self"], 1e-12, "distance self");
-    approx(d(&s6, &s4), &g["distance"]["s6_s4"], 1e-10, "distance s6_s4");
-    approx(d(&s6, &heavy), &g["distance"]["s6_heavy"], 1e-10, "distance s6_heavy");
+    approx(
+        d(&s6, &s4),
+        &g["distance"]["s6_s4"],
+        1e-10,
+        "distance s6_s4",
+    );
+    approx(
+        d(&s6, &heavy),
+        &g["distance"]["s6_heavy"],
+        1e-10,
+        "distance s6_heavy",
+    );
     let gg = ff::gross_gap(&|k| s6.get(k), &|k| heavy.get(k));
-    approx(gg.width.unwrap(), &g["distance"]["grossGap_s6_heavy"]["width"], 1e-10, "grossGap.width");
-    approx(gg.weight.unwrap(), &g["distance"]["grossGap_s6_heavy"]["weight"], 1e-10, "grossGap.weight");
+    approx(
+        gg.width.unwrap(),
+        &g["distance"]["grossGap_s6_heavy"]["width"],
+        1e-10,
+        "grossGap.width",
+    );
+    approx(
+        gg.weight.unwrap(),
+        &g["distance"]["grossGap_s6_heavy"]["weight"],
+        1e-10,
+        "grossGap.weight",
+    );
 
     // synthetic: {advX,densTall,contrast} vs contrast:null
     let a = |k: &str| match k {
@@ -241,9 +355,19 @@ fn distance_parity() {
         "densTall" => Some(0.5),
         _ => None,
     };
-    approx(ff::distance(&a, &b), &g["distance"]["synthetic"], 1e-12, "distance synthetic");
+    approx(
+        ff::distance(&a, &b),
+        &g["distance"]["synthetic"],
+        1e-12,
+        "distance synthetic",
+    );
 
-    let gf: Vec<String> = g["features"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
+    let gf: Vec<String> = g["features"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
     assert_eq!(*ff::FEATURES, gf, "FEATURES list");
 }
 
@@ -252,12 +376,21 @@ fn font_index_parity() {
     let g = golden();
     let gi = &g["index"];
     // INDEX_FEATURES order
-    let gif: Vec<String> = gi["features"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
+    let gif: Vec<String> = gi["features"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
     assert_eq!(*fi::INDEX_FEATURES, gif, "INDEX_FEATURES");
 
     let o = ff::FpOpts::default();
     let s6 = ff::fingerprint(&load("text_s6.png"), &o).unwrap();
-    assert_eq!(fi::pack_vector(&|k| s6.get(k), &fi::INDEX_FEATURES), gi["pack"].as_str().unwrap(), "packVector");
+    assert_eq!(
+        fi::pack_vector(&|k| s6.get(k), &fi::INDEX_FEATURES),
+        gi["pack"].as_str().unwrap(),
+        "packVector"
+    );
     let un = fi::unpack_vector(gi["pack"].as_str().unwrap(), &fi::INDEX_FEATURES);
     for k in fi::INDEX_FEATURES.iter() {
         let gv = &gi["unpack"][k.as_str()];
@@ -269,14 +402,34 @@ fn font_index_parity() {
     }
     // routeSize
     let sizes = fi::index_sizes();
-    assert_eq!(fi::route_size(8.0, &sizes, false), fi::SizeKey::Num(f(&gi["route"]["c8"])), "route c8");
-    assert_eq!(fi::route_size(20.0, &sizes, false), fi::SizeKey::Num(f(&gi["route"]["c20"])), "route c20");
-    assert_eq!(fi::route_size(30.0, &sizes, false), fi::SizeKey::Num(f(&gi["route"]["c30"])), "route c30");
-    assert_eq!(fi::route_size(30.0, &sizes, true).key(), gi["route"]["c30caps"].as_str().unwrap(), "route c30caps");
+    assert_eq!(
+        fi::route_size(8.0, &sizes, false),
+        fi::SizeKey::Num(f(&gi["route"]["c8"])),
+        "route c8"
+    );
+    assert_eq!(
+        fi::route_size(20.0, &sizes, false),
+        fi::SizeKey::Num(f(&gi["route"]["c20"])),
+        "route c20"
+    );
+    assert_eq!(
+        fi::route_size(30.0, &sizes, false),
+        fi::SizeKey::Num(f(&gi["route"]["c30"])),
+        "route c30"
+    );
+    assert_eq!(
+        fi::route_size(30.0, &sizes, true).key(),
+        gi["route"]["c30caps"].as_str().unwrap(),
+        "route c30caps"
+    );
     // NON_TEXT_FAMILY
     for e in gi["nonText"].as_array().unwrap() {
         let fam = e["f"].as_str().unwrap();
-        assert_eq!(fi::NON_TEXT_FAMILY.is_match(fam), e["hit"].as_bool().unwrap(), "nonText {fam}");
+        assert_eq!(
+            fi::NON_TEXT_FAMILY.is_match(fam),
+            e["hit"].as_bool().unwrap(),
+            "nonText {fam}"
+        );
     }
 
     // Full index (candidate ranking) — needs the catalog JSON from the public repo.
@@ -290,16 +443,35 @@ fn font_index_parity() {
     }
     let index = fi::load_font_index(&idx_path).expect("load font index");
     if let Some(loaded) = gi.get("loaded") {
-        assert_eq!(index.schema, loaded["schema"].as_i64().unwrap(), "index schema");
-        assert_eq!(index.entries.len(), loaded["entries"].as_u64().unwrap() as usize, "index entries");
+        assert_eq!(
+            index.schema,
+            loaded["schema"].as_i64().unwrap(),
+            "index schema"
+        );
+        assert_eq!(
+            index.entries.len(),
+            loaded["entries"].as_u64().unwrap() as usize,
+            "index entries"
+        );
     }
     if let Some(cand) = gi.get("candidates_s6").and_then(|c| c.as_array()) {
-        let out = fi::candidates_from_index(&s6, &index, &fi::CandOpts { n: 10, ..Default::default() });
+        let out = fi::candidates_from_index(
+            &s6,
+            &index,
+            &fi::CandOpts {
+                n: 10,
+                ..Default::default()
+            },
+        );
         assert_eq!(out.len(), cand.len(), "candidate count s6");
         for (c, gc) in out.iter().zip(cand) {
             assert_eq!(c.family, gc["family"].as_str().unwrap(), "candidate family");
             approx(c.weight, &gc["weight"], 1e-9, "candidate weight");
-            assert_eq!(c.category, gc["category"].as_str().unwrap(), "candidate category");
+            assert_eq!(
+                c.category,
+                gc["category"].as_str().unwrap(),
+                "candidate category"
+            );
             approx(c.d, &gc["d"], 1e-6, "candidate distance");
         }
     }
@@ -320,7 +492,9 @@ fn assert_json_eq(a: &Value, b: &Value, what: &str) {
         }
         (Value::Object(xo), Value::Object(yo)) => {
             for (k, yv) in yo {
-                let xv = xo.get(k).unwrap_or_else(|| panic!("{what}: missing key {k}"));
+                let xv = xo
+                    .get(k)
+                    .unwrap_or_else(|| panic!("{what}: missing key {k}"));
                 assert_json_eq(xv, yv, &format!("{what}.{k}"));
             }
         }
@@ -336,10 +510,22 @@ fn hero_checks_parity() {
     // textRegion
     let comp_crop = load("hero_comp_crop.png");
     let build_crop = load("hero_build_crop.png");
-    let region = hero::Region { id: "hero".into(), kind: "text".into(), chosen: None };
+    let region = hero::Region {
+        id: "hero".into(),
+        kind: "text".into(),
+        chosen: None,
+    };
     let trc = hero::text_region_check(&region, &comp_crop, &build_crop);
-    assert_json_eq(&trc["findings"], &gh["textRegion"]["findings"], "textRegion.findings");
-    assert_json_eq(&trc["metrics"], &gh["textRegion"]["metrics"], "textRegion.metrics");
+    assert_json_eq(
+        &trc["findings"],
+        &gh["textRegion"]["findings"],
+        "textRegion.findings",
+    );
+    assert_json_eq(
+        &trc["metrics"],
+        &gh["textRegion"]["metrics"],
+        "textRegion.metrics",
+    );
 
     // inventedInk: rebuild the exact inputs the recorder used.
     let hero_comp = r::create_image(512, 400, [245, 245, 240, 255]);
@@ -361,7 +547,12 @@ fn hero_checks_parity() {
     }
     let inv = hero::invented_ink(&hero_comp, &hero_build);
     assert_json_eq(&inv["cells"], &gh["invented"]["cells"], "invented.cells");
-    approx(f(&inv["fraction"]), &gh["invented"]["fraction"], 1e-9, "invented.fraction");
+    approx(
+        f(&inv["fraction"]),
+        &gh["invented"]["fraction"],
+        1e-9,
+        "invented.fraction",
+    );
 
     // plateClip
     let mut plate_comp = r::create_image(300, 200, [255, 255, 255, 255]);
@@ -378,20 +569,39 @@ fn hero_checks_parity() {
     let mut strip_build = r::create_image(600, 120, [255, 255, 255, 255]);
     r::fill_rect(&mut strip_build, 0.0, 0.0, 600.0, 40.0, rgb([20, 30, 50]));
     r::fill_rect(&mut strip_build, 0.0, 88.0, 600.0, 2.0, rgb([0, 0, 0]));
-    let nav = hero::Region { id: "nav".into(), kind: "band".into(), chosen: None };
+    let nav = hero::Region {
+        id: "nav".into(),
+        kind: "band".into(),
+        chosen: None,
+    };
     let cs = hero::chrome_strip_check(&nav, &strip_comp, &strip_build);
-    assert_json_eq(&cs["findings"], &gh["chromeStrip"]["findings"], "chromeStrip.findings");
+    assert_json_eq(
+        &cs["findings"],
+        &gh["chromeStrip"]["findings"],
+        "chromeStrip.findings",
+    );
     assert_json_eq(&cs["comp"], &gh["chromeStrip"]["comp"], "chromeStrip.comp");
-    assert_json_eq(&cs["build"], &gh["chromeStrip"]["build"], "chromeStrip.build");
+    assert_json_eq(
+        &cs["build"],
+        &gh["chromeStrip"]["build"],
+        "chromeStrip.build",
+    );
 
     // ruleRows
-    let rr: Vec<Value> = hero::rule_rows(&strip_comp, 0.5, 28.0).into_iter().map(|v| Value::from(v)).collect();
+    let rr: Vec<Value> = hero::rule_rows(&strip_comp, 0.5, 28.0)
+        .into_iter()
+        .map(Value::from)
+        .collect();
     assert_json_eq(&Value::Array(rr), &gh["ruleRows"]["strip"], "ruleRows");
 
     // inkColor of comp crop
     let ic = hero::ink_color(&comp_crop);
     match (ic.and_then(|c| c.ink), gh["inkColor"].is_null()) {
-        (Some(ink), false) => assert_eq!(ink.hex, gh["inkColor"]["hex"].as_str().unwrap(), "inkColor.hex"),
+        (Some(ink), false) => assert_eq!(
+            ink.hex,
+            gh["inkColor"]["hex"].as_str().unwrap(),
+            "inkColor.hex"
+        ),
         (None, true) => {}
         _ => panic!("inkColor mismatch"),
     }

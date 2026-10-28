@@ -172,7 +172,10 @@ fn num_arg(args: &[Value], i: usize) -> f64 {
 #[wasm_bindgen]
 pub fn pure_css_color_is_transparent(args_json: &str) -> String {
     let a = args_of(args_json);
-    json!(impeccable_core::checks::measures::css_color_is_transparent(str_arg(&a, 0).as_deref())).to_string()
+    json!(impeccable_core::checks::measures::css_color_is_transparent(
+        str_arg(&a, 0).as_deref()
+    ))
+    .to_string()
 }
 
 /// `colorsNearlyMatch(a, b)`: `[a, b]`.
@@ -216,7 +219,10 @@ pub fn pure_get_antipattern(args_json: &str) -> String {
 #[wasm_bindgen]
 pub fn pure_is_advisory_rule(args_json: &str) -> String {
     let a = args_of(args_json);
-    json!(impeccable_core::registry::is_advisory_rule(&str_arg(&a, 0).unwrap_or_default())).to_string()
+    json!(impeccable_core::registry::is_advisory_rule(
+        &str_arg(&a, 0).unwrap_or_default()
+    ))
+    .to_string()
 }
 
 /// `RULE_SCOPES`.
@@ -229,10 +235,11 @@ pub fn pure_rule_scopes(_args_json: &str) -> String {
 #[wasm_bindgen]
 pub fn pure_get_rules_for_category(args_json: &str) -> String {
     let a = args_of(args_json);
-    let rows: Vec<Value> = impeccable_core::registry::get_rules_for_category(&str_arg(&a, 0).unwrap_or_default())
-        .into_iter()
-        .map(antipattern_json)
-        .collect();
+    let rows: Vec<Value> =
+        impeccable_core::registry::get_rules_for_category(&str_arg(&a, 0).unwrap_or_default())
+            .into_iter()
+            .map(antipattern_json)
+            .collect();
     Value::Array(rows).to_string()
 }
 
@@ -240,7 +247,10 @@ pub fn pure_get_rules_for_category(args_json: &str) -> String {
 #[wasm_bindgen]
 pub fn pure_get_rule_engine_support(args_json: &str) -> String {
     let a = args_of(args_json);
-    json!(impeccable_core::registry::get_rule_engine_support(&str_arg(&a, 0).unwrap_or_default())).to_string()
+    json!(impeccable_core::registry::get_rule_engine_support(
+        &str_arg(&a, 0).unwrap_or_default()
+    ))
+    .to_string()
 }
 
 fn antipattern_json(ap: &impeccable_core::registry::Antipattern) -> Value {
@@ -270,14 +280,26 @@ mod tests {
 
     #[test]
     fn dispatcher_round_trips() {
-        assert_eq!(pure_parse_rgb(r#"["rgb(1, 2, 3)"]"#), r#"{"r":1,"g":2,"b":3,"a":1}"#);
-        assert_eq!(pure_call("shared.color", "contrastRatio", r#"[{"r":0,"g":0,"b":0},{"r":255,"g":255,"b":255}]"#), "21");
+        assert_eq!(
+            pure_parse_rgb(r#"["rgb(1, 2, 3)"]"#),
+            r#"{"r":1,"g":2,"b":3,"a":1}"#
+        );
+        assert_eq!(
+            pure_call(
+                "shared.color",
+                "contrastRatio",
+                r#"[{"r":0,"g":0,"b":0},{"r":255,"g":255,"b":255}]"#
+            ),
+            "21"
+        );
         let hits = pure_check_em_dash_overuse(r#"["a — b — c — d — e — f — g — h — i"]"#);
         assert!(hits.contains("em-dash-overuse"), "{hits}");
         assert_eq!(pure_call("nope", "nope", "[]"), "null");
         assert!(pure_functions().contains("checkBorders"));
         assert_eq!(pure_css_color_is_transparent(r#"["transparent"]"#), "true");
         assert!(pure_get_antipattern(r#"["side-tab"]"#).contains("\"name\""));
-        assert!(pure_finding(r#"["side-tab","a.html","x",3]"#).contains("\"antipattern\":\"side-tab\""));
+        assert!(
+            pure_finding(r#"["side-tab","a.html","x",3]"#).contains("\"antipattern\":\"side-tab\"")
+        );
     }
 }

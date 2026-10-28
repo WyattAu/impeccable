@@ -122,10 +122,8 @@ fn normalize_path(p: &str) -> String {
     }
     let mut out = String::from("/");
     out.push_str(&segs.join("/"));
-    if p.ends_with("/..") || p.ends_with("/.") {
-        if !out.ends_with('/') {
-            out.push('/');
-        }
+    if (p.ends_with("/..") || p.ends_with("/.")) && !out.ends_with('/') {
+        out.push('/');
     }
     out
 }
@@ -806,8 +804,12 @@ impl Drop for SerialServer {
 /// within five seconds. tiny_http 0.12 stranded part of such a burst (#1071).
 #[doc(hidden)]
 pub fn burst_answered(addr: SocketAddr, request: &[u8], idle: usize, burst: usize) -> usize {
-    let _idle: Vec<TcpStream> = (0..idle).filter_map(|_| TcpStream::connect(addr).ok()).collect();
-    let mut socks: Vec<TcpStream> = (0..burst).filter_map(|_| TcpStream::connect(addr).ok()).collect();
+    let _idle: Vec<TcpStream> = (0..idle)
+        .filter_map(|_| TcpStream::connect(addr).ok())
+        .collect();
+    let mut socks: Vec<TcpStream> = (0..burst)
+        .filter_map(|_| TcpStream::connect(addr).ok())
+        .collect();
     for s in socks.iter_mut() {
         let _ = s.write_all(request);
         let _ = s.set_read_timeout(Some(Duration::from_secs(5)));
@@ -843,7 +845,12 @@ mod tests {
                     }
                 }
             });
-            let answered = burst_answered(addr, b"GET /img/0 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n", 4, 8);
+            let answered = burst_answered(
+                addr,
+                b"GET /img/0 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n",
+                4,
+                8,
+            );
             assert_eq!(answered, 8, "connections stranded behind idle ones");
             drop(idle);
             handler.join().unwrap();
@@ -857,7 +864,10 @@ mod tests {
         drop(server);
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         while TcpListener::bind(addr).is_err() {
-            assert!(std::time::Instant::now() < deadline, "port still held after drop");
+            assert!(
+                std::time::Instant::now() < deadline,
+                "port still held after drop"
+            );
             std::thread::sleep(Duration::from_millis(20));
         }
     }
@@ -866,7 +876,9 @@ mod tests {
     fn an_unanswered_exchange_gets_a_500() {
         let server = SerialServer::bind("127.0.0.1:0", 1024).expect("bind");
         let mut client = TcpStream::connect(server.local_addr()).expect("connect");
-        client.write_all(b"GET / HTTP/1.1\r\nHost: h\r\n\r\n").unwrap();
+        client
+            .write_all(b"GET / HTTP/1.1\r\nHost: h\r\n\r\n")
+            .unwrap();
         drop(server.recv().expect("request"));
         let mut out = String::new();
         let _ = client.read_to_string(&mut out);
@@ -911,7 +923,8 @@ mod tests {
         // front (under panic=abort that OOM would take the server down); the
         // request comes back truncated instead.
         let req = read_raw(
-            b"POST /x HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\nffffffffffff\r\nhi".to_vec(),
+            b"POST /x HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\nffffffffffff\r\nhi"
+                .to_vec(),
             1024 * 1024,
         )
         .expect("request");
@@ -935,7 +948,8 @@ mod tests {
     #[test]
     fn short_content_length_body_is_not_a_request() {
         // Valid JSON as far as it goes, then EOF before the declared length.
-        let raw = b"POST /x HTTP/1.1\r\nHost: h\r\nContent-Length: 20\r\n\r\n{\"ok\":true}".to_vec();
+        let raw =
+            b"POST /x HTTP/1.1\r\nHost: h\r\nContent-Length: 20\r\n\r\n{\"ok\":true}".to_vec();
         assert!(read_raw(raw, 1024 * 1024).is_none());
     }
 
@@ -944,7 +958,9 @@ mod tests {
         let raw = b"POST /x HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\nb\r\n{\"ok\":true}\r\n".to_vec();
         assert!(read_raw(raw, 1024 * 1024).is_none());
         // Cut inside a chunk, too.
-        let raw = b"POST /x HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n10\r\n{\"ok\":".to_vec();
+        let raw =
+            b"POST /x HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n10\r\n{\"ok\":"
+                .to_vec();
         assert!(read_raw(raw, 1024 * 1024).is_none());
     }
 
@@ -959,14 +975,19 @@ mod tests {
         let server = SerialServer::bind("127.0.0.1:0", 1024).expect("bind");
         let mut client = TcpStream::connect(server.local_addr()).expect("connect");
         client
-            .write_all(b"POST /answer HTTP/1.1\r\nHost: h\r\nContent-Length: 20\r\n\r\n{\"ok\":true}")
+            .write_all(
+                b"POST /answer HTTP/1.1\r\nHost: h\r\nContent-Length: 20\r\n\r\n{\"ok\":true}",
+            )
             .unwrap();
         client.shutdown(Shutdown::Write).unwrap();
         // The connection is dropped without an answer.
         let mut out = Vec::new();
         let _ = client.read_to_end(&mut out);
         assert!(out.is_empty(), "{}", String::from_utf8_lossy(&out));
-        assert!(server.recv_timeout(Duration::from_millis(200)).unwrap().is_none());
+        assert!(server
+            .recv_timeout(Duration::from_millis(200))
+            .unwrap()
+            .is_none());
     }
 
     #[test]
@@ -975,13 +996,16 @@ mod tests {
         let addr = listener.local_addr().expect("addr");
         let client = std::thread::spawn(move || {
             let mut s = TcpStream::connect(addr).expect("connect");
-            s.write_all(b"POST /x HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\nExpect: 100-continue\r\n\r\n")
-                .unwrap();
+            s.write_all(
+                b"POST /x HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\nExpect: 100-continue\r\n\r\n",
+            )
+            .unwrap();
             // Send the body only once told to continue, as curl does.
             s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
             let want = b"HTTP/1.1 100 Continue\r\n\r\n";
             let mut got = vec![0u8; want.len()];
-            s.read_exact(&mut got).expect("100 Continue before the body");
+            s.read_exact(&mut got)
+                .expect("100 Continue before the body");
             assert_eq!(&got, want);
             s.write_all(b"hello").unwrap();
             let mut sink = Vec::new();
@@ -1002,8 +1026,10 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().expect("addr");
         let mut s = TcpStream::connect(addr).expect("connect");
-        s.write_all(b"POST /x HTTP/1.1\r\nHost: h\r\nContent-Length: 4096\r\nExpect: 100-continue\r\n\r\n")
-            .unwrap();
+        s.write_all(
+            b"POST /x HTTP/1.1\r\nHost: h\r\nContent-Length: 4096\r\nExpect: 100-continue\r\n\r\n",
+        )
+        .unwrap();
         let (stream, _) = listener.accept().expect("accept");
         set_header_timeout(&stream);
         let started = std::time::Instant::now();
@@ -1029,7 +1055,7 @@ mod tests {
         // (connection closed) instead of accumulating headers unbounded.
         let mut raw = b"GET / HTTP/1.1\r\nHost: h\r\n".to_vec();
         raw.extend_from_slice(b"X-Big: ");
-        raw.extend(std::iter::repeat(b'a').take(2 * MAX_HEAD_BYTES as usize));
+        raw.extend(std::iter::repeat_n(b'a', 2 * MAX_HEAD_BYTES as usize));
         raw.extend_from_slice(b"\r\n\r\n");
         assert!(read_raw(raw, 1024 * 1024).is_none());
     }
@@ -1290,10 +1316,14 @@ mod tests {
         // margin; the bound stays far under the 60s read timeout a
         // deadline-less read would hold the ticket for, so the test still
         // distinguishes the fix from the regression.
-        let slack = if cfg!(windows) { deadline * 12 } else { deadline * 6 };
-        ran_rx.recv_timeout(slack).expect(
-            "later /events was wedged behind a silent connection past the read deadline",
-        );
+        let slack = if cfg!(windows) {
+            deadline * 12
+        } else {
+            deadline * 6
+        };
+        ran_rx
+            .recv_timeout(slack)
+            .expect("later /events was wedged behind a silent connection past the read deadline");
 
         drop(silent);
         drop(later);

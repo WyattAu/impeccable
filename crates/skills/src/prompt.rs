@@ -24,10 +24,13 @@ impl Prompt {
     pub fn new(io: &Io) -> Prompt {
         let stdout_tty = stdout_is_tty();
         // JS: canStyleTerminal(): stdout TTY, NO_COLOR unset, TERM !== 'dumb'.
-        let style = stdout_tty
-            && io.env("NO_COLOR").is_none()
-            && io.env("TERM") != Some("dumb");
-        Prompt { stdin_tty: io.stdin_is_tty, stdout_tty, style, piped: None }
+        let style = stdout_tty && io.env("NO_COLOR").is_none() && io.env("TERM") != Some("dumb");
+        Prompt {
+            stdin_tty: io.stdin_is_tty,
+            stdout_tty,
+            style,
+            piped: None,
+        }
     }
 
     /// JS: isInteractivePrompt()
@@ -67,11 +70,18 @@ impl Prompt {
             io.out(question);
             if self.piped.is_none() {
                 let input = io.stdin().to_string();
-                let mut lines: Vec<String> = input.split('\n').map(|l| l.strip_suffix('\r').unwrap_or(l).to_string()).collect();
+                let mut lines: Vec<String> = input
+                    .split('\n')
+                    .map(|l| l.strip_suffix('\r').unwrap_or(l).to_string())
+                    .collect();
                 lines.reverse();
                 self.piped = Some(lines);
             }
-            let next = self.piped.as_mut().and_then(|v| v.pop()).unwrap_or_default();
+            let next = self
+                .piped
+                .as_mut()
+                .and_then(|v| v.pop())
+                .unwrap_or_default();
             return Ok(next.trim().to_lowercase());
         }
         if self.uses_tty_readline(io) {
@@ -96,7 +106,10 @@ impl Prompt {
         let mut session = KeypressSession::start_raw(io)?;
         let mut line = String::new();
         let refresh = |io: &mut Io, line: &str| {
-            io.out(&format!("\x1b[1G\x1b[0J{question}{line}\x1b[{}G", utf16_len(question) + utf16_len(line) + 1));
+            io.out(&format!(
+                "\x1b[1G\x1b[0J{question}{line}\x1b[{}G",
+                utf16_len(question) + utf16_len(line) + 1
+            ));
             let _ = io.stdout.flush();
         };
         refresh(io, &line);
@@ -146,15 +159,36 @@ impl Prompt {
     }
 
     /// JS: promptRadio(message, options, {initialIndex})
-    pub fn radio(&mut self, io: &mut Io, message: &str, options: &[RadioOption], initial_index: usize) -> R<usize> {
+    pub fn radio(
+        &mut self,
+        io: &mut Io,
+        message: &str,
+        options: &[RadioOption],
+        initial_index: usize,
+    ) -> R<usize> {
         let mut cursor = clamp_index(initial_index as isize, options.len());
         let render = |this: &Prompt, cursor: usize| -> Vec<String> {
-            let mut lines = vec![format!("{} {}", this.accent("◆"), this.bold(message)), String::new()];
+            let mut lines = vec![
+                format!("{} {}", this.accent("◆"), this.bold(message)),
+                String::new(),
+            ];
             for (index, option) in options.iter().enumerate() {
                 let active = index == cursor;
-                let pointer = if active { this.accent("›") } else { " ".to_string() };
-                let mark = if active { this.good("●") } else { this.dim("○") };
-                let label = if active { this.bold(&option.label) } else { option.label.clone() };
+                let pointer = if active {
+                    this.accent("›")
+                } else {
+                    " ".to_string()
+                };
+                let mark = if active {
+                    this.good("●")
+                } else {
+                    this.dim("○")
+                };
+                let label = if active {
+                    this.bold(&option.label)
+                } else {
+                    option.label.clone()
+                };
                 let hint = match &option.hint {
                     Some(h) => format!(" {}", this.dim(h)),
                     None => String::new(),
@@ -180,8 +214,12 @@ impl Prompt {
                     session.cleanup(io);
                     return Err(Flow::Abort);
                 }
-                Key::Up | Key::Char('k') | Key::Char('K') => cursor = clamp_index(cursor as isize - 1, options.len()),
-                Key::Down | Key::Char('j') | Key::Char('J') => cursor = clamp_index(cursor as isize + 1, options.len()),
+                Key::Up | Key::Char('k') | Key::Char('K') => {
+                    cursor = clamp_index(cursor as isize - 1, options.len())
+                }
+                Key::Down | Key::Char('j') | Key::Char('J') => {
+                    cursor = clamp_index(cursor as isize + 1, options.len())
+                }
                 Key::Enter => {
                     session.render(io, &render(self, cursor));
                     session.cleanup(io);
@@ -195,13 +233,22 @@ impl Prompt {
 
     /// JS: promptCheckbox(message, options, {selectedValues}). Returns the
     /// indices of the selected options, in option order.
-    pub fn checkbox(&mut self, io: &mut Io, message: &str, options: &[CheckboxOption], selected_values: &[usize]) -> R<Vec<usize>> {
+    pub fn checkbox(
+        &mut self,
+        io: &mut Io,
+        message: &str,
+        options: &[CheckboxOption],
+        selected_values: &[usize],
+    ) -> R<Vec<usize>> {
         let mut selected: Vec<usize> = selected_values.to_vec();
         let mut cursor: usize = 0;
         let mut error = String::new();
         let mut query = String::new();
         let rows = terminal_rows().unwrap_or(24) as isize;
-        let max_visible = std::cmp::max(5, std::cmp::min(options.len() as isize, std::cmp::min(rows - 9, 10))) as usize;
+        let max_visible = std::cmp::max(
+            5,
+            std::cmp::min(options.len() as isize, std::cmp::min(rows - 9, 10)),
+        ) as usize;
 
         let filtered_options = |query: &str| -> Vec<usize> {
             let needle = query.trim().to_lowercase();
@@ -223,31 +270,67 @@ impl Prompt {
             if labels.len() <= 4 {
                 return labels.join(", ");
             }
-            format!("{} {}", labels[..4].join(", "), this.dim(&format!("+{} more", labels.len() - 4)))
+            format!(
+                "{} {}",
+                labels[..4].join(", "),
+                this.dim(&format!("+{} more", labels.len() - 4))
+            )
         };
-        let render = |this: &Prompt, cursor: &mut usize, selected: &[usize], query: &str, error: &str| -> Vec<String> {
+        let render = |this: &Prompt,
+                      cursor: &mut usize,
+                      selected: &[usize],
+                      query: &str,
+                      error: &str|
+         -> Vec<String> {
             let filtered = filtered_options(query);
             *cursor = clamp_index(*cursor as isize, filtered.len());
             let (start, end) = visible_window(*cursor, filtered.len(), max_visible);
             let mut lines = vec![
                 format!("{} {}", this.accent("◆"), this.bold(message)),
                 String::new(),
-                format!("  Search: {}", if query.is_empty() { this.dim("type to filter") } else { query.to_string() }),
+                format!(
+                    "  Search: {}",
+                    if query.is_empty() {
+                        this.dim("type to filter")
+                    } else {
+                        query.to_string()
+                    }
+                ),
                 format!("  {}", this.dim("↑/↓ move, space select, enter confirm")),
                 String::new(),
             ];
             if filtered.is_empty() {
                 lines.push(format!("  {}", this.dim("No matches")));
             } else if filtered.len() > max_visible {
-                lines.push(format!("  {}", this.dim(&format!("Showing {}-{} of {}", start + 1, end, filtered.len()))));
+                lines.push(format!(
+                    "  {}",
+                    this.dim(&format!(
+                        "Showing {}-{} of {}",
+                        start + 1,
+                        end,
+                        filtered.len()
+                    ))
+                ));
             }
             if !filtered.is_empty() {
                 for index in start..end {
                     let option = &options[filtered[index]];
                     let active = index == *cursor;
-                    let pointer = if active { this.accent("›") } else { " ".to_string() };
-                    let mark = if selected.contains(&filtered[index]) { this.good("●") } else { this.dim("○") };
-                    let label = if active { this.bold(&option.label) } else { option.label.clone() };
+                    let pointer = if active {
+                        this.accent("›")
+                    } else {
+                        " ".to_string()
+                    };
+                    let mark = if selected.contains(&filtered[index]) {
+                        this.good("●")
+                    } else {
+                        this.dim("○")
+                    };
+                    let label = if active {
+                        this.bold(&option.label)
+                    } else {
+                        option.label.clone()
+                    };
                     let hint = match &option.hint {
                         Some(h) => format!(" {}", this.dim(h)),
                         None => String::new(),
@@ -324,7 +407,9 @@ impl Prompt {
                     let lines = render(self, &mut cursor, &selected, &query, &error);
                     session.render(io, &lines);
                     session.cleanup(io);
-                    let mut out: Vec<usize> = (0..options.len()).filter(|i| selected.contains(i)).collect();
+                    let mut out: Vec<usize> = (0..options.len())
+                        .filter(|i| selected.contains(i))
+                        .collect();
                     out.dedup();
                     return Ok(out);
                 }
@@ -428,12 +513,19 @@ impl KeypressSession {
             raw.c_cc[libc::VMIN] = 1;
             raw.c_cc[libc::VTIME] = 0;
             unsafe { libc::tcsetattr(0, libc::TCSADRAIN, &raw) };
-            Ok(KeypressSession { last_line_count: 0, done: false, saved, hid_cursor: false })
+            Ok(KeypressSession {
+                last_line_count: 0,
+                done: false,
+                saved,
+                hid_cursor: false,
+            })
         }
         #[cfg(not(unix))]
         {
             let _ = io;
-            Err(Flow::Throw("Interactive prompts are not supported on this platform".to_string()))
+            Err(Flow::Throw(
+                "Interactive prompts are not supported on this platform".to_string(),
+            ))
         }
     }
 
@@ -481,11 +573,15 @@ impl KeypressSession {
                 if !byte_ready(50) {
                     return Some(Key::Other);
                 }
-                let Some(second) = read_byte() else { return Some(Key::Other) };
+                let Some(second) = read_byte() else {
+                    return Some(Key::Other);
+                };
                 if second != b'[' && second != b'O' {
                     return Some(Key::Other);
                 }
-                let Some(third) = read_byte() else { return Some(Key::Other) };
+                let Some(third) = read_byte() else {
+                    return Some(Key::Other);
+                };
                 match third {
                     b'A' => Key::Up,
                     b'B' => Key::Down,
@@ -531,7 +627,10 @@ impl KeypressSession {
                         None => break,
                     }
                 }
-                match std::str::from_utf8(&buf).ok().and_then(|s| s.chars().next()) {
+                match std::str::from_utf8(&buf)
+                    .ok()
+                    .and_then(|s| s.chars().next())
+                {
                     Some(c) => Key::Char(c),
                     None => Key::Other,
                 }
@@ -588,7 +687,11 @@ fn read_byte() -> Option<u8> {
 fn byte_ready(ms: i32) -> bool {
     #[cfg(unix)]
     {
-        let mut fds = libc::pollfd { fd: 0, events: libc::POLLIN, revents: 0 };
+        let mut fds = libc::pollfd {
+            fd: 0,
+            events: libc::POLLIN,
+            revents: 0,
+        };
         unsafe { libc::poll(&mut fds, 1, ms) > 0 }
     }
     #[cfg(not(unix))]
@@ -646,7 +749,12 @@ mod tests {
     }
 
     fn tty_prompt() -> Prompt {
-        Prompt { stdin_tty: true, stdout_tty: true, style: false, piped: None }
+        Prompt {
+            stdin_tty: true,
+            stdout_tty: true,
+            style: false,
+            piped: None,
+        }
     }
 
     #[test]

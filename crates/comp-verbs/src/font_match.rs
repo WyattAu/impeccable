@@ -9,7 +9,7 @@
 use std::path::{Path, PathBuf};
 
 use impeccable_common::Io;
-use impeccable_comp::font_fingerprint::{distance, fingerprint, FpOpts, Fingerprint};
+use impeccable_comp::font_fingerprint::{distance, fingerprint, Fingerprint, FpOpts};
 use impeccable_comp::font_index::{
     candidates_from_index, load_font_index, CandOpts, FontIndex, SizeKey, MIN_RANK_CAP_PX,
 };
@@ -68,10 +68,23 @@ pub trait FontRenderer {
 /// the CLI cannot supply one.
 pub struct NoRenderer;
 impl FontRenderer for NoRenderer {
-    fn render_candidates(&mut self, _: &[RankCandidate], _: &str, _: f64, _: &str) -> Option<Vec<RenderedCandidate>> {
+    fn render_candidates(
+        &mut self,
+        _: &[RankCandidate],
+        _: &str,
+        _: f64,
+        _: &str,
+    ) -> Option<Vec<RenderedCandidate>> {
         None
     }
-    fn render_proof_sheet(&mut self, _: &r::Image, _: &[RenderedCandidate], _: &str, _: f64, _: &str) -> Option<Vec<u8>> {
+    fn render_proof_sheet(
+        &mut self,
+        _: &r::Image,
+        _: &[RenderedCandidate],
+        _: &str,
+        _: f64,
+        _: &str,
+    ) -> Option<Vec<u8>> {
         None
     }
 }
@@ -105,7 +118,11 @@ fn width_class(fp: &Fingerprint) -> &'static str {
     let Some((key, value)) = width_measure(fp) else {
         return "normal";
     };
-    let t = if key == "advTall" { [0.45, 0.61, 0.78] } else { [0.42, 0.585, 0.72] };
+    let t = if key == "advTall" {
+        [0.45, 0.61, 0.78]
+    } else {
+        [0.42, 0.585, 0.72]
+    };
     if value < t[0] {
         "compressed"
     } else if value < t[1] {
@@ -139,7 +156,11 @@ fn weight_class(fp: &Fingerprint) -> &'static str {
     let Some((key, value)) = weight_measure(fp) else {
         return "regular";
     };
-    let t = if key == "stemW" { [0.105, 0.165, 0.195, 0.24] } else { [0.34, 0.48, 0.56, 0.66] };
+    let t = if key == "stemW" {
+        [0.105, 0.165, 0.195, 0.24]
+    } else {
+        [0.34, 0.48, 0.56, 0.66]
+    };
     if value < t[0] {
         "light"
     } else if value < t[1] {
@@ -157,21 +178,50 @@ fn weight_class(fp: &Fingerprint) -> &'static str {
 fn shortlist(width: &str) -> Vec<&'static str> {
     match width {
         "compressed" => vec![
-            "League Gothic:400", "Bebas Neue:400", "Anton:400", "Six Caps:400",
-            "Big Shoulders Display:900", "Antonio:700", "Saira Extra Condensed:800", "Oswald:700",
+            "League Gothic:400",
+            "Bebas Neue:400",
+            "Anton:400",
+            "Six Caps:400",
+            "Big Shoulders Display:900",
+            "Antonio:700",
+            "Saira Extra Condensed:800",
+            "Oswald:700",
         ],
         "condensed" => vec![
-            "League Gothic:400", "Fjalla One:400", "Anton:400", "Bebas Neue:400", "Oswald:600",
-            "Barlow Condensed:700", "Roboto Condensed:800", "Archivo Narrow:700",
-            "Pathway Gothic One:400", "Big Shoulders Display:800", "Teko:600", "Sofia Sans Condensed:800",
+            "League Gothic:400",
+            "Fjalla One:400",
+            "Anton:400",
+            "Bebas Neue:400",
+            "Oswald:600",
+            "Barlow Condensed:700",
+            "Roboto Condensed:800",
+            "Archivo Narrow:700",
+            "Pathway Gothic One:400",
+            "Big Shoulders Display:800",
+            "Teko:600",
+            "Sofia Sans Condensed:800",
         ],
         "wide" => vec![
-            "Archivo Black:400", "Syne:800", "Space Grotesk:700", "Unbounded:700",
-            "Bricolage Grotesque:800", "Sora:800", "Outfit:800", "Lexend:800",
+            "Archivo Black:400",
+            "Syne:800",
+            "Space Grotesk:700",
+            "Unbounded:700",
+            "Bricolage Grotesque:800",
+            "Sora:800",
+            "Outfit:800",
+            "Lexend:800",
         ],
         _ => vec![
-            "Inter:700", "Work Sans:700", "IBM Plex Sans:700", "Archivo:800", "Public Sans:700",
-            "Source Sans 3:700", "Roboto:900", "Barlow:800", "Manrope:800", "Rubik:800",
+            "Inter:700",
+            "Work Sans:700",
+            "IBM Plex Sans:700",
+            "Archivo:800",
+            "Public Sans:700",
+            "Source Sans 3:700",
+            "Roboto:900",
+            "Barlow:800",
+            "Manrope:800",
+            "Rubik:800",
         ],
     }
 }
@@ -188,10 +238,16 @@ fn parse_candidates(s: Option<&str>) -> Vec<RankCandidate> {
                 let (fam, rest) = x.split_at(idx);
                 let w = &rest[1..];
                 if w.len() == 3 && w.bytes().all(|b| b.is_ascii_digit()) {
-                    return RankCandidate { family: fam.trim().to_string(), weight: w.parse().unwrap() };
+                    return RankCandidate {
+                        family: fam.trim().to_string(),
+                        weight: w.parse().unwrap(),
+                    };
                 }
             }
-            RankCandidate { family: x.trim().to_string(), weight: 400.0 }
+            RankCandidate {
+                family: x.trim().to_string(),
+                weight: 400.0,
+            }
         })
         .collect()
 }
@@ -243,7 +299,11 @@ fn select_candidates(
         candidates_from_index(
             fp,
             index,
-            &CandOpts { n, category: category.map(String::from), ..Default::default() },
+            &CandOpts {
+                n,
+                category: category.map(String::from),
+                ..Default::default()
+            },
         )
     } else {
         Vec::new()
@@ -253,7 +313,10 @@ fn select_candidates(
         list.push(o);
     }
     for c in &catalog {
-        list.push(RankCandidate { family: c.family.clone(), weight: c.weight });
+        list.push(RankCandidate {
+            family: c.family.clone(),
+            weight: c.weight,
+        });
     }
     let mut source = "index";
     if index.is_none() {
@@ -269,14 +332,26 @@ fn select_candidates(
         .into_iter()
         .filter(|c| seen.insert(format!("{}:{}", c.family, fmt_num(c.weight))))
         .collect();
-    Selected { candidates, catalog, source }
+    Selected {
+        candidates,
+        catalog,
+        source,
+    }
 }
 
 // ---- choice stamp ----------------------------------------------------------
 
-fn stamp_hash(region_id: &str, family: &str, weight: &str, font_size_px: &str, source: &str) -> String {
+fn stamp_hash(
+    region_id: &str,
+    family: &str,
+    weight: &str,
+    font_size_px: &str,
+    source: &str,
+) -> String {
     let mut h = Sha1::new();
-    h.update(format!("font-match:{region_id}:{family}:{weight}:{font_size_px}:{source}").as_bytes());
+    h.update(
+        format!("font-match:{region_id}:{family}:{weight}:{font_size_px}:{source}").as_bytes(),
+    );
     let digest = h.finalize();
     let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
     hex[..12].to_string()
@@ -308,8 +383,22 @@ fn jsonnum_str(v: Option<&Value>) -> String {
 // ---- fp serialization ------------------------------------------------------
 
 const COMPACT_KEYS: [&str; 16] = [
-    "lines", "glyphs", "capHeightPx", "inkIsDark", "allCaps", "advance", "advTall", "advX", "gap",
-    "xRatio", "stemW", "contrast", "serif", "densTall", "densX", "weight",
+    "lines",
+    "glyphs",
+    "capHeightPx",
+    "inkIsDark",
+    "allCaps",
+    "advance",
+    "advTall",
+    "advX",
+    "gap",
+    "xRatio",
+    "stemW",
+    "contrast",
+    "serif",
+    "densTall",
+    "densX",
+    "weight",
 ];
 
 /// JS: compactFp(fp).
@@ -349,8 +438,12 @@ fn opt_num(v: Option<f64>) -> String {
 fn describe(fp: &Fingerprint) -> String {
     let wm = width_measure(fp);
     let wt = weight_measure(fp);
-    let wm_s = wm.map(|(k, v)| format!(" ({k} {})", fmt_num(v))).unwrap_or_default();
-    let wt_s = wt.map(|(k, v)| format!(" ({k} {})", fmt_num(v))).unwrap_or_default();
+    let wm_s = wm
+        .map(|(k, v)| format!(" ({k} {})", fmt_num(v)))
+        .unwrap_or_default();
+    let wt_s = wt
+        .map(|(k, v)| format!(" ({k} {})", fmt_num(v)))
+        .unwrap_or_default();
     format!(
         "capHeight {}px, width {}{wm_s}, weight {}{wt_s}, tracking {}{}",
         fmt_num(fp.cap_height_px),
@@ -385,14 +478,21 @@ fn resolve(io: &Io, p: &str) -> PathBuf {
 /// when `data/font-index.json` was absent. The catalog file is never committed
 /// to the engine repo.
 fn font_index_path(io: &Io) -> Option<PathBuf> {
-    if let Some(dir) = io.env.get("IMPECCABLE_CATALOG_DIR").filter(|v| !v.is_empty()) {
+    if let Some(dir) = io
+        .env
+        .get("IMPECCABLE_CATALOG_DIR")
+        .filter(|v| !v.is_empty())
+    {
         let p = Path::new(dir).join("font-index.json");
         if p.exists() {
             return Some(p);
         }
     }
     if let Some(dir) = io.env.get("IMPECCABLE_SKILL_DIR").filter(|v| !v.is_empty()) {
-        let p = Path::new(dir).join("scripts").join("data").join("font-index.json");
+        let p = Path::new(dir)
+            .join("scripts")
+            .join("data")
+            .join("font-index.json");
         if p.exists() {
             return Some(p);
         }
@@ -431,26 +531,42 @@ pub fn run(argv: &[String], io: &mut Io, renderer: &mut dyn FontRenderer) -> i32
         return 1;
     };
     let Some(spec_val) = spec.as_mut() else {
-        io.err(&format!("font-match: no spec at {spec_path}; run comp-spec.mjs first\n"));
+        io.err(&format!(
+            "font-match: no spec at {spec_path}; run comp-spec.mjs first\n"
+        ));
         return 1;
     };
     let region = spec_val
         .get("regions")
         .and_then(Value::as_array)
-        .and_then(|a| a.iter().find(|r| r.get("id").and_then(Value::as_str) == Some(id)))
+        .and_then(|a| {
+            a.iter()
+                .find(|r| r.get("id").and_then(Value::as_str) == Some(id))
+        })
         .cloned();
     let Some(region) = region else {
         let ids = spec_val
             .get("regions")
             .and_then(Value::as_array)
-            .map(|a| a.iter().filter_map(|r| r.get("id").and_then(Value::as_str)).collect::<Vec<_>>().join(", "))
+            .map(|a| {
+                a.iter()
+                    .filter_map(|r| r.get("id").and_then(Value::as_str))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
             .unwrap_or_default();
         io.err(&format!("font-match: no region {id}; ids: {ids}\n"));
         return 1;
     };
-    let comp_file = spec_val.get("comp").and_then(Value::as_str).unwrap_or("").to_string();
+    let comp_file = spec_val
+        .get("comp")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
     // Type read off an edited comp would land in the spec as approved evidence.
-    if let Some(why) = crate::approved_comp::issue_at(io, spec_val, &spec_path, &crate::build_phase::self_cmd(io)) {
+    if let Some(why) =
+        crate::approved_comp::issue_at(io, spec_val, &spec_path, &crate::build_phase::self_cmd(io))
+    {
         io.err(&format!("font-match: {why}\n"));
         return 2;
     }
@@ -461,7 +577,12 @@ pub fn run(argv: &[String], io: &mut Io, renderer: &mut dyn FontRenderer) -> i32
             return 1;
         }
     };
-    let px = |k: &str| region.pointer(&format!("/px/{k}")).and_then(Value::as_f64).unwrap_or(0.0);
+    let px = |k: &str| {
+        region
+            .pointer(&format!("/px/{k}"))
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0)
+    };
     let (rx, ry, rw, rh) = (px("x"), px("y"), px("w"), px("h"));
     let c = r::crop(&comp, rx, ry, rw, rh);
     let fp = fingerprint(&c, &FpOpts::default());
@@ -470,13 +591,22 @@ pub fn run(argv: &[String], io: &mut Io, renderer: &mut dyn FontRenderer) -> i32
     let Some(fp) = fp else {
         // No lettering: record the attempt and size by the box.
         if let Some(reg) = region_mut(spec_val, id) {
-            let ty = reg.as_object_mut().and_then(|_| None::<()>);
+            let ty = reg.as_object_mut().and(None::<()>);
             let _ = ty;
-            let mut tmap = reg.get("type").and_then(|t| t.as_object()).cloned().unwrap_or_default();
+            let mut tmap = reg
+                .get("type")
+                .and_then(|t| t.as_object())
+                .cloned()
+                .unwrap_or_default();
             tmap.insert("comp".into(), Value::Null);
             tmap.insert("measuredAt".into(), json!(util::iso_now()));
-            tmap.insert("note".into(), json!("no separable lettering in the crop; size by the region box"));
-            reg.as_object_mut().unwrap().insert("type".into(), Value::Object(tmap));
+            tmap.insert(
+                "note".into(),
+                json!("no separable lettering in the crop; size by the region box"),
+            );
+            reg.as_object_mut()
+                .unwrap()
+                .insert("type".into(), Value::Object(tmap));
         }
         write_spec(io, &spec_path, spec_val);
         io.out(&format!("MEASURE {id}: no separable lettering in the region crop at comp resolution; size this text by its box ({px_w}x{px_h}px) and inherit face and weight from the nearest measured region.\n"));
@@ -484,11 +614,17 @@ pub fn run(argv: &[String], io: &mut Io, renderer: &mut dyn FontRenderer) -> i32
     };
     // Record type.comp + classes.
     if let Some(reg) = region_mut(spec_val, id) {
-        let mut tmap = reg.get("type").and_then(|t| t.as_object()).cloned().unwrap_or_default();
+        let mut tmap = reg
+            .get("type")
+            .and_then(|t| t.as_object())
+            .cloned()
+            .unwrap_or_default();
         tmap.insert("comp".into(), compact_fp(&fp));
         tmap.insert("widthClass".into(), json!(width_class(&fp)));
         tmap.insert("weightClass".into(), json!(weight_class(&fp)));
-        reg.as_object_mut().unwrap().insert("type".into(), Value::Object(tmap));
+        reg.as_object_mut()
+            .unwrap()
+            .insert("type".into(), Value::Object(tmap));
     }
     write_spec(io, &spec_path, spec_val);
     io.out(&format!(
@@ -527,11 +663,20 @@ pub fn run(argv: &[String], io: &mut Io, renderer: &mut dyn FontRenderer) -> i32
                 break;
             }
         }
-        let size_note = sel.catalog.first().map(|c| format!(", {}px index", size_display(&c.size))).unwrap_or_default();
-        let cat_note = category.map(|c| format!(", category {c}")).unwrap_or_default();
+        let size_note = sel
+            .catalog
+            .first()
+            .map(|c| format!(", {}px index", size_display(&c.size)))
+            .unwrap_or_default();
+        let cat_note = category
+            .map(|c| format!(", category {c}"))
+            .unwrap_or_default();
         io.out(&format!(
             "CATALOG top-5 by fingerprint: {} (from {} indexed faces{size_note}{cat_note})\n",
-            top5.iter().map(|t| format!("{}:{}", t.family, fmt_num(t.weight))).collect::<Vec<_>>().join(", "),
+            top5.iter()
+                .map(|t| format!("{}:{}", t.family, fmt_num(t.weight)))
+                .collect::<Vec<_>>()
+                .join(", "),
             index.entries.len()
         ));
         io.out(&format!(
@@ -548,7 +693,10 @@ pub fn run(argv: &[String], io: &mut Io, renderer: &mut dyn FontRenderer) -> i32
         ));
     }
     let region_text = region.get("text").and_then(Value::as_str);
-    let text = arg(argv, "text").or(region_text).unwrap_or("The manuals stop. The forum keeps going.").to_string();
+    let text = arg(argv, "text")
+        .or(region_text)
+        .unwrap_or("The manuals stop. The forum keeps going.")
+        .to_string();
     let default_transform = if fp.all_caps { "uppercase" } else { "none" };
     let transform = arg_or(argv, "transform", default_transform).to_string();
     let results = renderer.render_candidates(&sel.candidates, &text, fp.cap_height_px, &transform);
@@ -570,7 +718,13 @@ pub fn run(argv: &[String], io: &mut Io, renderer: &mut dyn FontRenderer) -> i32
             chosen.insert("fontSizePx".into(), json!(font_size_px));
             chosen.insert("source".into(), json!("catalog"));
             chosen.insert("estimatedSize".into(), json!(true));
-            let stamp = stamp_hash(id, &best.family, &fmt_num(best.weight), &font_size_px.to_string(), "catalog");
+            let stamp = stamp_hash(
+                id,
+                &best.family,
+                &fmt_num(best.weight),
+                &font_size_px.to_string(),
+                "catalog",
+            );
             chosen.insert("stamp".into(), json!(stamp));
             if let Some(reg) = region_mut(spec_val, id) {
                 if let Some(ty) = reg.get_mut("type").and_then(|t| t.as_object_mut()) {
@@ -614,7 +768,10 @@ pub fn run(argv: &[String], io: &mut Io, renderer: &mut dyn FontRenderer) -> i32
         .map(|r| format!("{}:{}", r.family, fmt_num(r.weight)))
         .collect();
     if !dropped.is_empty() {
-        io.out(&format!("SKIPPED (not available at that weight on Google Fonts): {}\n", dropped.join(", ")));
+        io.out(&format!(
+            "SKIPPED (not available at that weight on Google Fonts): {}\n",
+            dropped.join(", ")
+        ));
     }
     let wm = width_measure(&fp);
     let wt = weight_measure(&fp);
@@ -626,7 +783,11 @@ pub fn run(argv: &[String], io: &mut Io, renderer: &mut dyn FontRenderer) -> i32
     let fmt_pct = |v: Option<f64>| -> String {
         match v {
             None => "n/a".to_string(),
-            Some(x) => format!("{}{}%", if x >= 0.0 { "+" } else { "" }, to_fixed(x * 100.0, 0)),
+            Some(x) => format!(
+                "{}{}%",
+                if x >= 0.0 { "+" } else { "" },
+                to_fixed(x * 100.0, 0)
+            ),
         }
     };
     for (r, d) in &rows {
@@ -647,9 +808,17 @@ pub fn run(argv: &[String], io: &mut Io, renderer: &mut dyn FontRenderer) -> i32
         ));
     }
     // Proof sheet (best-effort).
-    let top: Vec<RenderedCandidate> = rows.iter().take(3).map(|(r, _)| clone_rendered(r)).collect();
-    if let Some(sheet) = renderer.render_proof_sheet(&c, &top, &text, fp.cap_height_px, &transform) {
-        let dir = Path::new(&spec_path).parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    let top: Vec<RenderedCandidate> = rows
+        .iter()
+        .take(3)
+        .map(|(r, _)| clone_rendered(r))
+        .collect();
+    if let Some(sheet) = renderer.render_proof_sheet(&c, &top, &text, fp.cap_height_px, &transform)
+    {
+        let dir = Path::new(&spec_path)
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_default();
         let out = dir.join("font-match").join(format!("{id}.png"));
         let abs = resolve(io, &out.to_string_lossy());
         if let Some(parent) = abs.parent() {
@@ -671,7 +840,8 @@ pub fn run(argv: &[String], io: &mut Io, renderer: &mut dyn FontRenderer) -> i32
         if let Some(dw) = dw {
             if dw.abs() > 0.1 {
                 advice.push(if dw > 0.0 {
-                    "still too wide: try a more condensed face or a variable font with a wdth axis".to_string()
+                    "still too wide: try a more condensed face or a variable font with a wdth axis"
+                        .to_string()
                 } else {
                     "still too narrow: try a wider face".to_string()
                 });
@@ -685,9 +855,15 @@ pub fn run(argv: &[String], io: &mut Io, renderer: &mut dyn FontRenderer) -> i32
         if let Some(dwt) = dwt {
             if dwt.abs() > 0.15 && variable {
                 advice.push(if dwt > 0.0 {
-                    format!("too heavy: drop to weight {}", 100f64.max(best.weight - 200.0) as i64)
+                    format!(
+                        "too heavy: drop to weight {}",
+                        100f64.max(best.weight - 200.0) as i64
+                    )
                 } else {
-                    format!("too light: raise to weight {}", 900f64.min(best.weight + 200.0) as i64)
+                    format!(
+                        "too light: raise to weight {}",
+                        900f64.min(best.weight + 200.0) as i64
+                    )
                 });
             }
         }
@@ -696,8 +872,16 @@ pub fn run(argv: &[String], io: &mut Io, renderer: &mut dyn FontRenderer) -> i32
             best.family,
             fmt_num(best.weight),
             best.font_size_px,
-            if transform != "none" { format!(" text-transform: {transform};") } else { String::new() },
-            if advice.is_empty() { String::new() } else { format!(" NOTE {}", advice.join("; ")) }
+            if transform != "none" {
+                format!(" text-transform: {transform};")
+            } else {
+                String::new()
+            },
+            if advice.is_empty() {
+                String::new()
+            } else {
+                format!(" NOTE {}", advice.join("; "))
+            }
         ));
         let mut chosen = Map::new();
         chosen.insert("family".into(), json!(best.family));
@@ -705,7 +889,13 @@ pub fn run(argv: &[String], io: &mut Io, renderer: &mut dyn FontRenderer) -> i32
         chosen.insert("fontSizePx".into(), json!(best.font_size_px));
         chosen.insert("source".into(), json!(sel.source));
         chosen.insert("fp".into(), compact_fp(bfp));
-        let stamp = stamp_hash(id, &best.family, &fmt_num(best.weight), &best.font_size_px.to_string(), sel.source);
+        let stamp = stamp_hash(
+            id,
+            &best.family,
+            &fmt_num(best.weight),
+            &best.font_size_px.to_string(),
+            sel.source,
+        );
         chosen.insert("stamp".into(), json!(stamp));
         if let Some(reg) = region_mut(spec_val, id) {
             if let Some(ty) = reg.get_mut("type").and_then(|t| t.as_object_mut()) {

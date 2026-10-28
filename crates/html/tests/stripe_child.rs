@@ -17,7 +17,11 @@ fn raw_side_tab_snippets(html: &str) -> Vec<String> {
 /// reports only on a host rounded away from it (r6-t2), so every box gets a
 /// radius unless a case says otherwise.
 fn side_tab_snippets(html: &str) -> Vec<String> {
-    raw_side_tab_snippets(&html.replacen("<body>", "<body><style>body * { border-radius: 12px; }</style>", 1))
+    raw_side_tab_snippets(&html.replacen(
+        "<body>",
+        "<body><style>body * { border-radius: 12px; }</style>",
+        1,
+    ))
 }
 
 #[test]
@@ -29,10 +33,15 @@ fn a_square_host_or_a_heading_host_is_not_a_card() {
 </style></head><body>
 <div class="card"><div class="stripe"></div><div class="body">Content</div></div>
 </body></html>"#;
-    assert_eq!(raw_side_tab_snippets(&card.replace("RADIUS", "border-radius: 12px;")).len(), 1);
+    assert_eq!(
+        raw_side_tab_snippets(&card.replace("RADIUS", "border-radius: 12px;")).len(),
+        1
+    );
     assert!(raw_side_tab_snippets(&card.replace("RADIUS", "")).is_empty());
     // Rounded only along the stripe: the far side is square.
-    assert!(raw_side_tab_snippets(&card.replace("RADIUS", "border-radius: 12px 0 0 12px;")).is_empty());
+    assert!(
+        raw_side_tab_snippets(&card.replace("RADIUS", "border-radius: 12px 0 0 12px;")).is_empty()
+    );
 
     // lance.com.br: a green bar inside an `h2`, beside its text.
     let heading = r#"<!DOCTYPE html><html><head><style>
@@ -42,7 +51,16 @@ h2 { display: inline-flex; width: 320px; height: 28px; border-radius: 12px; }
 <h2><span class="bar"></span><span>Olho no lance</span></h2>
 </body></html>"#;
     assert!(raw_side_tab_snippets(heading).is_empty());
-    assert_eq!(raw_side_tab_snippets(&heading.replace("<h2>", "<div>").replace("</h2>", "</div>").replace("h2 {", "div {")).len(), 1);
+    assert_eq!(
+        raw_side_tab_snippets(
+            &heading
+                .replace("<h2>", "<div>")
+                .replace("</h2>", "</div>")
+                .replace("h2 {", "div {")
+        )
+        .len(),
+        1
+    );
 }
 
 #[test]
@@ -99,10 +117,15 @@ fn absolute_top_bottom_flags() {
 #[test]
 fn absolute_definite_height_does_not_stretch_between_insets() {
     for height in ["4px", "1rem", "25%", "calc(2px + 2px)"] {
-        let html = format!(r#"<html><body><div style="position:relative;width:320px;height:100px">
+        let html = format!(
+            r#"<html><body><div style="position:relative;width:320px;height:100px">
 <span style="position:absolute;left:0;top:0;bottom:0;width:4px;height:{height};background:#3b82f6"></span>
-</div></body></html>"#);
-        assert!(side_tab_snippets(&html).is_empty(), "definite height {height} is not stretched");
+</div></body></html>"#
+        );
+        assert!(
+            side_tab_snippets(&html).is_empty(),
+            "definite height {height} is not stretched"
+        );
     }
 }
 
@@ -110,9 +133,11 @@ fn absolute_definite_height_does_not_stretch_between_insets() {
 fn auto_height_keywords_stretch_between_insets_and_in_flex_rows() {
     for height in ["auto", "initial", "unset", "INITIAL", "UNSET"] {
         for layout in ["position:absolute;left:0;top:0;bottom:0;", ""] {
-            let html = format!(r#"<html><body><div style="position:relative;display:flex;width:320px;height:100px">
+            let html = format!(
+                r#"<html><body><div style="position:relative;display:flex;width:320px;height:100px">
 <span style="{layout}width:4px;height:{height};background:#3b82f6"></span><div>Content</div>
-</div></body></html>"#);
+</div></body></html>"#
+            );
             let hits = side_tab_snippets(&html);
             assert_eq!(hits.len(), 1, "height {height}, layout {layout}: {hits:?}");
             assert!(hits[0].contains("stripe child (left)"));
@@ -123,10 +148,15 @@ fn auto_height_keywords_stretch_between_insets_and_in_flex_rows() {
 #[test]
 fn interactive_host_stripes_keep_the_border_rule_exemptions() {
     for tag in ["a", "button"] {
-        let html = format!(r#"<html><body><{tag} style="position:relative;display:block;width:320px;height:100px">
+        let html = format!(
+            r#"<html><body><{tag} style="position:relative;display:block;width:320px;height:100px">
 <span style="position:absolute;left:0;top:0;bottom:0;width:4px;background:#3b82f6"></span>
-</{tag}></body></html>"#);
-        assert!(side_tab_snippets(&html).is_empty(), "{tag} is an exempt control");
+</{tag}></body></html>"#
+        );
+        assert!(
+            side_tab_snippets(&html).is_empty(),
+            "{tag} is an exempt control"
+        );
     }
 }
 
@@ -246,9 +276,11 @@ fn row_reverse_first_child_is_right() {
 #[test]
 fn relative_widths_are_not_pixel_stripes() {
     for width in ["8%", "10vw", "4px", "3pt", "1mm"] {
-        let html = format!(r#"<html><body><div style="position:relative;width:320px;height:100px">
+        let html = format!(
+            r#"<html><body><div style="position:relative;width:320px;height:100px">
 <div style="position:absolute;inset:0 auto 0 0;width:{width};background:#3b82f6"></div>
-</div></body></html>"#);
+</div></body></html>"#
+        );
         let expected = usize::from(!width.ends_with('%') && !width.ends_with("vw"));
         assert_eq!(side_tab_snippets(&html).len(), expected, "width {width}");
     }
@@ -257,24 +289,31 @@ fn relative_widths_are_not_pixel_stripes() {
 #[test]
 fn flex_shorthands_set_direction_and_alignment() {
     let page = |host: &str, child: &str| {
-        format!(r#"<html><body><div style="display:flex;{host}width:320px;height:100px">
+        format!(
+            r#"<html><body><div style="display:flex;{host}width:320px;height:100px">
 <div style="width:4px;{child}background:#f59e0b"></div><div>Content</div>
-</div></body></html>"#)
+</div></body></html>"#
+        )
     };
     assert!(side_tab_snippets(&page("flex-flow:column wrap;", "")).is_empty());
     assert!(side_tab_snippets(&page("place-items:center;", "")).is_empty());
     assert!(side_tab_snippets(&page("", "place-self:center;")).is_empty());
     assert_eq!(side_tab_snippets(&page("flex-flow:wrap;", "")).len(), 1);
-    assert_eq!(side_tab_snippets(&page("flex-direction:column;flex-flow:wrap;", "")).len(), 1);
+    assert_eq!(
+        side_tab_snippets(&page("flex-direction:column;flex-flow:wrap;", "")).len(),
+        1
+    );
 }
 
 #[test]
 fn flex_shorthands_resolve_var_and_inherit_per_longhand() {
     let page = |vars: &str, host: &str| {
-        format!(r#"<html><body><div style="{vars}">
+        format!(
+            r#"<html><body><div style="{vars}">
 <div style="display:flex;{host}width:320px;height:100px">
 <div>Content</div><div style="width:4px;background:#f59e0b"></div>
-</div></div></body></html>"#)
+</div></div></body></html>"#
+        )
     };
     // The stripe is the last child: right edge in a row, left in row-reverse.
     let reversed = side_tab_snippets(&page("--flow:wrap row-reverse;", "flex-flow:var(--flow);"));
@@ -284,8 +323,14 @@ fn flex_shorthands_resolve_var_and_inherit_per_longhand() {
     assert!(side_tab_snippets(&page("--flow:COLUMN;", "flex-flow:VAR(--flow);")).is_empty());
     assert!(side_tab_snippets(&page("--align:Center;", "place-items:Var(--align);")).is_empty());
     assert!(side_tab_snippets(&page("--align:center;", "place-items:var(--align);")).is_empty());
-    let inherited = page("display:flex;flex-direction:row-reverse;", "flex-flow:inherit;");
+    let inherited = page(
+        "display:flex;flex-direction:row-reverse;",
+        "flex-flow:inherit;",
+    );
     let inherited = side_tab_snippets(&inherited);
     assert_eq!(inherited.len(), 1);
-    assert!(inherited[0].contains("stripe child (left)"), "{inherited:?}");
+    assert!(
+        inherited[0].contains("stripe child (left)"),
+        "{inherited:?}"
+    );
 }

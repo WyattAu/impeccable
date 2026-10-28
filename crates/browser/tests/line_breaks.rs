@@ -30,23 +30,39 @@ fn engine() -> Option<BrowserEngine> {
 
 /// `(rule, snippet, selector, severity)` for each line-break finding on one
 /// fixture.
-fn findings(engine: &BrowserEngine, origin: &str, fixture: &str) -> Vec<(String, String, String, String)> {
+fn findings(
+    engine: &BrowserEngine,
+    origin: &str,
+    fixture: &str,
+) -> Vec<(String, String, String, String)> {
     engine
         .detect_url(&format!("{origin}/{fixture}"), &ScanOptions::default())
         .expect("scan")
         .into_iter()
         .filter(|f| f.antipattern == "straggler" || f.antipattern == "unbalanced-heading")
         .map(|f| {
-            let selector = f.extras.get("selector").and_then(|s| s.as_str()).unwrap_or("").to_string();
+            let selector = f
+                .extras
+                .get("selector")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string();
             (f.antipattern, f.snippet, selector, f.severity)
         })
         .collect()
 }
 
-fn assert_cases(found: &[(String, String, String, String)], rule: &str, flag: &[&str], pass: &[&str]) {
+fn assert_cases(
+    found: &[(String, String, String, String)],
+    rule: &str,
+    flag: &[&str],
+    pass: &[&str],
+) {
     for case in flag {
         assert!(
-            found.iter().any(|(id, _, sel, _)| id == rule && sel.contains(case)),
+            found
+                .iter()
+                .any(|(id, _, sel, _)| id == rule && sel.contains(case)),
             "{rule}: `{case}` should flag, got {found:?}"
         );
     }
@@ -58,7 +74,10 @@ fn assert_cases(found: &[(String, String, String, String)], rule: &str, flag: &[
     }
     assert!(found.iter().all(|(id, _, _, _)| id == rule), "{found:?}");
     // An uneven break can be the design, so neither rule counts as a failure.
-    assert!(found.iter().all(|(_, _, _, sev)| sev == "advisory"), "{found:?}");
+    assert!(
+        found.iter().all(|(_, _, _, sev)| sev == "advisory"),
+        "{found:?}"
+    );
 }
 
 #[test]
@@ -95,14 +114,38 @@ fn the_line_break_rules_read_the_rendered_lines() {
             "pass-one-line",
         ],
     );
-    let paragraph = stragglers.iter().find(|(_, _, sel, _)| sel.contains("flag-paragraph")).unwrap();
-    assert!(paragraph.1.starts_with("\"text.\" alone on the last of 4 lines"), "{paragraph:?}");
+    let paragraph = stragglers
+        .iter()
+        .find(|(_, _, sel, _)| sel.contains("flag-paragraph"))
+        .unwrap();
+    assert!(
+        paragraph
+            .1
+            .starts_with("\"text.\" alone on the last of 4 lines"),
+        "{paragraph:?}"
+    );
 
     let headings = findings(&engine, &origin, "unbalanced-heading.html");
     assert_cases(
         &headings,
         "unbalanced-heading",
-        &["flag-hero", "flag-three-lines", "flag-centred", "flag-card", "flag-pretty-ancestor"],
-        &["pass-balance", "pass-pretty-ancestor", "pass-one-line", "pass-even", "pass-stacked", "pass-statement", "pass-two-words", "pass-narrow", "pass-break"],
+        &[
+            "flag-hero",
+            "flag-three-lines",
+            "flag-centred",
+            "flag-card",
+            "flag-pretty-ancestor",
+        ],
+        &[
+            "pass-balance",
+            "pass-pretty-ancestor",
+            "pass-one-line",
+            "pass-even",
+            "pass-stacked",
+            "pass-statement",
+            "pass-two-words",
+            "pass-narrow",
+            "pass-break",
+        ],
     );
 }

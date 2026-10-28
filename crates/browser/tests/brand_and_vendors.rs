@@ -91,7 +91,9 @@ fn engine() -> Option<BrowserEngine> {
 
 fn scan(engine: &BrowserEngine, port: u16, fixture: &str) -> Vec<Finding> {
     let url = format!("http://127.0.0.1:{port}/{fixture}");
-    engine.detect_url(&url, &ScanOptions::default()).expect("scan")
+    engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan")
 }
 
 fn of<'a>(findings: &'a [Finding], rule: &str) -> Vec<&'a Finding> {
@@ -99,7 +101,10 @@ fn of<'a>(findings: &'a [Finding], rule: &str) -> Vec<&'a Finding> {
 }
 
 fn selector(f: &Finding) -> &str {
-    f.extras.get("selector").and_then(|s| s.as_str()).unwrap_or("")
+    f.extras
+        .get("selector")
+        .and_then(|s| s.as_str())
+        .unwrap_or("")
 }
 
 fn third_party(f: &Finding) -> Option<&str> {
@@ -112,11 +117,25 @@ fn purple_headings_in_the_brand_hue_do_not_report() {
     let port = serve();
 
     let brand = scan(&engine, port, "ai-color-palette-brand-hue.html");
-    let palette: Vec<&str> = of(&brand, "ai-color-palette").iter().map(|f| f.snippet.as_str()).collect();
-    assert_eq!(palette, vec!["Purple/violet gradient background"], "{palette:?}");
+    let palette: Vec<&str> = of(&brand, "ai-color-palette")
+        .iter()
+        .map(|f| f.snippet.as_str())
+        .collect();
+    assert_eq!(
+        palette,
+        vec!["Purple/violet gradient background"],
+        "{palette:?}"
+    );
 
-    let headings_only = scan(&engine, port, "ai-color-palette-brand-hue-headings-only.html");
-    let mut palette: Vec<&str> = of(&headings_only, "ai-color-palette").iter().map(|f| f.snippet.as_str()).collect();
+    let headings_only = scan(
+        &engine,
+        port,
+        "ai-color-palette-brand-hue-headings-only.html",
+    );
+    let mut palette: Vec<&str> = of(&headings_only, "ai-color-palette")
+        .iter()
+        .map(|f| f.snippet.as_str())
+        .collect();
     palette.sort();
     assert_eq!(
         palette,
@@ -138,10 +157,16 @@ fn cyan_band_skips_emerald_sky_and_grayed_teal() {
         .map(|f| (f.snippet.as_str(), selector(f)))
         .collect();
     for flag in ["teal-cta", "cyan-950-panel"] {
-        assert!(palette.iter().any(|(_, sel)| sel.contains(flag)), "{flag}: {palette:#?}");
+        assert!(
+            palette.iter().any(|(_, sel)| sel.contains(flag)),
+            "{flag}: {palette:#?}"
+        );
     }
     for pass in ["emerald-cta", "sky-cta", "grayed-teal-cta"] {
-        assert!(!palette.iter().any(|(_, sel)| sel.contains(pass)), "{pass}: {palette:#?}");
+        assert!(
+            !palette.iter().any(|(_, sel)| sel.contains(pass)),
+            "{pass}: {palette:#?}"
+        );
     }
 }
 
@@ -176,7 +201,9 @@ fn category_colours_do_not_report() {
     );
     // Nothing in the category headings or the category tiles reports.
     assert!(
-        !palette.iter().any(|(_, sel)| sel.contains("section-title") || sel.contains("div.tile")),
+        !palette
+            .iter()
+            .any(|(_, sel)| sel.contains("section-title") || sel.contains("div.tile")),
         "{palette:#?}"
     );
 }
@@ -186,7 +213,10 @@ fn a_skip_into_the_footer_does_not_report() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let findings = scan(&engine, port, "skipped-heading-footer.html");
-    let skips: Vec<&str> = of(&findings, "skipped-heading").iter().map(|f| f.snippet.as_str()).collect();
+    let skips: Vec<&str> = of(&findings, "skipped-heading")
+        .iter()
+        .map(|f| f.snippet.as_str())
+        .collect();
     assert_eq!(
         skips,
         vec![
@@ -205,26 +235,53 @@ fn ad_tech_script_errors_are_advisory_and_name_the_vendor() {
     // Three ad-tech errors arrive ahead of the site's own; a fourth, after
     // it, is past the ad-tech cap. The counted error still reports.
     assert_eq!(errors.len(), 4, "{errors:#?}");
-    assert!(!errors.iter().any(|f| f.snippet.contains("slot render failed")), "{errors:#?}");
-    let prebid = errors.iter().find(|f| f.snippet.contains("bidder timeout")).expect("Prebid error");
+    assert!(
+        !errors
+            .iter()
+            .any(|f| f.snippet.contains("slot render failed")),
+        "{errors:#?}"
+    );
+    let prebid = errors
+        .iter()
+        .find(|f| f.snippet.contains("bidder timeout"))
+        .expect("Prebid error");
     assert_eq!(prebid.severity, "advisory");
     assert_eq!(third_party(prebid), Some("Prebid"));
 
-    let own = errors.iter().find(|f| f.snippet.contains("cart is undefined")).expect("own error");
+    let own = errors
+        .iter()
+        .find(|f| f.snippet.contains("cart is undefined"))
+        .expect("own error");
     assert_eq!(own.severity, "error");
     assert_eq!(third_party(own), None);
     assert!(!own.snippet.contains("third-party"), "{}", own.snippet);
 
-    let anymind = errors.iter().find(|f| f.snippet.contains("anymind360.com")).expect("AnyMind error");
+    let anymind = errors
+        .iter()
+        .find(|f| f.snippet.contains("anymind360.com"))
+        .expect("AnyMind error");
     assert_eq!(anymind.severity, "advisory");
     assert_eq!(anymind.advisory, Some(true));
     assert_eq!(third_party(anymind), Some("AnyMind"));
-    assert!(anymind.snippet.ends_with(" (third-party: AnyMind)"), "{}", anymind.snippet);
+    assert!(
+        anymind.snippet.ends_with(" (third-party: AnyMind)"),
+        "{}",
+        anymind.snippet
+    );
 
-    let topics = errors.iter().find(|f| f.snippet.contains("browsingTopics")).expect("Topics rejection");
+    let topics = errors
+        .iter()
+        .find(|f| f.snippet.contains("browsingTopics"))
+        .expect("Topics rejection");
     assert_eq!(topics.severity, "advisory");
     assert_eq!(third_party(topics), Some("ad tech"));
-    assert!(topics.snippet.starts_with("Uncaught (in promise) NotSupportedError: "), "{}", topics.snippet);
+    assert!(
+        topics
+            .snippet
+            .starts_with("Uncaught (in promise) NotSupportedError: "),
+        "{}",
+        topics.snippet
+    );
 }
 
 #[test]
@@ -235,23 +292,44 @@ fn widget_vendor_findings_name_the_vendor_and_keep_their_severity() {
 
     let text = of(&findings, "undersized-ui-text");
     assert_eq!(text.len(), 2, "{text:#?}");
-    let taboola = text.iter().find(|f| selector(f).contains("trc_spotlight_item")).expect("Taboola button");
+    let taboola = text
+        .iter()
+        .find(|f| selector(f).contains("trc_spotlight_item"))
+        .expect("Taboola button");
     assert_eq!(taboola.severity, "warning");
     assert_eq!(third_party(taboola), Some("Taboola"));
     assert_eq!(
         taboola.snippet,
         "10px functional text \"Learn More\" (below 11px floor) (third-party: Taboola)"
     );
-    let own = text.iter().find(|f| selector(f).contains("div.card")).expect("site button");
+    let own = text
+        .iter()
+        .find(|f| selector(f).contains("div.card"))
+        .expect("site button");
     assert_eq!(third_party(own), None);
-    assert_eq!(own.snippet, "10px functional text \"Learn More\" (below 11px floor)");
+    assert_eq!(
+        own.snippet,
+        "10px functional text \"Learn More\" (below 11px floor)"
+    );
 
     let easings = of(&findings, "bounce-easing");
-    let slide = easings.iter().find(|f| selector(f).contains("swiper-slide")).expect("Swiper slide");
+    let slide = easings
+        .iter()
+        .find(|f| selector(f).contains("swiper-slide"))
+        .expect("Swiper slide");
     assert_eq!(third_party(slide), Some("Swiper"));
-    assert_eq!(slide.snippet, "cubic-bezier(0.34, 1.56, 0.64, 1) (third-party: Swiper)");
-    assert_eq!(slide.severity, "advisory", "bounce-easing is advisory already");
-    let copy = easings.iter().find(|f| selector(f).contains("slide-copy")).expect("site copy in a slide");
+    assert_eq!(
+        slide.snippet,
+        "cubic-bezier(0.34, 1.56, 0.64, 1) (third-party: Swiper)"
+    );
+    assert_eq!(
+        slide.severity, "advisory",
+        "bounce-easing is advisory already"
+    );
+    let copy = easings
+        .iter()
+        .find(|f| selector(f).contains("slide-copy"))
+        .expect("site copy in a slide");
     assert_eq!(third_party(copy), None);
 }
 
@@ -263,13 +341,23 @@ fn a_flat_ramp_separated_by_weight_is_advisory() {
     let flat = of(&bold, "flat-type-hierarchy");
     assert_eq!(flat.len(), 1, "{flat:#?}");
     assert_eq!(flat[0].severity, "advisory");
-    assert!(flat[0].snippet.ends_with("; weight separates headings from body text)"), "{}", flat[0].snippet);
+    assert!(
+        flat[0]
+            .snippet
+            .ends_with("; weight separates headings from body text)"),
+        "{}",
+        flat[0].snippet
+    );
 
     let medium = scan(&engine, port, "flat-type-hierarchy-weight-flat.html");
     let flat = of(&medium, "flat-type-hierarchy");
     assert_eq!(flat.len(), 1, "{flat:#?}");
     assert_eq!(flat[0].severity, "warning");
-    assert!(!flat[0].snippet.contains("weight separates"), "{}", flat[0].snippet);
+    assert!(
+        !flat[0].snippet.contains("weight separates"),
+        "{}",
+        flat[0].snippet
+    );
 }
 
 #[test]
@@ -280,11 +368,18 @@ fn a_design_md_purple_switches_the_purple_forms_off() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/ai-color-palette-brand-hue-headings-only.html");
     let scan_with = |primary: &str| {
-        let fm: serde_json::Map<String, serde_json::Value> = serde_json::from_value(serde_json::json!({
-            "colors": { "primary": primary }
-        }))
-        .unwrap();
-        let ds = impeccable_detect::design_system::normalize_design_system(Some(&fm), None, Some("DESIGN.md"), None, false);
+        let fm: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_value(serde_json::json!({
+                "colors": { "primary": primary }
+            }))
+            .unwrap();
+        let ds = impeccable_detect::design_system::normalize_design_system(
+            Some(&fm),
+            None,
+            Some("DESIGN.md"),
+            None,
+            false,
+        );
         let options = ScanOptions {
             design_system: Some(Rc::new(ds)),
             ..ScanOptions::default()

@@ -851,7 +851,10 @@ mod tests {
     fn registry_shape() {
         assert_eq!(ANTIPATTERNS.len(), 62);
         assert!(is_advisory_rule("hard-offset-shadow"));
-        assert_eq!(get_antipattern("hard-offset-shadow").unwrap().category, "quality");
+        assert_eq!(
+            get_antipattern("hard-offset-shadow").unwrap().category,
+            "quality"
+        );
         assert!(!IMMEDIATE_TIER_RULES.contains(&"hard-offset-shadow"));
         assert_eq!(ANTIPATTERNS[0].id, "side-tab");
         assert_eq!(rule_scopes(), vec!["type", "layout"]);
@@ -898,7 +901,7 @@ mod tests {
             category: "quality",
             scopes: None,
             severity: Some("warning"),
-                name: "Test pack rule one",
+            name: "Test pack rule one",
             description: "First row of the registry-extension test pack.",
             skill_section: None,
             skill_guideline: None,
@@ -908,7 +911,7 @@ mod tests {
             category: "testpack-only",
             scopes: None,
             severity: Some("error"),
-                name: "Test pack rule two",
+            name: "Test pack rule two",
             description: "Second row of the registry-extension test pack.",
             skill_section: None,
             skill_guideline: None,

@@ -112,7 +112,11 @@ const MASKED_OUT_ALPHA: f64 = 0.2;
 fn mask_alpha_at(dom: &dyn Dom, el: ElId, x: f64, y: f64) -> Option<f64> {
     let image = {
         let m = dom.style(el, "maskImage");
-        if matches!(js::trim(&m), "" | "none") { dom.style(el, "webkitMaskImage") } else { m }
+        if matches!(js::trim(&m), "" | "none") {
+            dom.style(el, "webkitMaskImage")
+        } else {
+            m
+        }
     };
     let image = js::trim(&image);
     let args = image.strip_prefix("linear-gradient(")?.strip_suffix(')')?;
@@ -137,7 +141,11 @@ fn mask_alpha_at(dom: &dyn Dom, el: ElId, x: f64, y: f64) -> Option<f64> {
             parts.remove(0);
             d
         }
-        None if first.starts_with("to ") || first.ends_with("deg") || first.ends_with("turn") || first.ends_with("rad") => {
+        None if first.starts_with("to ")
+            || first.ends_with("deg")
+            || first.ends_with("turn")
+            || first.ends_with("rad") =>
+        {
             return None
         }
         None => (true, false),
@@ -149,20 +157,34 @@ fn mask_alpha_at(dom: &dyn Dom, el: ElId, x: f64, y: f64) -> Option<f64> {
     // mask: a chip in the faded end of an `overflow-x: auto` row is one
     // scroll from full alpha.
     let scrolls_along = if vertical {
-        scrolls(&dom.style(el, "overflowY")) && has_overflow(dom.scroll_height(el), dom.client_height(el))
+        scrolls(&dom.style(el, "overflowY"))
+            && has_overflow(dom.scroll_height(el), dom.client_height(el))
     } else {
-        scrolls(&dom.style(el, "overflowX")) && has_overflow(dom.scroll_width(el), dom.client_width(el))
+        scrolls(&dom.style(el, "overflowX"))
+            && has_overflow(dom.scroll_width(el), dom.client_width(el))
     };
     if scrolls_along {
         return None;
     }
     let r = dom.rect(el);
-    let layout = if vertical { dom.offset_height(el) } else { dom.offset_width(el) };
-    let (start, extent) = if vertical { (r.top, r.height) } else { (r.left, r.width) };
+    let layout = if vertical {
+        dom.offset_height(el)
+    } else {
+        dom.offset_width(el)
+    };
+    let (start, extent) = if vertical {
+        (r.top, r.height)
+    } else {
+        (r.left, r.width)
+    };
     if !(r.all_finite() && extent > 0.0) {
         return None;
     }
-    let length = if layout.is_finite() && layout > 0.0 { layout } else { extent };
+    let length = if layout.is_finite() && layout > 0.0 {
+        layout
+    } else {
+        extent
+    };
     let mut stops: Vec<(f64, Option<f64>)> = Vec::new();
     for part in &parts {
         let part = js::trim(part);
@@ -189,10 +211,9 @@ fn mask_alpha_at(dom: &dyn Dom, el: ElId, x: f64, y: f64) -> Option<f64> {
             Some(p) => {
                 let v = if let Some(n) = p.strip_suffix("px") {
                     js::parse_float(n)
-                } else if let Some(n) = p.strip_suffix('%') {
-                    js::parse_float(n) / 100.0 * length
                 } else {
-                    return None;
+                    let n = p.strip_suffix('%')?;
+                    js::parse_float(n) / 100.0 * length
                 };
                 if !v.is_finite() {
                     return None;
@@ -247,7 +268,11 @@ fn mask_alpha_at(dom: &dyn Dom, el: ElId, x: f64, y: f64) -> Option<f64> {
     for w in placed.windows(2) {
         let ((a, aa), (b, ba)) = (w[0], w[1]);
         if t <= b {
-            return Some(if b - a <= 0.0 { ba } else { aa + (ba - aa) * (t - a) / (b - a) });
+            return Some(if b - a <= 0.0 {
+                ba
+            } else {
+                aa + (ba - aa) * (t - a) / (b - a)
+            });
         }
     }
     Some(placed[placed.len() - 1].1)
@@ -349,8 +374,13 @@ pub const TEXT_MIN_VISIBLE_SHARE_Y: f64 = 0.5;
 /// animates (`bounce-easing`), the glow around it (`dark-glow`), the
 /// palette it paints (`ai-color-palette`) or the card it nests
 /// (`nested-cards`: arc.net's sidebar folder under its frame's mask fade).
-pub const PAINT_GATED_BOX_RULES: &[&str] =
-    &["ai-color-palette", "bounce-easing", "dark-glow", "hard-offset-shadow", "nested-cards"];
+pub const PAINT_GATED_BOX_RULES: &[&str] = &[
+    "ai-color-palette",
+    "bounce-easing",
+    "dark-glow",
+    "hard-offset-shadow",
+    "nested-cards",
+];
 
 /// The rules whose page-level CSS-text form names the rule a selector
 /// declared: such a finding reports only when at least one element the
@@ -360,8 +390,14 @@ pub const PAINT_GATED_BOX_RULES: &[&str] =
 /// stripe declared for cards none of which renders (fastsocial.co's
 /// `.pricing .tier-card::before`, every host in a `display: none` grid) is
 /// one of them: `side-tab`.
-pub const PAINT_GATED_PAGE_FORMS: &[&str] =
-    &["bounce-easing", "dark-glow", "gradient-text", "pulsing-dot", "repeating-stripes-gradient", "side-tab"];
+pub const PAINT_GATED_PAGE_FORMS: &[&str] = &[
+    "bounce-easing",
+    "dark-glow",
+    "gradient-text",
+    "pulsing-dot",
+    "repeating-stripes-gradient",
+    "side-tab",
+];
 
 /// Which gate a rule's findings pass through, or `None` for an ungated rule.
 pub fn paint_gate(rule_id: &str) -> Option<PaintGate> {
@@ -400,8 +436,14 @@ pub fn page_form_painted(dom: &dyn Dom, rule_id: &str, matches: &[ElId]) -> bool
 /// text out from under, and stacks that cannot answer keep the finding.
 ///
 /// [`covered_for_good`]: super::text_layers::covered_for_good
-pub const PAINT_GATED_COVERED_RULES: &[&str] =
-    &["line-length", "straggler", "tight-leading", "tiny-text", "unbalanced-heading", "undersized-ui-text"];
+pub const PAINT_GATED_COVERED_RULES: &[&str] = &[
+    "line-length",
+    "straggler",
+    "tight-leading",
+    "tiny-text",
+    "unbalanced-heading",
+    "undersized-ui-text",
+];
 
 /// Drop the findings on `el` whose rule needs a painted element when `el` is
 /// not painted, and those in [`PAINT_GATED_COVERED_RULES`] when a layer
@@ -413,7 +455,8 @@ pub fn retain_painted(dom: &dyn Dom, el: ElId, findings: &mut Vec<BrowserFinding
     findings.retain(|f| {
         let shown = match paint_gate(&f.type_) {
             None => true,
-            Some(gate) => *painted[gate as usize].get_or_insert_with(|| unpainted_for(dom, el, gate).is_none()),
+            Some(gate) => *painted[gate as usize]
+                .get_or_insert_with(|| unpainted_for(dom, el, gate).is_none()),
         };
         shown
             && !(PAINT_GATED_COVERED_RULES.contains(&f.type_.as_str())
@@ -426,13 +469,25 @@ pub fn unpainted_for(dom: &dyn Dom, el: ElId, gate: PaintGate) -> Option<Unpaint
     match gate {
         // A 0x0 tracking pixel at opacity 0 (teenage.engineering's
         // `/_api/mw/track/view` beacon) shows no picture to bury.
-        PaintGate::Raster => unpainted_at_capture(dom, el, OwnOpacity::Measured).or_else(|| no_area(dom, el)),
-        PaintGate::Box => unpainted_at_capture(dom, el, OwnOpacity::Counts).or_else(|| no_area(dom, el)),
-        PaintGate::Toggle => unpainted_at_capture(dom, el, OwnOpacity::Toggled).or_else(|| no_area(dom, el)),
-        PaintGate::Text => unpainted_walk(dom, el, OwnOpacity::Counts, None, &mut Visible::floored_text())
-            .or_else(|| no_text(dom, el))
-            .or_else(|| no_font_size(dom, el))
-            .or_else(|| no_area(dom, el)),
+        PaintGate::Raster => {
+            unpainted_at_capture(dom, el, OwnOpacity::Measured).or_else(|| no_area(dom, el))
+        }
+        PaintGate::Box => {
+            unpainted_at_capture(dom, el, OwnOpacity::Counts).or_else(|| no_area(dom, el))
+        }
+        PaintGate::Toggle => {
+            unpainted_at_capture(dom, el, OwnOpacity::Toggled).or_else(|| no_area(dom, el))
+        }
+        PaintGate::Text => unpainted_walk(
+            dom,
+            el,
+            OwnOpacity::Counts,
+            None,
+            &mut Visible::floored_text(),
+        )
+        .or_else(|| no_text(dom, el))
+        .or_else(|| no_font_size(dom, el))
+        .or_else(|| no_area(dom, el)),
     }
 }
 
@@ -443,8 +498,14 @@ pub fn unpainted_for(dom: &dyn Dom, el: ElId, gate: PaintGate) -> Option<Unpaint
 /// text, since a card that holds only an image, or whose words sit in a
 /// descendant a later element carries, still shows its edge.
 pub fn unpainted_text_box(dom: &dyn Dom, el: ElId) -> Option<Unpainted> {
-    unpainted_walk(dom, el, OwnOpacity::Counts, None, &mut Visible::floored(TEXT_MIN_VISIBLE_SHARE))
-        .or_else(|| no_area(dom, el))
+    unpainted_walk(
+        dom,
+        el,
+        OwnOpacity::Counts,
+        None,
+        &mut Visible::floored(TEXT_MIN_VISIBLE_SHARE),
+    )
+    .or_else(|| no_area(dom, el))
 }
 
 /// Whether `el`'s text shows across its whole width at rest: no clipping
@@ -472,7 +533,10 @@ pub fn painted_at_capture(dom: &dyn Dom, el: ElId) -> bool {
 /// unpositioned `el` paints in a later phase whatever the `order`, and any
 /// other parent paints in tree order.
 pub(crate) fn later_sibling_paints_after(dom: &dyn Dom, parent: ElId, el: ElId, sib: ElId) -> bool {
-    if !matches!(dom.style(parent, "display").as_str(), "flex" | "inline-flex" | "grid" | "inline-grid") {
+    if !matches!(
+        dom.style(parent, "display").as_str(),
+        "flex" | "inline-flex" | "grid" | "inline-grid"
+    ) {
         return true;
     }
     let position = |e: ElId| dom.style(e, "position");
@@ -505,7 +569,13 @@ pub fn unpainted_at_capture(dom: &dyn Dom, el: ElId, own: OwnOpacity) -> Option<
 /// transparency, a visually hidden box) still counts at every level, and so
 /// does a fixed layer parked outside the viewport.
 pub fn unpainted_inside(dom: &dyn Dom, el: ElId, container: ElId) -> Option<Unpainted> {
-    unpainted_walk(dom, el, OwnOpacity::Counts, Some(container), &mut Visible::floored(0.0))
+    unpainted_walk(
+        dom,
+        el,
+        OwnOpacity::Counts,
+        Some(container),
+        &mut Visible::floored(0.0),
+    )
 }
 
 /// How much of a text measurement shows on the x axis, for the visible-share
@@ -548,12 +618,18 @@ impl Visible {
     /// The Text gate's floor: [`TEXT_MIN_VISIBLE_SHARE`] on x, and on y for
     /// a single line ([`TEXT_MIN_VISIBLE_SHARE_Y`]).
     fn floored_text() -> Visible {
-        Visible { floor_y: true, ..Visible::floored(TEXT_MIN_VISIBLE_SHARE) }
+        Visible {
+            floor_y: true,
+            ..Visible::floored(TEXT_MIN_VISIBLE_SHARE)
+        }
     }
 
     /// No floor, but the shown part is tracked.
     fn tracking() -> Visible {
-        Visible { track: true, ..Visible::floored(0.0) }
+        Visible {
+            track: true,
+            ..Visible::floored(0.0)
+        }
     }
 
     /// Only a floor or a tracked walk measures the text, so the base
@@ -562,13 +638,16 @@ impl Visible {
         if !(self.min_share > 0.0 || self.track) {
             return;
         }
-        let text = phrasing_text_extent(dom, el).filter(|t| t.all_finite() && t.width > 0.0 && t.height > 0.0);
+        let text = phrasing_text_extent(dom, el)
+            .filter(|t| t.all_finite() && t.width > 0.0 && t.height > 0.0);
         let r = text.unwrap_or(*rect);
         self.measured = r.width > 0.0;
         self.extent = (r.left, r.right);
         self.shown = self.extent;
         if self.floor_y {
-            self.extent_y = text.and_then(|t| super::quality::single_line_glyph_band(dom, el, &t)).map(|b| (b.top, b.bottom));
+            self.extent_y = text
+                .and_then(|t| super::quality::single_line_glyph_band(dom, el, &t))
+                .map(|b| (b.top, b.bottom));
             if let Some(e) = self.extent_y {
                 self.shown_y = e;
             }
@@ -578,10 +657,17 @@ impl Visible {
     /// Cut a single line's glyph band to `[lo, hi]` on y: true when less
     /// than [`TEXT_MIN_VISIBLE_SHARE_Y`] of it is left.
     fn cut_y(&mut self, lo: f64, hi: f64) -> bool {
-        let Some((top, bottom)) = self.extent_y else { return false };
-        self.shown_y = (js::math_max(self.shown_y.0, lo), js::math_min(self.shown_y.1, hi));
+        let Some((top, bottom)) = self.extent_y else {
+            return false;
+        };
+        self.shown_y = (
+            js::math_max(self.shown_y.0, lo),
+            js::math_min(self.shown_y.1, hi),
+        );
         let height = bottom - top;
-        height > 0.0 && js::math_max(0.0, self.shown_y.1 - self.shown_y.0) / height < TEXT_MIN_VISIBLE_SHARE_Y
+        height > 0.0
+            && js::math_max(0.0, self.shown_y.1 - self.shown_y.0) / height
+                < TEXT_MIN_VISIBLE_SHARE_Y
     }
 
     /// A box that scrolls on y can bring the rest of the line into view.
@@ -605,14 +691,20 @@ impl Visible {
         } else if !self.track {
             return false;
         }
-        self.shown = (js::math_max(self.shown.0, lo), js::math_min(self.shown.1, hi));
+        self.shown = (
+            js::math_max(self.shown.0, lo),
+            js::math_min(self.shown.1, hi),
+        );
         self.under_floor()
     }
 
     /// Whether the measured text is no wider than `width` (within a
     /// pixel). An unmeasured text or width is not known to fit.
     fn fits_within(&self, width: f64) -> bool {
-        self.measured && width.is_finite() && width > 0.0 && self.extent.1 - self.extent.0 <= width + 1.0
+        self.measured
+            && width.is_finite()
+            && width > 0.0
+            && self.extent.1 - self.extent.0 <= width + 1.0
     }
 
     /// Whether this walk applies a visible-share floor.
@@ -627,7 +719,10 @@ impl Visible {
         if !self.measured {
             return false;
         }
-        self.shown = (js::math_max(self.shown.0, lo), js::math_min(self.shown.1, hi));
+        self.shown = (
+            js::math_max(self.shown.0, lo),
+            js::math_min(self.shown.1, hi),
+        );
         !self.shown_across()
     }
 
@@ -648,7 +743,8 @@ impl Visible {
     }
 
     fn shown_across(&self) -> bool {
-        !self.measured || (self.shown.0 <= self.extent.0 + 1.0 && self.shown.1 >= self.extent.1 - 1.0)
+        !self.measured
+            || (self.shown.0 <= self.extent.0 + 1.0 && self.shown.1 >= self.extent.1 - 1.0)
     }
 }
 
@@ -731,7 +827,9 @@ fn unpainted_walk(
     // Where a mask on the element or an ancestor is read: the middle of the
     // text, or of the box.
     let centre = {
-        let t = phrasing_text_extent(dom, el).filter(|t| t.all_finite() && t.width > 0.0 && t.height > 0.0).unwrap_or(rect);
+        let t = phrasing_text_extent(dom, el)
+            .filter(|t| t.all_finite() && t.width > 0.0 && t.height > 0.0)
+            .unwrap_or(rect);
         (t.left + t.width / 2.0, t.top + t.height / 2.0)
     };
     let mut mask_alpha = 1.0;
@@ -751,7 +849,11 @@ fn unpainted_walk(
     let root = dom.document_element();
     let mut placement = Placement::of(dom, el);
     // The outermost fixed box on the containing chain, once one is found.
-    let mut fixed_rect = if placement == Placement::Fixed { Some(rect) } else { None };
+    let mut fixed_rect = if placement == Placement::Fixed {
+        Some(rect)
+    } else {
+        None
+    };
     // Whether an ancestor above the current fixed box left its containing
     // block undecided, so the box may not be a viewport layer at all.
     let mut fixed_undecided = false;
@@ -829,7 +931,8 @@ fn unpainted_walk(
             return None;
         }
         if let Some(fr) = fixed_rect.filter(Rect::all_finite) {
-            if viewport_w > 0.0 && viewport_h > 0.0 && misses(&fr, 0.0, viewport_w, 0.0, viewport_h) {
+            if viewport_w > 0.0 && viewport_h > 0.0 && misses(&fr, 0.0, viewport_w, 0.0, viewport_h)
+            {
                 return Some(Unpainted::OutsideDocument);
             }
         }
@@ -943,9 +1046,10 @@ fn buried_by_an_opaque_sibling(dom: &dyn Dom, dialog: ElId) -> bool {
                 continue;
             }
             let r = dom.rect(sib);
-            let opaque = super::element_checks::parse_rgb_or_any(&dom.style(sib, "backgroundColor"))
-                .is_some_and(|c| c.alpha_or_one() >= 0.95)
-                && effective_opacity_dom(dom, sib) >= 0.95;
+            let opaque =
+                super::element_checks::parse_rgb_or_any(&dom.style(sib, "backgroundColor"))
+                    .is_some_and(|c| c.alpha_or_one() >= 0.95)
+                    && effective_opacity_dom(dom, sib) >= 0.95;
             if opaque
                 && r.all_finite()
                 && r.left <= d.left + 1.0
@@ -1026,7 +1130,10 @@ impl Placement {
 
 /// `visibility: hidden` or `collapse`, computed (so inherited).
 fn hides_by_visibility(dom: &dyn Dom, el: ElId) -> bool {
-    matches!(js::to_lower_case(&dom.style(el, "visibility")).as_str(), "hidden" | "collapse")
+    matches!(
+        js::to_lower_case(&dom.style(el, "visibility")).as_str(),
+        "hidden" | "collapse"
+    )
 }
 
 fn is_positioned(dom: &dyn Dom, el: ElId) -> bool {
@@ -1046,10 +1153,26 @@ enum Containment {
 
 /// The individual transform-like properties: any value but `none` makes the
 /// element the containing block of its fixed and absolute descendants.
-const CONTAINING_PROPS: &[&str] = &["transform", "translate", "scale", "rotate", "perspective", "filter", "backdropFilter"];
+const CONTAINING_PROPS: &[&str] = &[
+    "transform",
+    "translate",
+    "scale",
+    "rotate",
+    "perspective",
+    "filter",
+    "backdropFilter",
+];
 
 /// The `will-change` values that do the same ahead of the change.
-const CONTAINING_WILL_CHANGE: &[&str] = &["transform", "translate", "scale", "rotate", "perspective", "filter", "backdrop-filter"];
+const CONTAINING_WILL_CHANGE: &[&str] = &[
+    "transform",
+    "translate",
+    "scale",
+    "rotate",
+    "perspective",
+    "filter",
+    "backdrop-filter",
+];
 
 /// `transform`, `translate`, `scale`, `rotate`, `perspective`, `filter` or
 /// `backdrop-filter` other than `none`, a `will-change` that names one of
@@ -1140,7 +1263,10 @@ pub(crate) fn is_visually_hidden_box(dom: &dyn Dom, el: ElId) -> bool {
 /// An `overflow` value that cuts content at the box's edge without letting
 /// it scroll into view: `hidden` or `clip`. An unrecorded value is not one.
 fn hides_overflow(value: &str) -> bool {
-    matches!(js::to_lower_case(js::trim(value)).as_str(), "hidden" | "clip")
+    matches!(
+        js::to_lower_case(js::trim(value)).as_str(),
+        "hidden" | "clip"
+    )
 }
 
 /// The elements a text rule scores that paint a value or a placeholder
@@ -1160,7 +1286,9 @@ fn no_text(dom: &dyn Dom, el: ElId) -> Option<Unpainted> {
     if has_direct_text_longer_than(dom, el, 0) || TEXT_CONTROL_TAGS.contains(&tag.as_str()) {
         return None;
     }
-    js::trim(&dom.text_content(el)).is_empty().then_some(Unpainted::NoText)
+    js::trim(&dom.text_content(el))
+        .is_empty()
+        .then_some(Unpainted::NoText)
 }
 
 /// The elements whose content is fallback: a browser that renders the
@@ -1183,9 +1311,11 @@ fn no_font_size(dom: &dyn Dom, el: ElId) -> Option<Unpainted> {
     if !drawn_at_most_1px(dom, el) {
         return None;
     }
-    let sized_text = dom.query_all(Some(el), "*").unwrap_or_default().into_iter().any(|d| {
-        has_direct_text_longer_than(dom, d, 0) && !drawn_at_most_1px(dom, d)
-    });
+    let sized_text = dom
+        .query_all(Some(el), "*")
+        .unwrap_or_default()
+        .into_iter()
+        .any(|d| has_direct_text_longer_than(dom, d, 0) && !drawn_at_most_1px(dom, d));
     (!sized_text).then_some(Unpainted::NoFontSize)
 }
 
@@ -1233,7 +1363,13 @@ fn individual_rotate_z(value: &str) -> Option<f64> {
     let angle = match parts.as_slice() {
         [a] => *a,
         ["z", a] => *a,
-        [x, y, z, a] if js::parse_float(x) == 0.0 && js::parse_float(y) == 0.0 && js::parse_float(z) > 0.0 => *a,
+        [x, y, z, a]
+            if js::parse_float(x) == 0.0
+                && js::parse_float(y) == 0.0
+                && js::parse_float(z) > 0.0 =>
+        {
+            *a
+        }
         _ => return None,
     };
     let (n, per_unit) = if let Some(n) = angle.strip_suffix("deg") {
@@ -1242,10 +1378,9 @@ fn individual_rotate_z(value: &str) -> Option<f64> {
         (n, std::f64::consts::PI / 200.0)
     } else if let Some(n) = angle.strip_suffix("rad") {
         (n, 1.0)
-    } else if let Some(n) = angle.strip_suffix("turn") {
-        (n, std::f64::consts::TAU)
     } else {
-        return None;
+        let n = angle.strip_suffix("turn")?;
+        (n, std::f64::consts::TAU)
     };
     let n = js::parse_float(n);
     n.is_finite().then_some(n * per_unit)
@@ -1276,16 +1411,23 @@ pub(super) fn drawn_enlargement(dom: &dyn Dom, el: ElId) -> f64 {
         // The individual `scale` property composes outside `transform`
         // (the element's matrix is translate, rotate, scale, then transform,
         // left to right), so it multiplies after it.
-        let Some((sx, sy)) = individual_scale(&dom.style(c, "scale")) else { return 1.0 };
+        let Some((sx, sy)) = individual_scale(&dom.style(c, "scale")) else {
+            return 1.0;
+        };
         if sx != 1.0 || sy != 1.0 {
             total = multiply(&[[sx, 0.0, 0.0], [0.0, sy, 0.0], [0.0, 0.0, 1.0]], &total);
         }
         // The individual `rotate` composes outside `scale`. A turn about an
         // axis other than z, or one that does not parse, claims nothing.
-        let Some(turn) = individual_rotate_z(&dom.style(c, "rotate")) else { return 1.0 };
+        let Some(turn) = individual_rotate_z(&dom.style(c, "rotate")) else {
+            return 1.0;
+        };
         if turn != 0.0 {
             let (sin, cos) = turn.sin_cos();
-            total = multiply(&[[cos, -sin, 0.0], [sin, cos, 0.0], [0.0, 0.0, 1.0]], &total);
+            total = multiply(
+                &[[cos, -sin, 0.0], [sin, cos, 0.0], [0.0, 0.0, 1.0]],
+                &total,
+            );
         }
         cur = dom.parent(c);
     }
@@ -1295,7 +1437,11 @@ pub(super) fn drawn_enlargement(dom: &dyn Dom, el: ElId) -> f64 {
     let x = (total[0][0] * total[0][0] + total[1][0] * total[1][0]).sqrt();
     let y = (total[0][1] * total[0][1] + total[1][1] * total[1][1]).sqrt();
     let scale = x.min(y);
-    if scale.is_finite() && scale > 1.05 { scale } else { 1.0 }
+    if scale.is_finite() && scale > 1.05 {
+        scale
+    } else {
+        1.0
+    }
 }
 
 /// A computed `font-size` that parses to 1px or less: a size no glyph can be
@@ -1330,10 +1476,13 @@ pub fn at_most_1px(font_size: &str) -> bool {
 /// whole subtree; only a face found reads the chain above it.
 fn turned_away(dom: &dyn Dom, node: ElId) -> bool {
     const MAX_ANCESTORS: usize = 256;
-    if dom.style(node, "backfaceVisibility") != "hidden" || !faces_away(&dom.style(node, "transform")) {
+    if dom.style(node, "backfaceVisibility") != "hidden"
+        || !faces_away(&dom.style(node, "transform"))
+    {
         return false;
     }
-    let individual_none = |el: ElId, prop: &str| matches!(dom.style(el, prop).as_str(), "none" | "");
+    let individual_none =
+        |el: ElId, prop: &str| matches!(dom.style(el, prop).as_str(), "none" | "");
     if !(individual_none(node, "rotate") && individual_none(node, "scale")) {
         return false;
     }
@@ -1355,7 +1504,9 @@ fn turned_away(dom: &dyn Dom, node: ElId) -> bool {
         let t = dom.style(a, "transform");
         let t = js::trim(&t);
         if !(t.is_empty() || t == "none") {
-            let Some(m) = linear_part(t) else { return false };
+            let Some(m) = linear_part(t) else {
+                return false;
+            };
             if m[2][2] < 0.0 {
                 return false;
             }
@@ -1363,10 +1514,16 @@ fn turned_away(dom: &dyn Dom, node: ElId) -> bool {
         }
         up = dom.parent(a);
     }
-    let Some(inverse) = invert(&total) else { return false };
+    let Some(inverse) = invert(&total) else {
+        return false;
+    };
     let normal = inverse[2];
     let length = (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
-    let floor = if perspective { FACING_AWAY_MIN_UNDER_PERSPECTIVE } else { FACING_AWAY_MIN };
+    let floor = if perspective {
+        FACING_AWAY_MIN_UNDER_PERSPECTIVE
+    } else {
+        FACING_AWAY_MIN
+    };
     length > 0.0 && normal[2] / length < -floor
 }
 
@@ -1402,7 +1559,8 @@ fn multiply(a: &[[f64; 3]; 3], b: &[[f64; 3]; 3]) -> [[f64; 3]; 3] {
 
 /// The inverse of a 3x3 matrix, `None` when it is singular.
 fn invert(m: &[[f64; 3]; 3]) -> Option<[[f64; 3]; 3]> {
-    let c = |r0: usize, r1: usize, c0: usize, c1: usize| m[r0][c0] * m[r1][c1] - m[r0][c1] * m[r1][c0];
+    let c =
+        |r0: usize, r1: usize, c0: usize, c1: usize| m[r0][c0] * m[r1][c1] - m[r0][c1] * m[r1][c0];
     let cof = [
         [c(1, 2, 1, 2), -c(1, 2, 0, 2), c(1, 2, 0, 1)],
         [-c(0, 2, 1, 2), c(0, 2, 0, 2), -c(0, 2, 0, 1)],
@@ -1427,17 +1585,25 @@ fn invert(m: &[[f64; 3]; 3]) -> Option<[[f64; 3]; 3]> {
 /// carrying a perspective term.
 fn linear_part(transform: &str) -> Option<[[f64; 3]; 3]> {
     let parse = |body: &str| -> Option<Vec<f64>> {
-        let values: Vec<f64> = body.split(',').map(|v| js::parse_float(js::trim(v))).collect();
+        let values: Vec<f64> = body
+            .split(',')
+            .map(|v| js::parse_float(js::trim(v)))
+            .collect();
         values.iter().all(|v| v.is_finite()).then_some(values)
     };
-    if let Some(body) = transform.strip_prefix("matrix3d(").and_then(|b| b.strip_suffix(')')) {
+    if let Some(body) = transform
+        .strip_prefix("matrix3d(")
+        .and_then(|b| b.strip_suffix(')'))
+    {
         let v = parse(body)?;
         if v.len() != 16 || v[3] != 0.0 || v[7] != 0.0 || v[11] != 0.0 {
             return None;
         }
         return Some([[v[0], v[1], v[2]], [v[4], v[5], v[6]], [v[8], v[9], v[10]]]);
     }
-    let body = transform.strip_prefix("matrix(").and_then(|b| b.strip_suffix(')'))?;
+    let body = transform
+        .strip_prefix("matrix(")
+        .and_then(|b| b.strip_suffix(')'))?;
     let v = parse(body)?;
     (v.len() == 6).then(|| [[v[0], v[1], 0.0], [v[2], v[3], 0.0], [0.0, 0.0, 1.0]])
 }
@@ -1445,10 +1611,16 @@ fn linear_part(transform: &str) -> Option<[[f64; 3]; 3]> {
 /// Whether a computed `transform` is a 3D matrix whose z axis points away
 /// from the viewer (`m33` below 0).
 fn faces_away(transform: &str) -> bool {
-    let Some(body) = transform.strip_prefix("matrix3d(").and_then(|b| b.strip_suffix(')')) else {
+    let Some(body) = transform
+        .strip_prefix("matrix3d(")
+        .and_then(|b| b.strip_suffix(')'))
+    else {
         return false;
     };
-    let values: Vec<f64> = body.split(',').map(|v| js::parse_float(js::trim(v))).collect();
+    let values: Vec<f64> = body
+        .split(',')
+        .map(|v| js::parse_float(js::trim(v)))
+        .collect();
     values.len() == 16 && values.iter().all(|v| v.is_finite()) && values[10] < 0.0
 }
 
@@ -1463,7 +1635,10 @@ fn faces_away(transform: &str) -> bool {
 /// with nothing past its edges is flat on both axes.
 fn no_area(dom: &dyn Dom, el: ElId) -> Option<Unpainted> {
     let r = dom.rect(el);
-    if !r.all_finite() || (r.width > 0.0 && r.height > 0.0) || dom.style(el, "display") == "contents" {
+    if !r.all_finite()
+        || (r.width > 0.0 && r.height > 0.0)
+        || dom.style(el, "display") == "contents"
+    {
         return None;
     }
     let (ox, oy) = overflow_axes(dom, el);
@@ -1487,7 +1662,10 @@ pub(crate) fn overflow_axes(dom: &dyn Dom, el: ElId) -> (String, String) {
 
 /// `overflow` does not apply to boxes that generate no block of their own.
 pub(crate) fn clips_contents(display: &str) -> bool {
-    !matches!(display, "contents" | "inline" | "table-row" | "table-row-group")
+    !matches!(
+        display,
+        "contents" | "inline" | "table-row" | "table-row-group"
+    )
 }
 
 fn finite_or(v: f64, fallback: f64) -> f64 {
@@ -1581,7 +1759,9 @@ fn clip_outcome(
         }
     } else if clip_x
         && dom.style(p, "textOverflow") != "ellipsis"
-        && vis.cut(cr.left, cr.right, || parks_copies(dom, el, p, &cr, viewport_w))
+        && vis.cut(cr.left, cr.right, || {
+            parks_copies(dom, el, p, &cr, viewport_w)
+        })
     {
         return Err(Unpainted::ClippedOut);
     }
@@ -1600,7 +1780,10 @@ fn clip_outcome(
     }
     if script_frame || scrolls(&oy) || moves_on_y_inside(dom, el, p) {
         vis.stop_y();
-    } else if hides_y && !is_viewport_layer(dom, p, &cr, viewport_w, viewport_h) && vis.cut_y(cr.top, cr.bottom) {
+    } else if hides_y
+        && !is_viewport_layer(dom, p, &cr, viewport_w, viewport_h)
+        && vis.cut_y(cr.top, cr.bottom)
+    {
         return Err(Unpainted::ClippedOut);
     }
     let (mut left, mut width) = (band.left, band.width);
@@ -1642,7 +1825,11 @@ fn moves_on_y_inside(dom: &dyn Dom, el: ElId, p: ElId) -> bool {
             },
         };
         let translate = dom.style(c, "translate");
-        let translated = !matches!(js::trim(&translate), "" | "none") && js::trim(&translate).split_whitespace().nth(1).is_some_and(|y| js::parse_float(y) != 0.0);
+        let translated = !matches!(js::trim(&translate), "" | "none")
+            && js::trim(&translate)
+                .split_whitespace()
+                .nth(1)
+                .is_some_and(|y| js::parse_float(y) != 0.0);
         if moved || translated {
             return true;
         }
@@ -1770,7 +1957,12 @@ fn is_viewport_layer(dom: &dyn Dom, p: ElId, cr: &Rect, viewport_w: f64, viewpor
 
 /// Whether the box lies wholly where the document cannot be scrolled to:
 /// before its start, past its scroll width, or below its scroll height.
-fn outside_document(dom: &dyn Dom, rect: &Rect, vis: &mut Visible, viewport_w: f64) -> Option<Unpainted> {
+fn outside_document(
+    dom: &dyn Dom,
+    rect: &Rect,
+    vis: &mut Visible,
+    viewport_w: f64,
+) -> Option<Unpainted> {
     let sx = finite_or(dom.scroll_x(), 0.0);
     let sy = finite_or(dom.scroll_y(), 0.0);
     let left = rect.left + sx;
@@ -1815,7 +2007,11 @@ fn outside_document(dom: &dyn Dom, rect: &Rect, vis: &mut Visible, viewport_w: f
     // x -66 with 4px on the page) can never be scrolled to. Text cut at the
     // page's far edge runs past a page that hides its overflow, the page
     // shell cutting a line a visitor reads, and keeps reporting as it did.
-    let (origin_lo, origin_hi) = if rtl { (f64::NEG_INFINITY, end - sx) } else { (start - sx, f64::INFINITY) };
+    let (origin_lo, origin_hi) = if rtl {
+        (f64::NEG_INFINITY, end - sx)
+    } else {
+        (start - sx, f64::INFINITY)
+    };
     if vis.cut(origin_lo, origin_hi, || true) {
         return Some(Unpainted::OutsideDocument);
     }
@@ -1843,7 +2039,10 @@ fn parks_copies(dom: &dyn Dom, el: ElId, p: ElId, cr: &Rect, viewport_w: f64) ->
 /// width when a classic scrollbar makes that narrower. 0 when neither was
 /// measured.
 fn page_width(dom: &dyn Dom, viewport_w: f64) -> f64 {
-    let client = dom.document_element().map(|root| dom.client_width(root)).filter(|w| w.is_finite() && *w > 0.0);
+    let client = dom
+        .document_element()
+        .map(|root| dom.client_width(root))
+        .filter(|w| w.is_finite() && *w > 0.0);
     match client {
         Some(w) if viewport_w > 0.0 => js::math_min(w, viewport_w),
         Some(w) => w,
@@ -1991,7 +2190,10 @@ fn animation_entries(dom: &dyn Dom, el: ElId) -> Vec<AnimationEntry> {
         return Vec::new();
     }
     let list = |prop: &str| -> Vec<String> {
-        dom.style(el, prop).split(',').map(|v| js::to_lower_case(js::trim(v))).collect()
+        dom.style(el, prop)
+            .split(',')
+            .map(|v| js::to_lower_case(js::trim(v)))
+            .collect()
     };
     let at = |v: &[String], i: usize| -> String {
         if v.is_empty() {
@@ -2000,8 +2202,16 @@ fn animation_entries(dom: &dyn Dom, el: ElId) -> Vec<AnimationEntry> {
             v[i % v.len()].clone()
         }
     };
-    let (iterations, fill, direction) = (list("animationIterationCount"), list("animationFillMode"), list("animationDirection"));
-    let (duration, delay, timeline) = (list("animationDuration"), list("animationDelay"), list("animationTimeline"));
+    let (iterations, fill, direction) = (
+        list("animationIterationCount"),
+        list("animationFillMode"),
+        list("animationDirection"),
+    );
+    let (duration, delay, timeline) = (
+        list("animationDuration"),
+        list("animationDelay"),
+        list("animationTimeline"),
+    );
     let play_state = list("animationPlayState");
     let composition = list("animationComposition");
     names
@@ -2031,7 +2241,10 @@ fn sole_opacity_entry(dom: &dyn Dom, el: ElId) -> Option<AnimationEntry> {
     let mut found: Option<AnimationEntry> = None;
     for entry in animation_entries(dom, el) {
         let frames = dom.keyframes(&entry.name)?;
-        if frames.iter().any(|f| f.decls.iter().any(|(p, _)| p == "opacity")) {
+        if frames
+            .iter()
+            .any(|f| f.decls.iter().any(|(p, _)| p == "opacity"))
+        {
             if found.is_some() {
                 return None;
             }
@@ -2091,7 +2304,7 @@ fn opacity_at_offset(dom: &dyn Dom, name: &str, at: f64) -> Option<f64> {
         .zip(keys.iter())
         .filter(|(_, key)| key_names_offset(key, at))
         .filter_map(|(frame, _)| frame_opacity(frame))
-        .last()
+        .next_back()
 }
 
 /// The opacity a finite animation holds once it has played, where it holds
@@ -2140,10 +2353,9 @@ fn css_time(value: &str) -> Option<f64> {
     let v = js::trim(value);
     let n = if let Some(ms) = v.strip_suffix("ms") {
         js::parse_float(ms) / 1000.0
-    } else if let Some(s) = v.strip_suffix('s') {
-        js::parse_float(s)
     } else {
-        return None;
+        let s = v.strip_suffix('s')?;
+        js::parse_float(s)
     };
     n.is_finite().then_some(n)
 }
@@ -2186,9 +2398,12 @@ pub(crate) fn opacity_animation_shows(dom: &dyn Dom, el: ElId) -> bool {
         return false;
     }
     if entry.iterations == "infinite" {
-        return dom
-            .keyframes(&entry.name)
-            .is_some_and(|frames| frames.iter().filter_map(frame_opacity).any(|o| o > TRANSPARENT_FLOOR));
+        return dom.keyframes(&entry.name).is_some_and(|frames| {
+            frames
+                .iter()
+                .filter_map(frame_opacity)
+                .any(|o| o > TRANSPARENT_FLOOR)
+        });
     }
     held_end_opacity(dom, &entry).is_some_and(|o| o > TRANSPARENT_FLOOR)
 }
@@ -2216,9 +2431,12 @@ pub(crate) fn loops_in_motion(dom: &dyn Dom, el: ElId) -> bool {
     sole_opacity_entry(dom, el).is_some_and(|entry| {
         entry.iterations == "infinite"
             && entry.play_state != "paused"
-            && dom
-                .keyframes(&entry.name)
-                .is_some_and(|frames| frames.iter().filter_map(frame_opacity).any(|o| o <= LOOP_VANISH_OPACITY))
+            && dom.keyframes(&entry.name).is_some_and(|frames| {
+                frames
+                    .iter()
+                    .filter_map(frame_opacity)
+                    .any(|o| o <= LOOP_VANISH_OPACITY)
+            })
     })
 }
 
@@ -2245,9 +2463,12 @@ pub(crate) fn paused_mid_loop(dom: &dyn Dom, el: ElId) -> bool {
         entry.iterations == "infinite"
             && entry.play_state == "paused"
             && (entry.composition.is_empty() || entry.composition == "replace")
-            && dom
-                .keyframes(&entry.name)
-                .is_some_and(|frames| frames.iter().filter_map(frame_opacity).any(|o| o <= LOOP_VANISH_OPACITY))
+            && dom.keyframes(&entry.name).is_some_and(|frames| {
+                frames
+                    .iter()
+                    .filter_map(frame_opacity)
+                    .any(|o| o <= LOOP_VANISH_OPACITY)
+            })
     })
 }
 
@@ -2278,7 +2499,10 @@ pub(crate) fn moves_mid_animation(dom: &dyn Dom, el: ElId) -> bool {
             return false;
         }
         if let Some(props) = dom.running_animation_properties(c) {
-            if props.iter().any(|p| moves_sideways(dom, c, p) && traced_to_an_end(dom, c, p)) {
+            if props
+                .iter()
+                .any(|p| moves_sideways(dom, c, p) && traced_to_an_end(dom, c, p))
+            {
                 return true;
             }
         }
@@ -2303,7 +2527,10 @@ pub(crate) fn resizes_mid_animation(dom: &dyn Dom, el: ElId) -> bool {
             return false;
         }
         if let Some(props) = dom.running_animation_properties(c) {
-            if props.iter().any(|p| sets_width(p) && traced_to_an_end(dom, c, p)) {
+            if props
+                .iter()
+                .any(|p| sets_width(p) && traced_to_an_end(dom, c, p))
+            {
                 return true;
             }
         }
@@ -2327,7 +2554,10 @@ fn moves_sideways(dom: &dyn Dom, el: ElId, p: &str) -> bool {
         _ if p.starts_with("inset-inline") => true,
         "transform" => {
             let t = js::trim(&dom.style(el, "transform")).replace(' ', "");
-            let x = if let Some(body) = t.strip_prefix("matrix3d(").and_then(|b| b.strip_suffix(')')) {
+            let x = if let Some(body) = t
+                .strip_prefix("matrix3d(")
+                .and_then(|b| b.strip_suffix(')'))
+            {
                 body.split(',').nth(12).map(js::parse_float)
             } else if let Some(body) = t.strip_prefix("matrix(").and_then(|b| b.strip_suffix(')')) {
                 body.split(',').nth(4).map(js::parse_float)
@@ -2338,7 +2568,10 @@ fn moves_sideways(dom: &dyn Dom, el: ElId, p: &str) -> bool {
         }
         "translate" => {
             let t = dom.style(el, "translate");
-            t.split_whitespace().next().map(js::parse_float).is_some_and(|x| x.is_finite() && x.abs() >= 1.0)
+            t.split_whitespace()
+                .next()
+                .map(js::parse_float)
+                .is_some_and(|x| x.is_finite() && x.abs() >= 1.0)
                 && !keyframes_hold_x(dom, el, p)
         }
         _ => false,
@@ -2359,10 +2592,17 @@ fn keyframes_hold_x(dom: &dyn Dom, el: ElId, p: &str) -> bool {
     }
     let mut any = false;
     for e in animation_entries(dom, el) {
-        let Some(frames) = dom.keyframes(&e.name) else { return false };
+        let Some(frames) = dom.keyframes(&e.name) else {
+            return false;
+        };
         let xs: Vec<Option<String>> = frames
             .iter()
-            .filter_map(|f| f.decls.iter().find(|(prop, _)| prop == p).map(|(_, v)| keyframe_x(p, v)))
+            .filter_map(|f| {
+                f.decls
+                    .iter()
+                    .find(|(prop, _)| prop == p)
+                    .map(|(_, v)| keyframe_x(p, v))
+            })
             .collect();
         if xs.is_empty() {
             continue;
@@ -2393,7 +2633,10 @@ fn ancestor_turns(dom: &dyn Dom, el: ElId) -> bool {
         // A 3D matrix counts only as the 2D one it may be: nothing in or
         // out of z and no perspective row, which projects a move on y
         // sideways too.
-        let parts: Option<Vec<f64>> = if let Some(body) = t.strip_prefix("matrix3d(").and_then(|b| b.strip_suffix(')')) {
+        let parts: Option<Vec<f64>> = if let Some(body) = t
+            .strip_prefix("matrix3d(")
+            .and_then(|b| b.strip_suffix(')'))
+        {
             let v: Vec<f64> = body.split(',').map(js::parse_float).collect();
             let flat = v.len() == 16
                 && [2, 3, 6, 7, 8, 9, 11, 14].iter().all(|&i| v[i] == 0.0)
@@ -2413,7 +2656,10 @@ fn ancestor_turns(dom: &dyn Dom, el: ElId) -> bool {
         let rotate = js::trim(&dom.style(c, "rotate")).to_string();
         let unrotated = rotate.is_empty()
             || rotate == "none"
-            || rotate.split_whitespace().last().is_some_and(|a| js::parse_float(a) == 0.0);
+            || rotate
+                .split_whitespace()
+                .last()
+                .is_some_and(|a| js::parse_float(a) == 0.0);
         let perspective = js::trim(&dom.style(c, "perspective")).to_string();
         let flat_view = perspective.is_empty() || perspective == "none";
         if !keeps_directions || !unrotated || !flat_view {
@@ -2453,14 +2699,31 @@ fn keyframe_x(p: &str, value: &str) -> Option<String> {
     };
     let key = |a: f64, c: f64, xs: Vec<String>| {
         let xs: Vec<String> = xs.into_iter().filter(|x| x != "0").collect();
-        let t = if xs.is_empty() { "0".to_string() } else { xs.join(" ") };
-        Some(format!("{} {} | {t}", js::number_to_string(a), js::number_to_string(c)))
+        let t = if xs.is_empty() {
+            "0".to_string()
+        } else {
+            xs.join(" ")
+        };
+        Some(format!(
+            "{} {} | {t}",
+            js::number_to_string(a),
+            js::number_to_string(c)
+        ))
     };
     if value == "none" {
         return key(1.0, 0.0, Vec::new());
     }
     if p == "translate" {
-        return key(1.0, 0.0, value.split_whitespace().next().map(norm).into_iter().collect());
+        return key(
+            1.0,
+            0.0,
+            value
+                .split_whitespace()
+                .next()
+                .map(norm)
+                .into_iter()
+                .collect(),
+        );
     }
     let mut xs: Vec<String> = Vec::new();
     let mut linear: Option<(f64, f64)> = None;
@@ -2511,8 +2774,13 @@ fn keyframe_x(p: &str, value: &str) -> Option<String> {
 fn traced_to_an_end(dom: &dyn Dom, el: ElId, p: &str) -> bool {
     let mut setting = Vec::new();
     for e in animation_entries(dom, el) {
-        let Some(frames) = dom.keyframes(&e.name) else { return false };
-        if frames.iter().any(|f| f.decls.iter().any(|(prop, _)| prop == p)) {
+        let Some(frames) = dom.keyframes(&e.name) else {
+            return false;
+        };
+        if frames
+            .iter()
+            .any(|f| f.decls.iter().any(|(prop, _)| prop == p))
+        {
             setting.push(e);
         }
     }
@@ -2534,14 +2802,19 @@ fn traced_to_an_end(dom: &dyn Dom, el: ElId, p: &str) -> bool {
 /// about what runs on them.
 fn fades_out_in_chain(dom: &dyn Dom, el: ElId, include_self: bool) -> bool {
     const MAX_ANCESTORS: usize = 64;
-    let mut cur = if include_self { Some(el) } else { dom.parent(el) };
+    let mut cur = if include_self {
+        Some(el)
+    } else {
+        dom.parent(el)
+    };
     for _ in 0..MAX_ANCESTORS {
         let Some(c) = cur else { return false };
         if Some(c) == dom.body() || Some(c) == dom.document_element() {
             return false;
         }
         let names = dom.style(c, "animationName");
-        if !js::trim(&names).is_empty() && js::trim(&names) != "none" && fades_out_for_good(dom, c) {
+        if !js::trim(&names).is_empty() && js::trim(&names) != "none" && fades_out_for_good(dom, c)
+        {
             return true;
         }
         cur = dom.parent(c);
@@ -2574,12 +2847,17 @@ pub fn opacity_held_by_scroll_timeline(dom: &dyn Dom, el: ElId, style_text: &str
         return false;
     }
     let fades = |name: &str| {
-        dom.keyframes(name)
-            .is_some_and(|frames| frames.iter().any(|f| f.decls.iter().any(|(p, _)| p == "opacity")))
+        dom.keyframes(name).is_some_and(|frames| {
+            frames
+                .iter()
+                .any(|f| f.decls.iter().any(|(p, _)| p == "opacity"))
+        })
     };
     let scroll_driven = |timeline: &str| {
         let timeline = js::to_lower_case(js::trim(timeline));
-        timeline.starts_with("scroll(") || timeline.starts_with("view(") || timeline.starts_with("--")
+        timeline.starts_with("scroll(")
+            || timeline.starts_with("view(")
+            || timeline.starts_with("--")
     };
     let timelines = dom.style(el, "animationTimeline");
     if !js::trim(&timelines).is_empty() {
@@ -2605,10 +2883,14 @@ pub fn opacity_held_by_scroll_timeline(dom: &dyn Dom, el: ElId, style_text: &str
         let at = from + found;
         from = at + DECL.len();
         let rest = lower[from..].trim_start();
-        let Some(value) = rest.strip_prefix(':') else { continue };
+        let Some(value) = rest.strip_prefix(':') else {
+            continue;
+        };
         let value = value.split([';', '}']).next().unwrap_or("");
         let scroll_driven = value.split(',').map(js::trim).any(|timeline| {
-            timeline.starts_with("scroll(") || timeline.starts_with("view(") || timeline.starts_with("--")
+            timeline.starts_with("scroll(")
+                || timeline.starts_with("view(")
+                || timeline.starts_with("--")
         });
         if !scroll_driven {
             continue;
@@ -2644,7 +2926,10 @@ pub(crate) fn scroll_held_end_opacity(dom: &dyn Dom, el: ElId) -> Option<f64> {
     }
     let entry = sole_opacity_entry(dom, el)?;
     let timeline = js::to_lower_case(js::trim(&entry.timeline));
-    if !(timeline.starts_with("scroll(") || timeline.starts_with("view(") || timeline.starts_with("--")) {
+    if !(timeline.starts_with("scroll(")
+        || timeline.starts_with("view(")
+        || timeline.starts_with("--"))
+    {
         return None;
     }
     if !(entry.composition.is_empty() || entry.composition == "replace") {
@@ -2687,13 +2972,15 @@ pub fn effective_opacity_scrolled(dom: &dyn Dom, el: ElId) -> f64 {
     let mut cur = Some(el);
     while let Some(c) = cur {
         let raw = dom.style(c, "opacity");
-        let v = scroll_held_end_opacity(dom, c).or_else(|| entrance_end_opacity(dom, c)).unwrap_or_else(|| {
-            if raw.is_empty() {
-                1.0
-            } else {
-                js::parse_float(&raw)
-            }
-        });
+        let v = scroll_held_end_opacity(dom, c)
+            .or_else(|| entrance_end_opacity(dom, c))
+            .unwrap_or_else(|| {
+                if raw.is_empty() {
+                    1.0
+                } else {
+                    js::parse_float(&raw)
+                }
+            });
         o *= v;
         if o <= TRANSPARENT_FLOOR {
             return 0.0;
@@ -2766,7 +3053,8 @@ pub fn parked_outside_clip(dom: &dyn Dom, el: ElId) -> bool {
         if clips_contents(&dom.style(p, "display")) {
             let (ox, oy) = overflow_axes(dom, p);
             let cr = dom.rect(p);
-            if !cr.all_finite() || (clips(&ox) && cr.width < 1.0) || (clips(&oy) && cr.height < 1.0) {
+            if !cr.all_finite() || (clips(&ox) && cr.width < 1.0) || (clips(&oy) && cr.height < 1.0)
+            {
                 return false;
             }
         }
@@ -2899,7 +3187,12 @@ pub fn colour_mid_reveal(dom: &dyn Dom, el: ElId) -> bool {
     if has_direct_text_longer_than(dom, parent, 0) {
         return false;
     }
-    let words = dom.children(parent).into_iter().filter(|&w| is_word(w)).take(REVEAL_RUN_MIN_WORDS).count();
+    let words = dom
+        .children(parent)
+        .into_iter()
+        .filter(|&w| is_word(w))
+        .take(REVEAL_RUN_MIN_WORDS)
+        .count();
     if words >= REVEAL_RUN_MIN_WORDS {
         return true;
     }
@@ -2917,7 +3210,11 @@ pub fn colour_mid_reveal(dom: &dyn Dom, el: ElId) -> bool {
         if has_direct_text_longer_than(dom, word, 0) {
             continue;
         }
-        letters += dom.children(word).into_iter().filter(|&l| is_word(l) && is_one_letter(dom, l)).count();
+        letters += dom
+            .children(word)
+            .into_iter()
+            .filter(|&l| is_word(l) && is_one_letter(dom, l))
+            .count();
         if letters >= REVEAL_RUN_MIN_WORDS {
             return true;
         }
@@ -2947,7 +3244,10 @@ fn is_reveal_word(dom: &dyn Dom, el: ElId) -> bool {
     let inline = match dom.style(el, "display").as_str() {
         "inline" | "inline-block" => true,
         "block" => dom.parent(el).is_some_and(|p| {
-            matches!(dom.style(p, "display").as_str(), "flex" | "inline-flex" | "grid" | "inline-grid")
+            matches!(
+                dom.style(p, "display").as_str(),
+                "flex" | "inline-flex" | "grid" | "inline-grid"
+            )
         }),
         _ => false,
     };
@@ -3007,10 +3307,14 @@ fn declares_animation(dom: &dyn Dom, el: ElId) -> bool {
 /// An `animation-name` whose keyframes animate opacity, or whose keyframes
 /// the capture could not read.
 fn declares_opacity_animation(dom: &dyn Dom, el: ElId) -> bool {
-    animation_names(dom, el).iter().any(|name| match dom.keyframes(name) {
-        Some(frames) => frames.iter().any(|f| f.decls.iter().any(|(p, _)| p == "opacity")),
-        None => true,
-    })
+    animation_names(dom, el)
+        .iter()
+        .any(|name| match dom.keyframes(name) {
+            Some(frames) => frames
+                .iter()
+                .any(|f| f.decls.iter().any(|(p, _)| p == "opacity")),
+            None => true,
+        })
 }
 
 /// The attributes lazy-loading libraries park a source or a load state in.
@@ -3039,12 +3343,15 @@ fn marks_lazy_loading(dom: &dyn Dom, el: ElId) -> bool {
     if LAZY_ATTRS.iter().any(|name| dom.attr(el, name).is_some()) {
         return true;
     }
-    [Some(el), dom.parent(el)].into_iter().flatten().any(|node| {
-        class_attr(dom, node).split_ascii_whitespace().any(|token| {
-            let token = js::to_lower_case(token);
-            token.contains("lazy") || token.contains("loading") || token.contains("preload")
+    [Some(el), dom.parent(el)]
+        .into_iter()
+        .flatten()
+        .any(|node| {
+            class_attr(dom, node).split_ascii_whitespace().any(|token| {
+                let token = js::to_lower_case(token);
+                token.contains("lazy") || token.contains("loading") || token.contains("preload")
+            })
         })
-    })
 }
 
 /// Whether a raster is a lazy-loading library's image that has not been
@@ -3064,17 +3371,23 @@ fn marks_lazy_loading(dom: &dyn Dom, el: ElId) -> bool {
 /// images carry it by default, and an image held buried behind it is still
 /// reported.
 fn lazy_raster_pending(dom: &dyn Dom, el: ElId) -> bool {
-    if dom.attr(el, "data-loaded").is_some_and(|v| js::to_lower_case(js::trim(&v)) == "false") {
+    if dom
+        .attr(el, "data-loaded")
+        .is_some_and(|v| js::to_lower_case(js::trim(&v)) == "false")
+    {
         return true;
     }
-    if dom.attr(el, "data-ll-status").is_some_and(|v| js::to_lower_case(js::trim(&v)) != "loaded") {
+    if dom
+        .attr(el, "data-ll-status")
+        .is_some_and(|v| js::to_lower_case(js::trim(&v)) != "loaded")
+    {
         return true;
     }
     let holds_source = LAZY_ATTRS
         .iter()
         .filter(|name| !matches!(**name, "data-loaded" | "data-ll-status"))
         .any(|name| dom.attr(el, name).is_some());
-    if holds_source && dom.attr(el, "src").map_or(true, |v| js::trim(&v).is_empty()) {
+    if holds_source && dom.attr(el, "src").is_none_or(|v| js::trim(&v).is_empty()) {
         return true;
     }
     let tokens: Vec<String> = [Some(el), dom.parent(el)]
@@ -3134,7 +3447,13 @@ fn stacked_with(dom: &dyn Dom, el: ElId, video_only: bool) -> bool {
         .any(|sibling| holds_layer_over(dom, sibling, &rect, LAYER_SEARCH_DEPTH, video_only))
 }
 
-fn holds_layer_over(dom: &dyn Dom, node: ElId, target: &Rect, depth: usize, video_only: bool) -> bool {
+fn holds_layer_over(
+    dom: &dyn Dom,
+    node: ElId,
+    target: &Rect,
+    depth: usize,
+    video_only: bool,
+) -> bool {
     let tag = tag_lower(dom, node);
     let layer = if video_only {
         tag == "video" && shows_box(dom, node)
@@ -3238,7 +3557,14 @@ mod tests {
             }
             d.set_attr(nav, "inert", "true");
             resolved(&mut d, nav);
-            d.set_styles(nav, &[("position", "fixed"), ("zIndex", "0"), ("backgroundColor", "rgb(255, 255, 255)")]);
+            d.set_styles(
+                nav,
+                &[
+                    ("position", "fixed"),
+                    ("zIndex", "0"),
+                    ("backgroundColor", "rgb(255, 255, 255)"),
+                ],
+            );
             d.set_rect(nav, 840.0, 60.0, 440.0, 740.0);
             let panel = d.add(Some(nav), "div");
             d.set_attr(panel, "inert", "true");
@@ -3247,7 +3573,15 @@ mod tests {
             d.set_rect(link, 860.0, 100.0, 200.0, 20.0);
             d.add_text(link, "Tarife");
             let sheet = d.add(Some(body), "div");
-            d.set_styles(sheet, &[("position", "relative"), ("zIndex", "1"), ("backgroundColor", "rgb(255, 255, 255)"), ("opacity", "1")]);
+            d.set_styles(
+                sheet,
+                &[
+                    ("position", "relative"),
+                    ("zIndex", "1"),
+                    ("backgroundColor", "rgb(255, 255, 255)"),
+                    ("opacity", "1"),
+                ],
+            );
             d.set_rect(sheet, 0.0, 0.0, 1280.0, 5056.0);
             (d, nav, link, sheet)
         };
@@ -3275,7 +3609,11 @@ mod tests {
         assert_eq!(text(&d, link), None, "sheet below");
         d.set_style(sheet, "zIndex", "auto");
         d.set_style(nav, "zIndex", "auto");
-        assert_eq!(text(&d, link), Some(Unpainted::NotRendered), "same level, sheet later");
+        assert_eq!(
+            text(&d, link),
+            Some(Unpainted::NotRendered),
+            "same level, sheet later"
+        );
         d.set_style(sheet, "zIndex", "1");
         d.set_style(nav, "zIndex", "0");
         d.set_rect(sheet, 0.0, 0.0, 1280.0, 400.0);
@@ -3296,10 +3634,22 @@ mod tests {
         assert_eq!(text(&d, link), None, "display none sheet");
         let (mut d, _, link, sheet) = build("nav", Some("dialog"));
         d.set_style(sheet, "zIndex", "0");
-        assert_eq!(text(&d, link), Some(Unpainted::NotRendered), "same z, later sheet");
+        assert_eq!(
+            text(&d, link),
+            Some(Unpainted::NotRendered),
+            "same z, later sheet"
+        );
         let (mut d4, body4) = page();
         let sheet4 = d4.add(Some(body4), "div");
-        d4.set_styles(sheet4, &[("position", "relative"), ("zIndex", "0"), ("backgroundColor", "rgb(255, 255, 255)"), ("opacity", "1")]);
+        d4.set_styles(
+            sheet4,
+            &[
+                ("position", "relative"),
+                ("zIndex", "0"),
+                ("backgroundColor", "rgb(255, 255, 255)"),
+                ("opacity", "1"),
+            ],
+        );
         d4.set_rect(sheet4, 0.0, 0.0, 1280.0, 5056.0);
         let nav4 = d4.add(Some(body4), "nav");
         d4.set_attr(nav4, "role", "dialog");
@@ -3320,7 +3670,14 @@ mod tests {
         d.set_attr(chat, "role", "dialog");
         d.set_attr(chat, "inert", "");
         resolved(&mut d, chat);
-        d.set_styles(chat, &[("position", "fixed"), ("zIndex", "50"), ("backgroundColor", "rgb(255, 255, 255)")]);
+        d.set_styles(
+            chat,
+            &[
+                ("position", "fixed"),
+                ("zIndex", "50"),
+                ("backgroundColor", "rgb(255, 255, 255)"),
+            ],
+        );
         d.set_rect(chat, 900.0, 300.0, 340.0, 460.0);
         let copy = d.add(Some(chat), "p");
         d.set_rect(copy, 920.0, 340.0, 300.0, 20.0);
@@ -3328,7 +3685,15 @@ mod tests {
         assert_eq!(text(&d, copy), None);
         let confirm = d.add(Some(body), "div");
         d.set_attr(confirm, "role", "alertdialog");
-        d.set_styles(confirm, &[("position", "fixed"), ("zIndex", "60"), ("backgroundColor", "rgb(255, 255, 255)"), ("opacity", "1")]);
+        d.set_styles(
+            confirm,
+            &[
+                ("position", "fixed"),
+                ("zIndex", "60"),
+                ("backgroundColor", "rgb(255, 255, 255)"),
+                ("opacity", "1"),
+            ],
+        );
         d.set_rect(confirm, 950.0, 400.0, 200.0, 120.0);
         assert_eq!(text(&d, copy), None, "a nested confirm over part of it");
 
@@ -3366,11 +3731,17 @@ mod tests {
         let track = d.add(Some(clip), "div");
         d.set_styles(
             track,
-            &[("transform", "matrix(1, 0, 0, 1, -300, 0)"), ("animationName", "marquee"), ("animationIterationCount", "infinite")],
+            &[
+                ("transform", "matrix(1, 0, 0, 1, -300, 0)"),
+                ("animationName", "marquee"),
+                ("animationIterationCount", "infinite"),
+            ],
         );
         d.keyframes.insert(
             "marquee".into(),
-            vec![KeyframeFrame { decls: vec![("transform".into(), "translateX(-50%)".into())] }],
+            vec![KeyframeFrame {
+                decls: vec![("transform".into(), "translateX(-50%)".into())],
+            }],
         );
         d.set_rect(track, -300.0, 600.0, 2400.0, 40.0);
         d.el_mut(track).scroll_width = 2400.0;
@@ -3392,7 +3763,9 @@ mod tests {
         d.set_style(track, "animationName", "marquee");
         d.keyframes.insert(
             "marquee".into(),
-            vec![KeyframeFrame { decls: vec![("transform".into(), "scale(1.02)".into())] }],
+            vec![KeyframeFrame {
+                decls: vec![("transform".into(), "scale(1.02)".into())],
+            }],
         );
         assert_eq!(text(&d, chips[6]), None);
         // The tracking walk still sees the cut.
@@ -3401,7 +3774,9 @@ mod tests {
         // wholly inside it, and keeps the share floor.
         d.keyframes.insert(
             "marquee".into(),
-            vec![KeyframeFrame { decls: vec![("transform".into(), "translateX(-50%)".into())] }],
+            vec![KeyframeFrame {
+                decls: vec![("transform".into(), "translateX(-50%)".into())],
+            }],
         );
         assert_eq!(text(&d, chips[6]), Some(Unpainted::ClippedOut));
         let long = d.add(Some(track), "span");
@@ -3430,7 +3805,14 @@ mod tests {
         d.set_rect(crumb, 16.0, 20.0, 120.0, 14.0);
         d.add_text(crumb, "Health/Accident");
         let nav = d.add(Some(body), "nav");
-        d.set_styles(nav, &[("position", "fixed"), ("backgroundColor", "rgb(255, 255, 255)"), ("opacity", "1")]);
+        d.set_styles(
+            nav,
+            &[
+                ("position", "fixed"),
+                ("backgroundColor", "rgb(255, 255, 255)"),
+                ("opacity", "1"),
+            ],
+        );
         d.set_rect(nav, 0.0, 0.0, 390.0, 50.0);
         let findings = || {
             vec![
@@ -3471,7 +3853,14 @@ mod tests {
         d.set_styles(layer, &[("position", "fixed"), ("pointerEvents", "none")]);
         d.set_rect(layer, 0.0, 0.0, 390.0, 844.0);
         let low_bar = d.add(Some(layer), "div");
-        d.set_styles(low_bar, &[("position", "absolute"), ("backgroundColor", "rgb(34, 34, 34)"), ("opacity", "1")]);
+        d.set_styles(
+            low_bar,
+            &[
+                ("position", "absolute"),
+                ("backgroundColor", "rgb(34, 34, 34)"),
+                ("opacity", "1"),
+            ],
+        );
         d.set_rect(low_bar, 0.0, 724.0, 390.0, 120.0);
         assert_eq!(ids(&d).len(), 5);
         d.set_rect(low_bar, 0.0, 3000.0, 390.0, 120.0);
@@ -3482,7 +3871,10 @@ mod tests {
         d.set_style(wrap, "position", "sticky");
         d.set_rect(wrap, 0.0, 760.0, 390.0, 84.0);
         let bar = d.add(Some(wrap), "div");
-        d.set_styles(bar, &[("backgroundColor", "rgb(255, 255, 255)"), ("opacity", "1")]);
+        d.set_styles(
+            bar,
+            &[("backgroundColor", "rgb(255, 255, 255)"), ("opacity", "1")],
+        );
         d.set_rect(bar, 0.0, 760.0, 390.0, 84.0);
         assert_eq!(ids(&d).len(), 5);
         d.set_rect(wrap, 0.0, 0.0, 390.0, 50.0);
@@ -3505,7 +3897,14 @@ mod tests {
         d.set_rect(low_bar, 0.0, 3000.0, 390.0, 120.0);
         d.set_style(crumb, "position", "fixed");
         d.set_rect(crumb, 16.0, 20.0, 120.0, 14.0);
-        d.set_styles(nav, &[("position", "absolute"), ("backgroundColor", "rgb(255, 255, 255)"), ("opacity", "1")]);
+        d.set_styles(
+            nav,
+            &[
+                ("position", "absolute"),
+                ("backgroundColor", "rgb(255, 255, 255)"),
+                ("opacity", "1"),
+            ],
+        );
         d.set_rect(nav, 0.0, 10.0, 390.0, 40.0);
         assert_eq!(ids(&d).len(), 5);
     }
@@ -3566,13 +3965,21 @@ mod tests {
         d.set_style(inner, "fontSize", "1px");
         d.set_rect(inner, 76.0, 600.0, 160.0, 16.0);
         d.add_text(inner, "Scaled label");
-        d.set_style(wrap, "transform", "matrix3d(16, 0, 0, 0, 0, 16, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)");
+        d.set_style(
+            wrap,
+            "transform",
+            "matrix3d(16, 0, 0, 0, 0, 16, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)",
+        );
         assert_eq!(text(&d, inner), None);
         // A rotation alone, and a stretch on one axis (`scaleX(2)`,
         // `scaleY(16)`), leave the letters a pixel thin.
         d.set_style(enlarged, "transform", "matrix(0, 1, -1, 0, 0, 0)");
         assert_eq!(text(&d, enlarged), Some(Unpainted::NoFontSize));
-        d.set_style(enlarged, "transform", "matrix(0.707107, 0.707107, -0.707107, 0.707107, 0, 0)");
+        d.set_style(
+            enlarged,
+            "transform",
+            "matrix(0.707107, 0.707107, -0.707107, 0.707107, 0, 0)",
+        );
         assert_eq!(text(&d, enlarged), Some(Unpainted::NoFontSize));
         d.set_style(enlarged, "transform", "matrix(2, 0, 0, 1, 0, 0)");
         assert_eq!(text(&d, enlarged), Some(Unpainted::NoFontSize));
@@ -3590,7 +3997,10 @@ mod tests {
         // An individual `rotate` composes with the scales: a uniform scale
         // stays an enlargement under it, and a one-axis scale turned against
         // an ancestor's stretch on the other axis does not become one.
-        d.set_styles(enlarged, &[("transform", "none"), ("scale", "16"), ("rotate", "90deg")]);
+        d.set_styles(
+            enlarged,
+            &[("transform", "none"), ("scale", "16"), ("rotate", "90deg")],
+        );
         assert_eq!(text(&d, enlarged), None);
         d.set_style(enlarged, "rotate", "0deg");
         assert_eq!(text(&d, enlarged), None);
@@ -3599,7 +4009,10 @@ mod tests {
         let stretched = d.add(Some(body), "div");
         d.set_style(stretched, "transform", "matrix(1, 0, 0, 16, 0, 0)");
         let turned = d.add(Some(stretched), "span");
-        d.set_styles(turned, &[("fontSize", "1px"), ("scale", "16 1"), ("rotate", "90deg")]);
+        d.set_styles(
+            turned,
+            &[("fontSize", "1px"), ("scale", "16 1"), ("rotate", "90deg")],
+        );
         d.set_rect(turned, 76.0, 800.0, 16.0, 160.0);
         d.add_text(turned, "Turned label");
         assert_eq!(text(&d, turned), Some(Unpainted::NoFontSize));
@@ -3687,10 +4100,26 @@ mod tests {
         const FLIPPED: &str = "matrix3d(-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1)";
         let (mut d, body) = page();
         let card = d.add(Some(body), "div");
-        d.set_styles(card, &[("position", "relative"), ("transform", "none"), ("rotate", "none")]);
+        d.set_styles(
+            card,
+            &[
+                ("position", "relative"),
+                ("transform", "none"),
+                ("rotate", "none"),
+            ],
+        );
         d.set_rect(card, 175.0, 1971.0, 296.0, 233.0);
         let back = d.add(Some(card), "div");
-        d.set_styles(back, &[("position", "absolute"), ("transform", FLIPPED), ("backfaceVisibility", "hidden"), ("rotate", "none"), ("scale", "none")]);
+        d.set_styles(
+            back,
+            &[
+                ("position", "absolute"),
+                ("transform", FLIPPED),
+                ("backfaceVisibility", "hidden"),
+                ("rotate", "none"),
+                ("scale", "none"),
+            ],
+        );
         d.set_rect(back, 175.0, 1971.0, 296.0, 233.0);
         let copy = d.add(Some(back), "p");
         d.set_rect(copy, 196.0, 1992.0, 254.0, 90.0);
@@ -3700,7 +4129,10 @@ mod tests {
 
         // The front face, and a back face whose backface shows, are painted.
         let front = d.add(Some(card), "div");
-        d.set_styles(front, &[("transform", "none"), ("backfaceVisibility", "hidden")]);
+        d.set_styles(
+            front,
+            &[("transform", "none"), ("backfaceVisibility", "hidden")],
+        );
         d.set_rect(front, 175.0, 1971.0, 296.0, 233.0);
         assert_eq!(why(&d, front), None);
         d.set_style(back, "backfaceVisibility", "visible");
@@ -3738,9 +4170,17 @@ mod tests {
         // perspective the capture does not model could show either way; a
         // perspective term, or a transform that does not parse as a matrix,
         // says nothing.
-        d.set_style(card, "transform", "matrix3d(0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1)");
+        d.set_style(
+            card,
+            "transform",
+            "matrix3d(0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1)",
+        );
         assert_eq!(why(&d, copy), None);
-        d.set_style(card, "transform", "matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, -0.001, 0, 0, 0, 1)");
+        d.set_style(
+            card,
+            "transform",
+            "matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, -0.001, 0, 0, 0, 1)",
+        );
         assert_eq!(why(&d, copy), None);
         d.set_style(card, "transform", "rotateX(5deg)");
         assert_eq!(why(&d, copy), None);
@@ -3763,13 +4203,20 @@ mod tests {
         // z axis: a face at rotateX(150deg) under rotateX(-60deg)
         // scaleY(0.2) faces the viewer.
         d.set_style(back, "transform", &matrix3d(&rotate_x(150.0)));
-        let squashed = mul(&rotate_x(-60.0), &[[1.0, 0.0, 0.0], [0.0, 0.2, 0.0], [0.0, 0.0, 1.0]]);
+        let squashed = mul(
+            &rotate_x(-60.0),
+            &[[1.0, 0.0, 0.0], [0.0, 0.2, 0.0], [0.0, 0.0, 1.0]],
+        );
         d.set_style(card, "transform", &matrix3d(&squashed));
         assert_eq!(why(&d, copy), None);
         // Under perspective, a face a little past edge-on is kept.
         d.set_style(back, "transform", FLIPPED);
         d.set_style(card, "transform", &matrix3d(&rotate_y(75.0)));
-        assert_eq!(why(&d, copy), Some(Unpainted::TurnedAway), "cos 255 = -0.26 past the plain floor");
+        assert_eq!(
+            why(&d, copy),
+            Some(Unpainted::TurnedAway),
+            "cos 255 = -0.26 past the plain floor"
+        );
         d.set_style(body, "perspective", "1000px");
         assert_eq!(why(&d, copy), None);
         d.set_style(body, "perspective", "none");
@@ -3797,7 +4244,10 @@ mod tests {
         resolved(&mut d, body);
         let header = d.add(Some(body), "header");
         resolved(&mut d, header);
-        d.set_styles(header, &[("position", "fixed"), ("backdropFilter", "blur(12px)")]);
+        d.set_styles(
+            header,
+            &[("position", "fixed"), ("backdropFilter", "blur(12px)")],
+        );
         d.set_rect(header, 0.0, 0.0, 390.0, 60.0);
         let drawer = d.add(Some(header), "div");
         resolved(&mut d, drawer);
@@ -3838,7 +4288,10 @@ mod tests {
             d.set_text_rect(label, x, 334.0, 40.0, 16.0);
         };
         place(&mut d, 1274.0);
-        assert_eq!(unpainted_for(&d, label, PaintGate::Text), Some(Unpainted::OutsideDocument));
+        assert_eq!(
+            unpainted_for(&d, label, PaintGate::Text),
+            Some(Unpainted::OutsideDocument)
+        );
         // The base predicate keeps any pixel on screen.
         assert_eq!(why(&d, label), None);
         // Half of it on screen is read.
@@ -3868,10 +4321,16 @@ mod tests {
         // gate drops it.
         let ticker = d.add(Some(tab), "span");
         resolved(&mut d, ticker);
-        d.add_text(ticker, "Free shipping on every order, every day, everywhere");
+        d.add_text(
+            ticker,
+            "Free shipping on every order, every day, everywhere",
+        );
         d.set_rect(ticker, 0.0, 300.0, 5200.0, 16.0);
         d.set_text_rect(ticker, 0.0, 300.0, 5200.0, 16.0);
-        assert_eq!(unpainted_for(&d, ticker, PaintGate::Text), Some(Unpainted::OutsideDocument));
+        assert_eq!(
+            unpainted_for(&d, ticker, PaintGate::Text),
+            Some(Unpainted::OutsideDocument)
+        );
     }
 
     /// jyes.com.tw's spec table under a "read more" panel held at
@@ -3880,7 +4339,15 @@ mod tests {
     fn a_panel_held_at_its_max_height_is_not_a_scroll_frame() {
         let (mut d, body) = page();
         let panel = d.add(Some(body), "div");
-        d.set_styles(panel, &[("display", "block"), ("overflowX", "hidden"), ("overflowY", "hidden"), ("maxHeight", "1000px")]);
+        d.set_styles(
+            panel,
+            &[
+                ("display", "block"),
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+                ("maxHeight", "1000px"),
+            ],
+        );
         d.set_rect(panel, 20.0, 4516.0, 350.0, 1000.0);
         d.el_mut(panel).client_height = 999.0;
         d.el_mut(panel).scroll_height = Some(2968.0);
@@ -3930,7 +4397,13 @@ mod tests {
         );
         d.set_rect(card, 25.0, 7399.0, 341.0, 182.0);
         let img = d.add(Some(card), "img");
-        d.set_styles(img, &[("opacity", "0.0567087"), ("transform", "matrix(0.75, 0.06, -0.06, 0.75, 0, 24)")]);
+        d.set_styles(
+            img,
+            &[
+                ("opacity", "0.0567087"),
+                ("transform", "matrix(0.75, 0.06, -0.06, 0.75, 0, 24)"),
+            ],
+        );
         d.set_rect(img, 158.0, 7432.0, 73.0, 78.0);
         assert_eq!(raster(&d, img), Some(Unpainted::StateLayer));
         // At rest: the card at full opacity, or not displaced, or with no
@@ -4009,7 +4482,11 @@ mod tests {
         // A lazy-loading class on the parent, before the loaded class.
         d.set_attr(wrap, "class", "lazy-load-image-background blur");
         assert_eq!(raster(&d, img), Some(Unpainted::StateLayer));
-        d.set_attr(wrap, "class", "lazy-load-image-background blur lazy-load-image-loaded");
+        d.set_attr(
+            wrap,
+            "class",
+            "lazy-load-image-background blur lazy-load-image-loaded",
+        );
         assert_eq!(raster(&d, img), None);
 
         // A faint value is a fade only while a script tweens it inline.
@@ -4038,7 +4515,14 @@ mod tests {
         let mut words = Vec::new();
         for w in ["Words", "light", "up", "later"] {
             let span = d.add(Some(p), "span");
-            d.set_styles(span, &[("display", "inline"), ("transitionProperty", "color, background-color"), ("transitionDuration", "0.15s")]);
+            d.set_styles(
+                span,
+                &[
+                    ("display", "inline"),
+                    ("transitionProperty", "color, background-color"),
+                    ("transitionDuration", "0.15s"),
+                ],
+            );
             d.set_attr(span, "style", "color: rgb(228, 228, 231);");
             d.add_text(span, w);
             words.push(span);
@@ -4069,8 +4553,19 @@ mod tests {
             let w = d.add(Some(q), "span");
             for c in word.chars() {
                 let l = d.add(Some(w), "span");
-                d.set_styles(l, &[("display", "inline"), ("transitionProperty", "color"), ("transitionDuration", "0.2s")]);
-                d.set_attr(l, "style", "transition: color 0.2s ease-in-out; color: rgb(50, 61, 73);");
+                d.set_styles(
+                    l,
+                    &[
+                        ("display", "inline"),
+                        ("transitionProperty", "color"),
+                        ("transitionDuration", "0.2s"),
+                    ],
+                );
+                d.set_attr(
+                    l,
+                    "style",
+                    "transition: color 0.2s ease-in-out; color: rgb(50, 61, 73);",
+                );
                 d.add_text(l, &c.to_string());
                 letters.push(l);
             }
@@ -4086,7 +4581,14 @@ mod tests {
         let mut flex_words = Vec::new();
         for w in ["we", "are", "creating", "the"] {
             let span = d.add(Some(h), "span");
-            d.set_styles(span, &[("display", "block"), ("transitionProperty", "color"), ("transitionDuration", "0.3s")]);
+            d.set_styles(
+                span,
+                &[
+                    ("display", "block"),
+                    ("transitionProperty", "color"),
+                    ("transitionDuration", "0.3s"),
+                ],
+            );
             d.set_attr(span, "style", "display: inline-block; color: rgb(172, 176, 207); will-change: color; transition: color 0.3s;");
             d.add_text(span, w);
             flex_words.push(span);
@@ -4105,7 +4607,14 @@ mod tests {
         let mut chips = Vec::new();
         for _ in 0..4 {
             let chip = d.add(Some(row), "button");
-            d.set_styles(chip, &[("display", "inline-flex"), ("transitionProperty", "all"), ("transitionDuration", "0.15s")]);
+            d.set_styles(
+                chip,
+                &[
+                    ("display", "inline-flex"),
+                    ("transitionProperty", "all"),
+                    ("transitionDuration", "0.15s"),
+                ],
+            );
             d.set_attr(chip, "style", "background-color: #D97757; color: #FFFFFF;");
             chips.push(chip);
         }
@@ -4125,7 +4634,14 @@ mod tests {
         let (mut d, body) = page();
         let inline_word = |d: &mut FakeDom, parent: ElId, tag: &str, text: &str| {
             let w = d.add(Some(parent), tag);
-            d.set_styles(w, &[("display", "inline"), ("transitionProperty", "all"), ("transitionDuration", "0.3s")]);
+            d.set_styles(
+                w,
+                &[
+                    ("display", "inline"),
+                    ("transitionProperty", "all"),
+                    ("transitionDuration", "0.3s"),
+                ],
+            );
             d.set_attr(w, "style", "color: #b0b0b0;");
             d.add_text(w, text);
             w
@@ -4163,7 +4679,10 @@ mod tests {
 
         // The same runs with every word wrapped are a reveal.
         let q = d.add(Some(body), "p");
-        let wrapped: Vec<ElId> = ["on", "orders", "within"].into_iter().map(|t| inline_word(&mut d, q, "span", t)).collect();
+        let wrapped: Vec<ElId> = ["on", "orders", "within"]
+            .into_iter()
+            .map(|t| inline_word(&mut d, q, "span", t))
+            .collect();
         assert!(colour_mid_reveal(&d, wrapped[0]));
         // A word nested one level down is not a letter.
         let r = d.add(Some(body), "p");
@@ -4206,7 +4725,14 @@ mod tests {
     fn a_demo_step_that_has_not_played_is_transparent() {
         let (mut d, body) = page();
         let step = d.add(Some(body), "div");
-        d.set_styles(step, &[("opacity", "0"), ("transitionProperty", "opacity, transform"), ("transitionDuration", "0.45s, 0.45s")]);
+        d.set_styles(
+            step,
+            &[
+                ("opacity", "0"),
+                ("transitionProperty", "opacity, transform"),
+                ("transitionDuration", "0.45s, 0.45s"),
+            ],
+        );
         d.set_rect(step, 100.0, 1500.0, 339.0, 260.0);
         let label = d.add(Some(step), "span");
         d.set_rect(label, 350.0, 1530.0, 72.0, 16.0);
@@ -4220,7 +4746,14 @@ mod tests {
         d.set_rect(li, 0.0, 60.0, 390.0, 40.0);
         // max-height: 0 panel under the item.
         let sub = d.add(Some(li), "ul");
-        d.set_styles(sub, &[("overflow", "hidden"), ("overflowX", "hidden"), ("overflowY", "hidden")]);
+        d.set_styles(
+            sub,
+            &[
+                ("overflow", "hidden"),
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+            ],
+        );
         d.set_rect(sub, 0.0, 100.0, 390.0, 0.0);
         let p = d.add(Some(sub), "p");
         d.set_rect(p, 16.0, 100.0, 358.0, 54.0);
@@ -4228,7 +4761,14 @@ mod tests {
 
         // The adm.com shape: an absolute scroller at zero width.
         let side = d.add(Some(body), "ul");
-        d.set_styles(side, &[("position", "absolute"), ("overflowX", "scroll"), ("overflowY", "scroll")]);
+        d.set_styles(
+            side,
+            &[
+                ("position", "absolute"),
+                ("overflowX", "scroll"),
+                ("overflowY", "scroll"),
+            ],
+        );
         d.set_rect(side, 0.0, 73.0, 0.0, 771.0);
         let item = d.add(Some(side), "li");
         let copy = d.add(Some(item), "p");
@@ -4284,10 +4824,24 @@ mod tests {
     fn an_app_shell_keeps_what_its_inner_scroller_reaches() {
         let (mut d, body) = page();
         let shell = d.add(Some(body), "div");
-        d.set_styles(shell, &[("display", "flex"), ("overflowX", "hidden"), ("overflowY", "hidden")]);
+        d.set_styles(
+            shell,
+            &[
+                ("display", "flex"),
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+            ],
+        );
         d.set_rect(shell, 0.0, 0.0, 1280.0, 800.0);
         let main = d.add(Some(shell), "main");
-        d.set_styles(main, &[("display", "block"), ("overflowX", "auto"), ("overflowY", "auto")]);
+        d.set_styles(
+            main,
+            &[
+                ("display", "block"),
+                ("overflowX", "auto"),
+                ("overflowY", "auto"),
+            ],
+        );
         d.set_rect(main, 240.0, 0.0, 1040.0, 800.0);
         d.el_mut(main).client_width = 1040.0;
         d.el_mut(main).scroll_width = 1040.0;
@@ -4330,7 +4884,15 @@ mod tests {
     fn a_map_whose_overflow_is_placed_markers_is_not_a_scroll_frame() {
         let (mut d, body) = page();
         let map = d.add(Some(body), "div");
-        d.set_styles(map, &[("display", "block"), ("position", "relative"), ("overflowX", "hidden"), ("overflowY", "hidden")]);
+        d.set_styles(
+            map,
+            &[
+                ("display", "block"),
+                ("position", "relative"),
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+            ],
+        );
         d.set_rect(map, 0.0, 0.0, 896.0, 800.0);
         d.el_mut(map).client_height = 800.0;
         d.el_mut(map).scroll_height = Some(1626.0);
@@ -4394,7 +4956,14 @@ mod tests {
     fn a_viewport_tall_frame_keeps_content_below_its_fold() {
         let (mut d, body) = page();
         let frame = d.add(Some(body), "div");
-        d.set_styles(frame, &[("display", "block"), ("overflowX", "hidden"), ("overflowY", "hidden")]);
+        d.set_styles(
+            frame,
+            &[
+                ("display", "block"),
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+            ],
+        );
         d.set_rect(frame, 0.0, 0.0, 1280.0, 800.0);
         d.el_mut(frame).client_height = 800.0;
         d.el_mut(frame).scroll_height = Some(2000.0);
@@ -4451,7 +5020,14 @@ mod tests {
             d.set_rect(el, 0.0, 0.0, 1280.0, 800.0);
         }
         let root = d.add(Some(body), "div");
-        d.set_styles(root, &[("display", "block"), ("overflowX", "hidden"), ("overflowY", "auto")]);
+        d.set_styles(
+            root,
+            &[
+                ("display", "block"),
+                ("overflowX", "hidden"),
+                ("overflowY", "auto"),
+            ],
+        );
         d.set_rect(root, 0.0, 0.0, 1280.0, 800.0);
         d.el_mut(root).client_height = 800.0;
         d.el_mut(root).scroll_height = Some(5000.0);
@@ -4464,10 +5040,24 @@ mod tests {
     fn a_scroller_wider_than_its_frame_keeps_what_it_scrolls_into_view() {
         let (mut d, body) = page();
         let frame = d.add(Some(body), "div");
-        d.set_styles(frame, &[("display", "block"), ("overflowX", "hidden"), ("overflowY", "hidden")]);
+        d.set_styles(
+            frame,
+            &[
+                ("display", "block"),
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+            ],
+        );
         d.set_rect(frame, 40.0, 600.0, 600.0, 300.0);
         let scroller = d.add(Some(frame), "div");
-        d.set_styles(scroller, &[("display", "block"), ("overflowX", "auto"), ("overflowY", "hidden")]);
+        d.set_styles(
+            scroller,
+            &[
+                ("display", "block"),
+                ("overflowX", "auto"),
+                ("overflowY", "hidden"),
+            ],
+        );
         d.set_rect(scroller, 40.0, 600.0, 900.0, 300.0);
         d.el_mut(scroller).client_width = 900.0;
         d.el_mut(scroller).scroll_width = 2400.0;
@@ -4490,7 +5080,14 @@ mod tests {
     fn a_smooth_scroll_viewport_keeps_content_below_its_fold() {
         let (mut d, body) = page();
         let wrapper = d.add(Some(body), "div");
-        d.set_styles(wrapper, &[("position", "fixed"), ("overflowX", "hidden"), ("overflowY", "hidden")]);
+        d.set_styles(
+            wrapper,
+            &[
+                ("position", "fixed"),
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+            ],
+        );
         d.set_rect(wrapper, 0.0, 0.0, 1280.0, 800.0);
         let content = d.add(Some(wrapper), "div");
         d.set_style(content, "transform", "matrix(1, 0, 0, 1, 0, 0)");
@@ -4567,7 +5164,11 @@ mod tests {
         assert_eq!(why(&d, below), Some(Unpainted::OutsideDocument));
         let last = d.add(Some(body), "div");
         d.set_rect(last, 40.0, 3900.0, 580.0, 326.0);
-        assert_eq!(why(&d, last), None, "runs past the end but starts on the page");
+        assert_eq!(
+            why(&d, last),
+            None,
+            "runs past the end but starts on the page"
+        );
 
         // A body that scrolls under a root held at the viewport's height
         // reaches as far as the body does.
@@ -4580,7 +5181,14 @@ mod tests {
         d.el_mut(body).scroll_height = Some(4000.0);
         d.el_mut(root).scroll_height = Some(4000.0);
         let frame = d.add(Some(body), "div");
-        d.set_styles(frame, &[("display", "block"), ("overflowX", "hidden"), ("overflowY", "auto")]);
+        d.set_styles(
+            frame,
+            &[
+                ("display", "block"),
+                ("overflowX", "hidden"),
+                ("overflowY", "auto"),
+            ],
+        );
         d.set_rect(frame, 0.0, 3600.0, 1280.0, 400.0);
         d.el_mut(frame).client_height = 400.0;
         d.el_mut(frame).scroll_height = Some(1200.0);
@@ -4632,14 +5240,22 @@ mod tests {
             d.set_style(badge, "position", "fixed");
             d.set_rect(badge, 60.0, 2020.0, 120.0, 14.0);
             // No trigger: a viewport layer parked below the viewport.
-            assert_eq!(why(&d, badge), Some(Unpainted::OutsideDocument), "without {prop}");
+            assert_eq!(
+                why(&d, badge),
+                Some(Unpainted::OutsideDocument),
+                "without {prop}"
+            );
             d.set_style(container, prop, value);
             assert_eq!(why(&d, badge), None, "{prop}: {value}");
         }
 
         // `will-change` naming something else and `contain: size` or
         // `contain: style` do not contain it.
-        for (prop, value) in [("willChange", "opacity"), ("contain", "size"), ("contain", "style")] {
+        for (prop, value) in [
+            ("willChange", "opacity"),
+            ("contain", "size"),
+            ("contain", "style"),
+        ] {
             let (mut d, body) = page();
             let container = d.add(Some(body), "div");
             resolved(&mut d, container);
@@ -4648,7 +5264,11 @@ mod tests {
             let badge = d.add(Some(container), "a");
             d.set_style(badge, "position", "fixed");
             d.set_rect(badge, 60.0, 2020.0, 120.0, 14.0);
-            assert_eq!(why(&d, badge), Some(Unpainted::OutsideDocument), "{prop}: {value}");
+            assert_eq!(
+                why(&d, badge),
+                Some(Unpainted::OutsideDocument),
+                "{prop}: {value}"
+            );
         }
     }
 
@@ -4658,7 +5278,14 @@ mod tests {
     fn an_undecided_containing_block_keeps_a_fixed_element() {
         let (mut d, body) = page();
         let container = d.add(Some(body), "div");
-        d.set_styles(container, &[("transform", "none"), ("filter", "none"), ("backdropFilter", "none")]);
+        d.set_styles(
+            container,
+            &[
+                ("transform", "none"),
+                ("filter", "none"),
+                ("backdropFilter", "none"),
+            ],
+        );
         d.set_rect(container, 40.0, 2000.0, 400.0, 400.0);
         let badge = d.add(Some(container), "a");
         d.set_style(badge, "position", "fixed");
@@ -4686,7 +5313,10 @@ mod tests {
         d.set_rect(pixel, 0.0, 0.0, 0.0, 0.0);
         d.el_mut(pixel).scroll_width = 0.0;
         d.el_mut(pixel).scroll_height = Some(0.0);
-        assert_eq!(unpainted_for(&d, pixel, PaintGate::Raster), Some(Unpainted::NoArea));
+        assert_eq!(
+            unpainted_for(&d, pixel, PaintGate::Raster),
+            Some(Unpainted::NoArea)
+        );
 
         // Twin: a 600x400 photo held at opacity 0.05 is what the rule is for.
         let photo = d.add(Some(body), "img");
@@ -4717,38 +5347,73 @@ mod tests {
         assert_eq!(text(&d, label), Some(Unpainted::MaskedOut));
         let folder = d.add(Some(frame), "div");
         d.set_rect(folder, 29.7, 4545.2, 194.3, 151.7);
-        assert_eq!(unpainted_for(&d, folder, PaintGate::Box), Some(Unpainted::MaskedOut));
+        assert_eq!(
+            unpainted_for(&d, folder, PaintGate::Box),
+            Some(Unpainted::MaskedOut)
+        );
         let heading = d.add(Some(frame), "h3");
         d.add_text(heading, "Spaces");
         d.set_rect(heading, 55.2, 4300.0, 120.0, 20.0);
         assert_eq!(text(&d, heading), None, "in the clear zone");
         // A fade over the last 10% leaves a heading 80% down painted.
-        d.set_style(frame, "maskImage", "linear-gradient(to bottom, rgb(0, 0, 0) 90%, transparent)");
+        d.set_style(
+            frame,
+            "maskImage",
+            "linear-gradient(to bottom, rgb(0, 0, 0) 90%, transparent)",
+        );
         d.set_rect(heading, 55.2, 4095.8 + 0.8 * 484.6, 120.0, 20.0);
         assert_eq!(text(&d, heading), None, "above a 10% fade");
         d.set_rect(heading, 55.2, 4095.8 + 0.99 * 484.6 - 10.0, 120.0, 20.0);
-        assert_eq!(text(&d, heading), Some(Unpainted::MaskedOut), "at the end of the fade");
+        assert_eq!(
+            text(&d, heading),
+            Some(Unpainted::MaskedOut),
+            "at the end of the fade"
+        );
         // A chip in the faded end of a row that scrolls along the mask is
         // one scroll from full alpha; the same row unscrolled hides it.
         let row = d.add(Some(body), "div");
         d.set_rect(row, 0.0, 5000.0, 400.0, 40.0);
-        d.set_style(row, "maskImage", "linear-gradient(to right, rgb(0, 0, 0) 60%, transparent)");
+        d.set_style(
+            row,
+            "maskImage",
+            "linear-gradient(to right, rgb(0, 0, 0) 60%, transparent)",
+        );
         let chip = d.add(Some(row), "span");
         d.add_text(chip, "Travel");
         d.set_rect(chip, 370.0, 5010.0, 24.0, 20.0);
-        assert_eq!(text(&d, chip), Some(Unpainted::MaskedOut), "a fixed row's faded end");
+        assert_eq!(
+            text(&d, chip),
+            Some(Unpainted::MaskedOut),
+            "a fixed row's faded end"
+        );
         d.set_style(row, "overflowX", "auto");
         d.el_mut(row).scroll_width = 900.0;
         d.el_mut(row).client_width = 400.0;
         assert_eq!(text(&d, chip), None, "a row that scrolls along its mask");
         // Scrolling on x does not move content under a mask that runs on y.
-        d.set_style(row, "maskImage", "linear-gradient(rgb(0, 0, 0) 10%, transparent)");
+        d.set_style(
+            row,
+            "maskImage",
+            "linear-gradient(rgb(0, 0, 0) 10%, transparent)",
+        );
         d.set_rect(chip, 10.0, 5034.0, 24.0, 4.0);
-        assert_eq!(text(&d, chip), Some(Unpainted::MaskedOut), "a y mask on an x scroller");
+        assert_eq!(
+            text(&d, chip),
+            Some(Unpainted::MaskedOut),
+            "a y mask on an x scroller"
+        );
         // A mask the engine does not read is taken as painted.
-        d.set_style(frame, "maskImage", "linear-gradient(rgb(0, 0, 0) calc(100% - 56px), rgba(0, 0, 0, 0))");
+        d.set_style(
+            frame,
+            "maskImage",
+            "linear-gradient(rgb(0, 0, 0) calc(100% - 56px), rgba(0, 0, 0, 0))",
+        );
         assert_eq!(text(&d, label), None);
-        d.set_style(frame, "maskImage", "linear-gradient(135deg, rgb(0, 0, 0), transparent)");
+        d.set_style(
+            frame,
+            "maskImage",
+            "linear-gradient(135deg, rgb(0, 0, 0), transparent)",
+        );
         assert_eq!(text(&d, label), None);
     }
 
@@ -4762,34 +5427,67 @@ mod tests {
         d.set_styles(active, &[("position", "absolute"), ("opacity", "1")]);
         d.set_rect(active, 40.0, 400.0, 320.0, 200.0);
         let poster = d.add(Some(stack), "img");
-        d.set_styles(poster, &[("position", "absolute"), ("opacity", "0"), ("transitionProperty", "opacity"), ("transitionDuration", "120ms")]);
+        d.set_styles(
+            poster,
+            &[
+                ("position", "absolute"),
+                ("opacity", "0"),
+                ("transitionProperty", "opacity"),
+                ("transitionDuration", "120ms"),
+            ],
+        );
         d.set_rect(poster, 40.0, 400.0, 320.0, 200.0);
         assert_eq!(raster(&d, poster), Some(Unpainted::StateLayer));
 
         let all = d.add(Some(stack), "img");
-        d.set_styles(all, &[("opacity", "0"), ("transitionProperty", "all"), ("transitionDuration", "0.1s")]);
+        d.set_styles(
+            all,
+            &[
+                ("opacity", "0"),
+                ("transitionProperty", "all"),
+                ("transitionDuration", "0.1s"),
+            ],
+        );
         d.set_rect(all, 40.0, 400.0, 320.0, 200.0);
         assert_eq!(raster(&d, all), Some(Unpainted::StateLayer));
 
         // A raster held near zero with nothing moving it is what the rule is for.
         let buried = d.add(Some(body), "img");
-        d.set_styles(buried, &[("opacity", "0.05"), ("transitionProperty", "all"), ("transitionDuration", "0s")]);
+        d.set_styles(
+            buried,
+            &[
+                ("opacity", "0.05"),
+                ("transitionProperty", "all"),
+                ("transitionDuration", "0s"),
+            ],
+        );
         d.set_rect(buried, 40.0, 700.0, 320.0, 200.0);
         assert_eq!(raster(&d, buried), None);
 
         // An animation that moves opacity marks a slideshow layer; one that
         // only moves transform does not.
         let slide = d.add(Some(stack), "div");
-        d.set_styles(slide, &[("opacity", "0"), ("animationName", "trophy-fade"), ("backgroundImage", "url(a.png)")]);
+        d.set_styles(
+            slide,
+            &[
+                ("opacity", "0"),
+                ("animationName", "trophy-fade"),
+                ("backgroundImage", "url(a.png)"),
+            ],
+        );
         d.set_rect(slide, 40.0, 400.0, 320.0, 200.0);
         d.keyframes.insert(
             "trophy-fade".to_string(),
-            vec![crate::browser::dom::KeyframeFrame { decls: vec![("opacity".to_string(), "1".to_string())] }],
+            vec![crate::browser::dom::KeyframeFrame {
+                decls: vec![("opacity".to_string(), "1".to_string())],
+            }],
         );
         assert_eq!(raster(&d, slide), Some(Unpainted::StateLayer));
         d.keyframes.insert(
             "trophy-fade".to_string(),
-            vec![crate::browser::dom::KeyframeFrame { decls: vec![("transform".to_string(), "none".to_string())] }],
+            vec![crate::browser::dom::KeyframeFrame {
+                decls: vec![("transform".to_string(), "none".to_string())],
+            }],
         );
         assert_eq!(raster(&d, slide), None);
 
@@ -4820,20 +5518,47 @@ mod tests {
                 d.set_attr(img, "class", class);
             }
             d.set_attr(img, "src", "/thumb.jpg");
-            d.set_styles(img, &[("opacity", opacity), ("transitionProperty", "all"), ("transitionDuration", "0s")]);
+            d.set_styles(
+                img,
+                &[
+                    ("opacity", opacity),
+                    ("transitionProperty", "all"),
+                    ("transitionDuration", "0s"),
+                ],
+            );
             img
         };
         let fades = |d: &mut FakeDom, img: ElId| {
-            d.set_styles(img, &[("transitionProperty", "opacity"), ("transitionDuration", "0.3s")]);
+            d.set_styles(
+                img,
+                &[
+                    ("transitionProperty", "opacity"),
+                    ("transitionDuration", "0.3s"),
+                ],
+            );
         };
-        let waiting = thumb(&mut d, 2793.0, "entry-thumb td-animation-stack-type0-1", "0");
-        assert_eq!(raster(&d, waiting), None, "no image on the page has been revealed");
+        let waiting = thumb(
+            &mut d,
+            2793.0,
+            "entry-thumb td-animation-stack-type0-1",
+            "0",
+        );
+        assert_eq!(
+            raster(&d, waiting),
+            None,
+            "no image on the page has been revealed"
+        );
 
         // One revealed peer is not enough; two are.
         let first = thumb(&mut d, 400.0, "entry-thumb td-animation-stack-type0-2", "1");
         fades(&mut d, first);
         assert_eq!(raster(&d, waiting), None);
-        let second = thumb(&mut d, 800.0, "entry-thumb td-animation-stack-type0-2", "0.82");
+        let second = thumb(
+            &mut d,
+            800.0,
+            "entry-thumb td-animation-stack-type0-2",
+            "0.82",
+        );
         fades(&mut d, second);
         assert_eq!(raster(&d, waiting), Some(Unpainted::StateLayer));
 
@@ -4888,10 +5613,21 @@ mod tests {
         let (mut d, body) = page();
         let img = d.add(Some(body), "img");
         d.set_rect(img, 478.0, 600.0, 324.0, 235.0);
-        d.set_styles(img, &[("opacity", "0.105372"), ("transitionProperty", "opacity"), ("transitionDuration", "0.3s")]);
+        d.set_styles(
+            img,
+            &[
+                ("opacity", "0.105372"),
+                ("transitionProperty", "opacity"),
+                ("transitionDuration", "0.3s"),
+            ],
+        );
         assert_eq!(raster(&d, img), None, "a probe that read no animations");
         d.set_running_animations(img, &[]);
-        assert_eq!(raster(&d, img), None, "nothing running: held at a faint value");
+        assert_eq!(
+            raster(&d, img),
+            None,
+            "nothing running: held at a faint value"
+        );
         d.set_running_animations(img, &["transform"]);
         assert_eq!(raster(&d, img), None);
         d.set_running_animations(img, &["opacity"]);
@@ -4906,27 +5642,48 @@ mod tests {
 .has-reveal .timed > * { animation-name: lab-rise; animation-timeline: auto; }\n\
 .has-reveal .rail { animation-name: lab-rail; animation-timeline: --lab-rail; }";
         let (mut d, body) = page();
-        let fade = || vec![crate::browser::dom::KeyframeFrame { decls: vec![("opacity".to_string(), "0".to_string())] }];
+        let fade = || {
+            vec![crate::browser::dom::KeyframeFrame {
+                decls: vec![("opacity".to_string(), "0".to_string())],
+            }]
+        };
         d.keyframes.insert("lab-scrub-rise".to_string(), fade());
         d.keyframes.insert("lab-rise".to_string(), fade());
         d.keyframes.insert("lab-rail".to_string(), fade());
         d.keyframes.insert(
             "lab-grow".to_string(),
-            vec![crate::browser::dom::KeyframeFrame { decls: vec![("transform".to_string(), "none".to_string())] }],
+            vec![crate::browser::dom::KeyframeFrame {
+                decls: vec![("transform".to_string(), "none".to_string())],
+            }],
         );
         let block = d.add(Some(body), "div");
-        d.set_styles(block, &[("opacity", "0"), ("animationName", "lab-scrub-rise")]);
+        d.set_styles(
+            block,
+            &[("opacity", "0"), ("animationName", "lab-scrub-rise")],
+        );
         d.add_selector(block, ".has-reveal [data-cascade] > *");
-        assert!(!opacity_held_by_scroll_timeline(&d, block, css), "a probe that read no animations");
+        assert!(
+            !opacity_held_by_scroll_timeline(&d, block, css),
+            "a probe that read no animations"
+        );
         d.set_running_animations(block, &["opacity", "transform"]);
         assert!(opacity_held_by_scroll_timeline(&d, block, css));
         d.set_running_animations(block, &["transform"]);
-        assert!(!opacity_held_by_scroll_timeline(&d, block, css), "the running animation moves no opacity");
+        assert!(
+            !opacity_held_by_scroll_timeline(&d, block, css),
+            "the running animation moves no opacity"
+        );
         d.set_running_animations(block, &["opacity"]);
         d.set_style(block, "animationName", "lab-grow");
-        assert!(!opacity_held_by_scroll_timeline(&d, block, css), "its keyframes set no opacity");
+        assert!(
+            !opacity_held_by_scroll_timeline(&d, block, css),
+            "its keyframes set no opacity"
+        );
         d.set_style(block, "animationName", "none");
-        assert!(!opacity_held_by_scroll_timeline(&d, block, css), "a transition, not an animation");
+        assert!(
+            !opacity_held_by_scroll_timeline(&d, block, css),
+            "a transition, not an animation"
+        );
 
         // A named timeline counts; the document timeline does not.
         let rail = d.add(Some(body), "div");
@@ -4939,24 +5696,36 @@ mod tests {
         d.set_running_animations(timed, &["opacity"]);
         d.add_selector(timed, ".has-reveal .timed > *");
         assert!(!opacity_held_by_scroll_timeline(&d, timed, css));
-        assert!(!opacity_held_by_scroll_timeline(&d, timed, ""), "no rule to read");
+        assert!(
+            !opacity_held_by_scroll_timeline(&d, timed, ""),
+            "no rule to read"
+        );
 
         // With the computed timeline recorded, the cascade's answer decides:
         // a later rule's `auto` wins over the stylesheet's `view()`.
         d.set_style(block, "animationName", "lab-scrub-rise");
         d.set_running_animations(block, &["opacity"]);
         d.set_style(block, "animationTimeline", "auto");
-        assert!(!opacity_held_by_scroll_timeline(&d, block, css), "the timeline was overridden");
+        assert!(
+            !opacity_held_by_scroll_timeline(&d, block, css),
+            "the timeline was overridden"
+        );
         d.set_style(block, "animationTimeline", "view()");
         assert!(opacity_held_by_scroll_timeline(&d, block, css));
         // A view() timeline on a transform animation beside a document-
         // timeline fade does not hold the fade.
         d.set_style(block, "animationName", "lab-grow, lab-rise");
         d.set_style(block, "animationTimeline", "view(), auto");
-        assert!(!opacity_held_by_scroll_timeline(&d, block, css), "the fade runs on the document timeline");
+        assert!(
+            !opacity_held_by_scroll_timeline(&d, block, css),
+            "the fade runs on the document timeline"
+        );
         d.set_style(block, "animationName", "lab-rise, lab-grow");
         d.set_style(block, "animationTimeline", "view()");
-        assert!(opacity_held_by_scroll_timeline(&d, block, css), "one timeline repeats for every name");
+        assert!(
+            opacity_held_by_scroll_timeline(&d, block, css),
+            "one timeline repeats for every name"
+        );
     }
 
     /// opencodex.me 11728: `p.lp-disclaimer` runs `ocx-fade-up` (0% at
@@ -4967,7 +5736,11 @@ mod tests {
     #[test]
     fn a_box_held_at_zero_by_a_scroll_timeline_counts_at_its_end_keyframe() {
         let (mut d, body) = page();
-        set_keyframes(&mut d, "ocx-fade-up", &[("0%", &[("opacity", "0")]), ("100%", &[("opacity", "1")])]);
+        set_keyframes(
+            &mut d,
+            "ocx-fade-up",
+            &[("0%", &[("opacity", "0")]), ("100%", &[("opacity", "1")])],
+        );
         let wrap = d.add(Some(body), "div");
         d.set_rect(wrap, 100.0, 3000.0, 600.0, 80.0);
         let p = d.add(Some(wrap), "p");
@@ -4983,13 +5756,24 @@ mod tests {
                 ("animationComposition", "replace"),
             ],
         );
-        assert_eq!(scroll_held_end_opacity(&d, p), None, "a probe that read no animations");
+        assert_eq!(
+            scroll_held_end_opacity(&d, p),
+            None,
+            "a probe that read no animations"
+        );
         assert_eq!(effective_opacity_scrolled(&d, p), 0.0);
         d.set_running_animations(p, &["opacity", "transform"]);
         assert_eq!(scroll_held_end_opacity(&d, p), Some(1.0));
         assert_eq!(effective_opacity_scrolled(&d, p), 1.0);
-        assert_eq!(effective_opacity_dom(&d, p), 0.0, "the captured opacity is unchanged");
-        assert_ne!(unpainted_at_capture(&d, p, OwnOpacity::Counts), Some(Unpainted::Transparent));
+        assert_eq!(
+            effective_opacity_dom(&d, p),
+            0.0,
+            "the captured opacity is unchanged"
+        );
+        assert_ne!(
+            unpainted_at_capture(&d, p, OwnOpacity::Counts),
+            Some(Unpainted::Transparent)
+        );
 
         // A held wrapper fades its text the same way.
         let child = d.add(Some(p), "span");
@@ -4998,7 +5782,10 @@ mod tests {
         // A reversed run ends on its first frame, which shows nothing.
         d.set_style(p, "animationDirection", "reverse");
         assert_eq!(scroll_held_end_opacity(&d, p), Some(0.0));
-        assert_eq!(unpainted_at_capture(&d, p, OwnOpacity::Counts), Some(Unpainted::Transparent));
+        assert_eq!(
+            unpainted_at_capture(&d, p, OwnOpacity::Counts),
+            Some(Unpainted::Transparent)
+        );
         // A direction or composition it cannot read keeps the captured 0.
         d.set_style(p, "animationDirection", "alternate");
         assert_eq!(scroll_held_end_opacity(&d, p), None);
@@ -5015,7 +5802,14 @@ mod tests {
         assert_eq!(scroll_held_end_opacity(&d, p), None);
         // An end keyframe that sets no opacity cannot be read.
         d.set_style(p, "opacity", "0");
-        set_keyframes(&mut d, "ocx-fade-up", &[("0%", &[("opacity", "0")]), ("100%", &[("transform", "none")])]);
+        set_keyframes(
+            &mut d,
+            "ocx-fade-up",
+            &[
+                ("0%", &[("opacity", "0")]),
+                ("100%", &[("transform", "none")]),
+            ],
+        );
         assert_eq!(scroll_held_end_opacity(&d, p), None);
     }
 
@@ -5031,20 +5825,36 @@ mod tests {
         set_keyframes(
             &mut d,
             "landing-actions-reveal",
-            &[("0%", &[("opacity", "0")]), ("99%", &[("pointer-events", "none")]), ("100%", &[("opacity", "1")])],
+            &[
+                ("0%", &[("opacity", "0")]),
+                ("99%", &[("pointer-events", "none")]),
+                ("100%", &[("opacity", "1")]),
+            ],
         );
         let actions = d.add(Some(body), "div");
         d.set_rect(actions, 480.0, 535.0, 320.0, 214.0);
         one_shot(&mut d, actions, "landing-actions-reveal", "forwards");
-        d.set_styles(actions, &[("opacity", "0"), ("animationDuration", "0.6s"), ("animationDelay", "2.45s")]);
+        d.set_styles(
+            actions,
+            &[
+                ("opacity", "0"),
+                ("animationDuration", "0.6s"),
+                ("animationDelay", "2.45s"),
+            ],
+        );
         let button = d.add(Some(actions), "button");
         d.set_rect(button, 480.0, 535.0, 320.0, 48.0);
         assert_eq!(entrance_end_opacity(&d, actions), Some(1.0));
         assert_eq!(effective_opacity_scrolled(&d, button), 1.0);
-        assert_eq!(effective_opacity_dom(&d, button), 0.0, "the captured opacity is unchanged");
+        assert_eq!(
+            effective_opacity_dom(&d, button),
+            0.0,
+            "the captured opacity is unchanged"
+        );
         assert_eq!(unpainted_for(&d, button, PaintGate::Box), None);
 
-        let gone = |d: &FakeDom| unpainted_for(d, button, PaintGate::Box) == Some(Unpainted::Transparent);
+        let gone =
+            |d: &FakeDom| unpainted_for(d, button, PaintGate::Box) == Some(Unpainted::Transparent);
         // Handed back to its own style at the end: what it shows then is unknown.
         d.set_style(actions, "animationFillMode", "none");
         assert!(gone(&d));
@@ -5066,9 +5876,17 @@ mod tests {
         d.set_style(actions, "animationDelay", "2.45s");
         // An entrance that ends at 0 shows nothing, and one caught above the
         // floor is read as captured.
-        set_keyframes(&mut d, "landing-actions-reveal", &[("0%", &[("opacity", "1")]), ("100%", &[("opacity", "0")])]);
+        set_keyframes(
+            &mut d,
+            "landing-actions-reveal",
+            &[("0%", &[("opacity", "1")]), ("100%", &[("opacity", "0")])],
+        );
         assert!(gone(&d));
-        set_keyframes(&mut d, "landing-actions-reveal", &[("0%", &[("opacity", "0")]), ("100%", &[("opacity", "1")])]);
+        set_keyframes(
+            &mut d,
+            "landing-actions-reveal",
+            &[("0%", &[("opacity", "0")]), ("100%", &[("opacity", "1")])],
+        );
         d.set_style(actions, "opacity", "0.5");
         assert_eq!(entrance_end_opacity(&d, actions), None);
         assert_eq!(effective_opacity_scrolled(&d, button), 0.5);
@@ -5081,11 +5899,26 @@ mod tests {
         let (mut d, body) = page();
         let row = d.add(Some(body), "div");
         resolved(&mut d, row);
-        d.set_styles(row, &[("display", "flex"), ("position", "relative"), ("overflowX", "hidden"), ("overflowY", "hidden")]);
+        d.set_styles(
+            row,
+            &[
+                ("display", "flex"),
+                ("position", "relative"),
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+            ],
+        );
         d.set_rect(row, 108.0, 3617.0, 1064.0, 76.0);
         let answer = d.add(Some(row), "div");
         resolved(&mut d, answer);
-        d.set_styles(answer, &[("display", "flex"), ("position", "absolute"), ("opacity", "0")]);
+        d.set_styles(
+            answer,
+            &[
+                ("display", "flex"),
+                ("position", "absolute"),
+                ("opacity", "0"),
+            ],
+        );
         d.set_rect(answer, 132.0, 3744.0, 1016.0, 45.0);
         assert!(parked_outside_clip(&d, answer));
 
@@ -5103,7 +5936,14 @@ mod tests {
         // A row that does not clip, or is not the containing block.
         d.set_styles(row, &[("overflowX", "visible"), ("overflowY", "visible")]);
         assert!(!parked_outside_clip(&d, answer));
-        d.set_styles(row, &[("overflowX", "hidden"), ("overflowY", "hidden"), ("position", "static")]);
+        d.set_styles(
+            row,
+            &[
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+                ("position", "static"),
+            ],
+        );
         assert!(!parked_outside_clip(&d, answer));
         d.set_style(row, "position", "relative");
         assert!(parked_outside_clip(&d, answer));
@@ -5133,19 +5973,27 @@ mod tests {
         // With a second marker, a transition at rest at 0 is a load or
         // crossfade state.
         d.set_style(photo, "opacity", "0");
-        d.el_mut(photo).attrs.push(("loading".to_string(), "lazy".to_string()));
+        d.el_mut(photo)
+            .attrs
+            .push(("loading".to_string(), "lazy".to_string()));
         assert_eq!(raster(&d, photo), Some(Unpainted::StateLayer));
         d.el_mut(photo).attrs.clear();
-        d.el_mut(photo).attrs.push(("class".to_string(), "owl-lazy item-img".to_string()));
+        d.el_mut(photo)
+            .attrs
+            .push(("class".to_string(), "owl-lazy item-img".to_string()));
         assert_eq!(raster(&d, photo), Some(Unpainted::StateLayer));
         d.el_mut(photo).attrs.clear();
-        d.el_mut(photo).attrs.push(("data-src".to_string(), "hero.jpg".to_string()));
+        d.el_mut(photo)
+            .attrs
+            .push(("data-src".to_string(), "hero.jpg".to_string()));
         assert_eq!(raster(&d, photo), Some(Unpainted::StateLayer));
         d.el_mut(photo).attrs.clear();
         d.set_style(photo, "animationName", "drift");
         d.keyframes.insert(
             "drift".to_string(),
-            vec![crate::browser::dom::KeyframeFrame { decls: vec![("transform".to_string(), "none".to_string())] }],
+            vec![crate::browser::dom::KeyframeFrame {
+                decls: vec![("transform".to_string(), "none".to_string())],
+            }],
         );
         assert_eq!(raster(&d, photo), Some(Unpainted::StateLayer));
         d.set_style(photo, "animationName", "none");
@@ -5166,15 +6014,43 @@ mod tests {
     fn a_lazy_image_held_at_a_faint_value_is_not_a_state_layer() {
         let (mut d, body) = page();
         let hero = d.add(Some(body), "section");
-        d.set_styles(hero, &[("position", "relative"), ("overflowX", "hidden"), ("overflowY", "hidden")]);
+        d.set_styles(
+            hero,
+            &[
+                ("position", "relative"),
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+            ],
+        );
         d.set_rect(hero, 0.0, 0.0, 1280.0, 520.0);
         let photo = d.add(Some(hero), "img");
-        d.set_styles(photo, &[("position", "absolute"), ("opacity", "0.1"), ("transitionProperty", "opacity"), ("transitionDuration", "0.15s")]);
-        d.el_mut(photo).attrs.push(("loading".to_string(), "lazy".to_string()));
-        d.el_mut(photo).attrs.push(("data-nimg".to_string(), "fill".to_string()));
+        d.set_styles(
+            photo,
+            &[
+                ("position", "absolute"),
+                ("opacity", "0.1"),
+                ("transitionProperty", "opacity"),
+                ("transitionDuration", "0.15s"),
+            ],
+        );
+        d.el_mut(photo)
+            .attrs
+            .push(("loading".to_string(), "lazy".to_string()));
+        d.el_mut(photo)
+            .attrs
+            .push(("data-nimg".to_string(), "fill".to_string()));
         d.set_rect(photo, 0.0, 0.0, 1280.0, 520.0);
         let overlay = d.add(Some(hero), "div");
-        d.set_styles(overlay, &[("position", "absolute"), ("backgroundImage", "linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.9))")]);
+        d.set_styles(
+            overlay,
+            &[
+                ("position", "absolute"),
+                (
+                    "backgroundImage",
+                    "linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.9))",
+                ),
+            ],
+        );
         d.set_rect(overlay, 0.0, 0.0, 1280.0, 520.0);
         assert_eq!(raster(&d, photo), None);
 
@@ -5200,7 +6076,9 @@ mod tests {
         d.set_style(photo, "animationName", "pulse");
         d.keyframes.insert(
             "pulse".to_string(),
-            vec![crate::browser::dom::KeyframeFrame { decls: vec![("opacity".to_string(), "0.5".to_string())] }],
+            vec![crate::browser::dom::KeyframeFrame {
+                decls: vec![("opacity".to_string(), "0.5".to_string())],
+            }],
         );
         assert_eq!(raster(&d, photo), Some(Unpainted::StateLayer));
     }
@@ -5218,7 +6096,15 @@ mod tests {
         let video = d.add(Some(wrap), "video");
         d.set_rect(video, 829.0, 448.0, 270.0, 428.0);
         let poster = d.add(Some(stack), "img");
-        d.set_styles(poster, &[("position", "absolute"), ("opacity", "0"), ("transitionProperty", "opacity"), ("transitionDuration", "0.12s")]);
+        d.set_styles(
+            poster,
+            &[
+                ("position", "absolute"),
+                ("opacity", "0"),
+                ("transitionProperty", "opacity"),
+                ("transitionDuration", "0.12s"),
+            ],
+        );
         d.set_rect(poster, 829.0, 448.0, 270.0, 428.0);
         assert_eq!(raster(&d, poster), Some(Unpainted::StateLayer));
 
@@ -5261,7 +6147,10 @@ mod tests {
         assert_eq!(why(&d, label), Some(Unpainted::VisuallyHidden));
         d.set_styles(sr, &[("clip", "auto"), ("clipPath", "inset(50%)")]);
         assert_eq!(why(&d, label), Some(Unpainted::VisuallyHidden));
-        d.set_styles(sr, &[("clipPath", "none"), ("webkitClipPath", "inset(50%)")]);
+        d.set_styles(
+            sr,
+            &[("clipPath", "none"), ("webkitClipPath", "inset(50%)")],
+        );
         assert_eq!(why(&d, label), Some(Unpainted::VisuallyHidden));
 
         // So does its own overflow clip on both axes: a 1px window shows
@@ -5271,10 +6160,21 @@ mod tests {
         d.set_style(sr, "webkitClipPath", "none");
         assert_eq!(why(&d, label), Some(Unpainted::VisuallyHidden));
         let own = d.add(Some(bar), "i");
-        d.set_styles(own, &[("position", "absolute"), ("overflowX", "hidden"), ("overflowY", "hidden"), ("fontSize", "20px")]);
+        d.set_styles(
+            own,
+            &[
+                ("position", "absolute"),
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+                ("fontSize", "20px"),
+            ],
+        );
         d.set_rect(own, 720.0, 8080.0, 1.0, 1.0);
         d.add_text(own, "영상");
-        assert_eq!(unpainted_for(&d, own, PaintGate::Text), Some(Unpainted::VisuallyHidden));
+        assert_eq!(
+            unpainted_for(&d, own, PaintGate::Text),
+            Some(Unpainted::VisuallyHidden)
+        );
         // Should-flag twins: overflow cut on one axis only, overflow that
         // scrolls or is not recorded, or a box larger than 1px.
         d.set_style(own, "overflowY", "visible");
@@ -5293,7 +6193,10 @@ mod tests {
         assert_eq!(why(&d, label), None);
 
         // `clip` applies only to an absolutely positioned box.
-        d.set_styles(sr, &[("position", "static"), ("clip", "rect(0px, 0px, 0px, 0px)")]);
+        d.set_styles(
+            sr,
+            &[("position", "static"), ("clip", "rect(0px, 0px, 0px, 0px)")],
+        );
         assert_eq!(why(&d, label), None);
 
         // A box larger than 1px is not the utility; the clip tests decide it.
@@ -5311,15 +6214,27 @@ mod tests {
         d.set_style(wrapper, "display", "inline");
         d.set_rect(wrapper, 887.0, 6522.0, 0.0, 18.0);
         d.el_mut(wrapper).scroll_width = 0.0;
-        assert_eq!(unpainted_for(&d, wrapper, PaintGate::Text), Some(Unpainted::NoText));
+        assert_eq!(
+            unpainted_for(&d, wrapper, PaintGate::Text),
+            Some(Unpainted::NoText)
+        );
         // The base predicate and the other gates do not ask for text.
         assert_eq!(why(&d, wrapper), None);
-        assert_eq!(unpainted_for(&d, wrapper, PaintGate::Box), Some(Unpainted::NoArea));
+        assert_eq!(
+            unpainted_for(&d, wrapper, PaintGate::Box),
+            Some(Unpainted::NoArea)
+        );
         let copy = d.add(Some(wrapper), "b");
         d.add_text(copy, "   ");
-        assert_eq!(unpainted_for(&d, wrapper, PaintGate::Text), Some(Unpainted::NoText));
+        assert_eq!(
+            unpainted_for(&d, wrapper, PaintGate::Text),
+            Some(Unpainted::NoText)
+        );
         d.add_text(copy, "Search your word");
-        assert_eq!(unpainted_for(&d, wrapper, PaintGate::Text), Some(Unpainted::NoArea));
+        assert_eq!(
+            unpainted_for(&d, wrapper, PaintGate::Text),
+            Some(Unpainted::NoArea)
+        );
         d.set_rect(wrapper, 887.0, 6522.0, 108.0, 18.0);
         assert_eq!(unpainted_for(&d, wrapper, PaintGate::Text), None);
 
@@ -5330,16 +6245,29 @@ mod tests {
 
         let p = d.add(Some(body), "p");
         d.add_text(p, "Collapsed answer copy");
-        d.set_styles(p, &[("display", "block"), ("overflowX", "hidden"), ("overflowY", "hidden")]);
+        d.set_styles(
+            p,
+            &[
+                ("display", "block"),
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+            ],
+        );
         d.set_rect(p, 40.0, 900.0, 400.0, 0.0);
         d.el_mut(p).scroll_height = Some(54.0);
-        assert_eq!(unpainted_for(&d, p, PaintGate::Text), Some(Unpainted::NoArea));
+        assert_eq!(
+            unpainted_for(&d, p, PaintGate::Text),
+            Some(Unpainted::NoArea)
+        );
         // With visible overflow its lines show past the edge.
         d.set_styles(p, &[("overflowX", "visible"), ("overflowY", "visible")]);
         assert_eq!(unpainted_for(&d, p, PaintGate::Text), None);
         // Nothing past the edge: no lines at all.
         d.el_mut(p).scroll_height = Some(0.0);
-        assert_eq!(unpainted_for(&d, p, PaintGate::Text), Some(Unpainted::NoArea));
+        assert_eq!(
+            unpainted_for(&d, p, PaintGate::Text),
+            Some(Unpainted::NoArea)
+        );
         // A metric the capture did not record keeps it.
         d.el_mut(p).scroll_height = None;
         assert_eq!(unpainted_for(&d, p, PaintGate::Text), None);
@@ -5359,10 +6287,20 @@ mod tests {
     fn a_box_rule_skips_boxes_that_show_nothing() {
         let (mut d, body) = page();
         let tray = d.add(Some(body), "div");
-        d.set_styles(tray, &[("display", "block"), ("overflowX", "hidden"), ("overflowY", "hidden")]);
+        d.set_styles(
+            tray,
+            &[
+                ("display", "block"),
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+            ],
+        );
         d.set_rect(tray, 16.0, 4688.0, 1248.0, 0.0);
         d.el_mut(tray).scroll_height = Some(0.0);
-        assert_eq!(unpainted_for(&d, tray, PaintGate::Box), Some(Unpainted::NoArea));
+        assert_eq!(
+            unpainted_for(&d, tray, PaintGate::Box),
+            Some(Unpainted::NoArea)
+        );
         // A zero-height box whose content shows past its edge is kept.
         d.set_styles(tray, &[("overflowX", "visible"), ("overflowY", "visible")]);
         d.el_mut(tray).scroll_height = Some(240.0);
@@ -5375,25 +6313,49 @@ mod tests {
         let bar = d.add(Some(body), "div");
         d.set_style(bar, "display", "none");
         let volume = d.add(Some(bar), "div");
-        d.set_styles(volume, &[("display", "flex"), ("transitionProperty", "width")]);
+        d.set_styles(
+            volume,
+            &[("display", "flex"), ("transitionProperty", "width")],
+        );
         d.set_rect(volume, 0.0, 0.0, 0.0, 0.0);
-        assert_eq!(unpainted_for(&d, volume, PaintGate::Box), Some(Unpainted::NotRendered));
+        assert_eq!(
+            unpainted_for(&d, volume, PaintGate::Box),
+            Some(Unpainted::NotRendered)
+        );
 
         let seek = d.add(Some(body), "div");
         d.set_styles(seek, &[("display", "block"), ("position", "absolute")]);
         d.set_rect(seek, -326.0, 1061.0, 140.0, 2.0);
-        assert_eq!(unpainted_for(&d, seek, PaintGate::Box), Some(Unpainted::OutsideDocument));
+        assert_eq!(
+            unpainted_for(&d, seek, PaintGate::Box),
+            Some(Unpainted::OutsideDocument)
+        );
     }
 
     #[test]
     fn unpainted_inside_leaves_the_container_clip_to_the_rule() {
         let (mut d, body) = page();
         let frame = d.add(Some(body), "div");
-        d.set_styles(frame, &[("display", "block"), ("overflowX", "hidden"), ("overflowY", "hidden")]);
+        d.set_styles(
+            frame,
+            &[
+                ("display", "block"),
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+            ],
+        );
         d.set_rect(frame, 40.0, 300.0, 300.0, 40.0);
         let host = d.add(Some(frame), "div");
         resolved(&mut d, host);
-        d.set_styles(host, &[("display", "block"), ("position", "relative"), ("overflowX", "hidden"), ("overflowY", "hidden")]);
+        d.set_styles(
+            host,
+            &[
+                ("display", "block"),
+                ("position", "relative"),
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+            ],
+        );
         d.set_rect(host, 40.0, 300.0, 300.0, 40.0);
         let menu = d.add(Some(host), "div");
         d.set_style(menu, "position", "absolute");
@@ -5415,11 +6377,17 @@ mod tests {
         let rate_menu = d.add(Some(controls), "div");
         d.set_style(rate_menu, "position", "absolute");
         d.set_rect(rate_menu, 40.0, 340.0, 200.0, 60.0);
-        assert_eq!(unpainted_inside(&d, rate_menu, host), Some(Unpainted::NotRendered));
+        assert_eq!(
+            unpainted_inside(&d, rate_menu, host),
+            Some(Unpainted::NotRendered)
+        );
 
         // So does transparency.
         d.set_style(menu, "opacity", "0");
-        assert_eq!(unpainted_inside(&d, menu, host), Some(Unpainted::Transparent));
+        assert_eq!(
+            unpainted_inside(&d, menu, host),
+            Some(Unpainted::Transparent)
+        );
     }
 
     /// ynet.co.il: a floating player, `position: fixed`, inside a card that
@@ -5462,12 +6430,21 @@ mod tests {
             BrowserFinding::new("gradient-text", "gradient"),
             BrowserFinding::new("low-contrast", "2.0:1"),
             BrowserFinding::new("bounce-easing", "animation: bounce"),
-            BrowserFinding::new("dark-glow", "Colored box-shadow glow (#cdaca2) on dark background"),
+            BrowserFinding::new(
+                "dark-glow",
+                "Colored box-shadow glow (#cdaca2) on dark background",
+            ),
             BrowserFinding::new("ai-color-palette", "Purple/violet gradient background"),
-            BrowserFinding::new("italic-serif-display", "italic serif h1 (playfair display) at 60px"),
+            BrowserFinding::new(
+                "italic-serif-display",
+                "italic serif h1 (playfair display) at 60px",
+            ),
             BrowserFinding::new("blinking-cursor", "i.caret — 5x10px blinking cursor"),
         ];
-        findings.push(BrowserFinding::new("font-overuse-stand-in", "an ungated style tell"));
+        findings.push(BrowserFinding::new(
+            "font-overuse-stand-in",
+            "an ungated style tell",
+        ));
         retain_painted(&d, a, &mut findings);
         let ids: Vec<&str> = findings.iter().map(|f| f.type_.as_str()).collect();
         assert_eq!(ids, vec!["font-overuse-stand-in"]);
@@ -5509,7 +6486,10 @@ mod tests {
         // The off phase of an opacity blink is still the cursor.
         d.set_style(cursor, "opacity", "0");
         assert_eq!(unpainted_for(&d, cursor, PaintGate::Toggle), None);
-        assert_eq!(unpainted_for(&d, cursor, PaintGate::Box), Some(Unpainted::Transparent));
+        assert_eq!(
+            unpainted_for(&d, cursor, PaintGate::Box),
+            Some(Unpainted::Transparent)
+        );
         d.set_style(cursor, "opacity", "1");
 
         // So is the off phase of a visibility blink, which checkVisibility()
@@ -5519,25 +6499,40 @@ mod tests {
         assert_eq!(unpainted_for(&d, cursor, PaintGate::Toggle), None);
         d.set_style(term, "visibility", "visible");
         assert_eq!(unpainted_for(&d, cursor, PaintGate::Toggle), None);
-        assert_eq!(unpainted_for(&d, cursor, PaintGate::Box), Some(Unpainted::NotRendered));
+        assert_eq!(
+            unpainted_for(&d, cursor, PaintGate::Box),
+            Some(Unpainted::NotRendered)
+        );
 
         // A panel at visibility: hidden hides it.
         d.set_style(term, "visibility", "hidden");
-        assert_eq!(unpainted_for(&d, cursor, PaintGate::Toggle), Some(Unpainted::NotRendered));
+        assert_eq!(
+            unpainted_for(&d, cursor, PaintGate::Toggle),
+            Some(Unpainted::NotRendered)
+        );
         d.set_style(term, "visibility", "visible");
         d.set_style(cursor, "visibility", "visible");
         d.el_mut(cursor).check_visibility = Some(true);
 
         // So does a transparent panel, and one at display: none.
         d.set_style(term, "opacity", "0");
-        assert_eq!(unpainted_for(&d, cursor, PaintGate::Toggle), Some(Unpainted::Transparent));
+        assert_eq!(
+            unpainted_for(&d, cursor, PaintGate::Toggle),
+            Some(Unpainted::Transparent)
+        );
         d.set_style(term, "opacity", "1");
         d.set_style(term, "display", "none");
-        assert_eq!(unpainted_for(&d, cursor, PaintGate::Toggle), Some(Unpainted::NotRendered));
+        assert_eq!(
+            unpainted_for(&d, cursor, PaintGate::Toggle),
+            Some(Unpainted::NotRendered)
+        );
         d.set_style(term, "visibility", "hidden");
         d.set_style(cursor, "visibility", "hidden");
         d.el_mut(cursor).check_visibility = Some(false);
-        assert_eq!(unpainted_for(&d, cursor, PaintGate::Toggle), Some(Unpainted::NotRendered));
+        assert_eq!(
+            unpainted_for(&d, cursor, PaintGate::Toggle),
+            Some(Unpainted::NotRendered)
+        );
     }
 
     /// observations-25 issue 4: co-trip.jp's date on a Swiper slide parked
@@ -5554,11 +6549,25 @@ mod tests {
         d.set_rect(window, 25.0, 3205.4, 340.0, 200.0);
         let row = d.add(Some(window), "span");
         d.add_text(row, "4ea2f827-c3a1-4f0e-9b1a-2d1f0c8e7a55");
-        d.set_styles(row, &[("display", "inline"), ("fontSize", "16px"), ("lineHeight", "24px")]);
+        d.set_styles(
+            row,
+            &[
+                ("display", "inline"),
+                ("fontSize", "16px"),
+                ("lineHeight", "24px"),
+            ],
+        );
         d.set_rect(row, 220.0, 3400.4, 364.8, 17.0);
         d.set_text_rect(row, 220.0, 3400.4, 364.8, 17.0);
-        assert_eq!(unpainted_for(&d, row, PaintGate::Text), Some(Unpainted::ClippedOut));
-        assert_eq!(unpainted_for(&d, row, PaintGate::Box), None, "the box rules keep the x floor only");
+        assert_eq!(
+            unpainted_for(&d, row, PaintGate::Text),
+            Some(Unpainted::ClippedOut)
+        );
+        assert_eq!(
+            unpainted_for(&d, row, PaintGate::Box),
+            None,
+            "the box rules keep the x floor only"
+        );
         // Twin: on a track the page translates on y (juskoe.vercel.app's
         // testimonial column, -167px by script), the capture caught the
         // row mid-run, and it keeps its findings.
@@ -5567,7 +6576,14 @@ mod tests {
         d.set_rect(column, 25.0, 3000.0, 340.0, 600.0);
         let moving = d.add(Some(column), "span");
         d.add_text(moving, "Juskoe made our launch painless");
-        d.set_styles(moving, &[("display", "inline"), ("fontSize", "16px"), ("lineHeight", "24px")]);
+        d.set_styles(
+            moving,
+            &[
+                ("display", "inline"),
+                ("fontSize", "16px"),
+                ("lineHeight", "24px"),
+            ],
+        );
         d.set_rect(moving, 30.0, 3400.4, 300.0, 17.0);
         d.set_text_rect(moving, 30.0, 3400.4, 300.0, 17.0);
         assert_eq!(unpainted_for(&d, moving, PaintGate::Text), None);
@@ -5581,7 +6597,10 @@ mod tests {
         d.set_styles(clamp, &[("overflowX", "hidden"), ("overflowY", "hidden")]);
         d.set_rect(clamp, 40.0, 900.0, 400.0, 72.0);
         let p = d.add(Some(clamp), "p");
-        d.add_text(p, "A summary clamped to three lines of a much longer paragraph of prose");
+        d.add_text(
+            p,
+            "A summary clamped to three lines of a much longer paragraph of prose",
+        );
         d.set_styles(p, &[("fontSize", "16px"), ("lineHeight", "24px")]);
         d.set_rect(p, 40.0, 900.0, 400.0, 144.0);
         d.set_text_rect(p, 40.0, 902.0, 400.0, 140.0);
@@ -5592,7 +6611,14 @@ mod tests {
         d.set_rect(feed, 25.0, 1205.4, 340.0, 200.0);
         let item = d.add(Some(feed), "span");
         d.add_text(item, "A row at the bottom of a scrolling feed");
-        d.set_styles(item, &[("display", "inline"), ("fontSize", "16px"), ("lineHeight", "24px")]);
+        d.set_styles(
+            item,
+            &[
+                ("display", "inline"),
+                ("fontSize", "16px"),
+                ("lineHeight", "24px"),
+            ],
+        );
         d.set_rect(item, 30.0, 1400.4, 300.0, 17.0);
         d.set_text_rect(item, 30.0, 1400.4, 300.0, 17.0);
         assert_eq!(unpainted_for(&d, item, PaintGate::Text), None);
@@ -5613,20 +6639,37 @@ mod tests {
         d.set_rect(date, 174.0, 116.0, 70.0, 20.0);
         assert_eq!(why(&d, date), None, "the base predicate keeps any overlap");
         assert_eq!(unpainted_for(&d, date, PaintGate::Box), None);
-        assert_eq!(unpainted_for(&d, date, PaintGate::Text), Some(Unpainted::ClippedOut));
+        assert_eq!(
+            unpainted_for(&d, date, PaintGate::Text),
+            Some(Unpainted::ClippedOut)
+        );
         // 30 of 70px shows: a copy a reader can make out still reports.
         d.set_rect(date, 210.0, 116.0, 70.0, 20.0);
         assert_eq!(unpainted_for(&d, date, PaintGate::Text), None);
         // The text's own extent is what shows, not the box around it.
         d.set_rect(date, -600.0, 116.0, 1000.0, 20.0);
         d.set_text_rect(date, 250.0, 118.0, 70.0, 16.0);
-        assert_eq!(unpainted_for(&d, date, PaintGate::Text), None, "text inside a wide box");
+        assert_eq!(
+            unpainted_for(&d, date, PaintGate::Text),
+            None,
+            "text inside a wide box"
+        );
         d.set_text_rect(date, 176.0, 118.0, 70.0, 16.0);
-        assert_eq!(unpainted_for(&d, date, PaintGate::Text), Some(Unpainted::ClippedOut));
+        assert_eq!(
+            unpainted_for(&d, date, PaintGate::Text),
+            Some(Unpainted::ClippedOut)
+        );
 
         // A box that truncates its line with an ellipsis shows the start of it.
         let truncate = d.add(Some(body), "div");
-        d.set_styles(truncate, &[("overflowX", "hidden"), ("overflowY", "hidden"), ("textOverflow", "ellipsis")]);
+        d.set_styles(
+            truncate,
+            &[
+                ("overflowX", "hidden"),
+                ("overflowY", "hidden"),
+                ("textOverflow", "ellipsis"),
+            ],
+        );
         d.set_rect(truncate, 20.0, 300.0, 150.0, 24.0);
         let label = d.add(Some(truncate), "span");
         d.set_style(label, "display", "inline");
@@ -5634,7 +6677,10 @@ mod tests {
         d.set_rect(label, 20.0, 300.0, 900.0, 24.0);
         assert_eq!(unpainted_for(&d, label, PaintGate::Text), None);
         d.set_style(truncate, "textOverflow", "clip");
-        assert_eq!(unpainted_for(&d, label, PaintGate::Text), Some(Unpainted::ClippedOut));
+        assert_eq!(
+            unpainted_for(&d, label, PaintGate::Text),
+            Some(Unpainted::ClippedOut)
+        );
 
         // Only the x axis is floored: a line-clamped standfirst shows its first
         // lines, while the text rects of the lines it hides run past its bottom.
@@ -5642,7 +6688,10 @@ mod tests {
         d.set_styles(clamp, &[("overflowX", "hidden"), ("overflowY", "hidden")]);
         d.set_rect(clamp, 40.0, 900.0, 400.0, 40.0);
         let standfirst = d.add(Some(clamp), "p");
-        d.add_text(standfirst, "A standfirst clamped to two lines of a much longer summary");
+        d.add_text(
+            standfirst,
+            "A standfirst clamped to two lines of a much longer summary",
+        );
         d.set_rect(standfirst, 40.0, 900.0, 400.0, 200.0);
         assert_eq!(unpainted_for(&d, standfirst, PaintGate::Text), None);
 
@@ -5656,7 +6705,10 @@ mod tests {
         let cell = d.add(Some(scroller), "div");
         d.add_text(cell, "Third column");
         d.set_rect(cell, 330.0, 1200.0, 150.0, 40.0);
-        assert_eq!(unpainted_for(&d, cell, PaintGate::Text), Some(Unpainted::ClippedOut));
+        assert_eq!(
+            unpainted_for(&d, cell, PaintGate::Text),
+            Some(Unpainted::ClippedOut)
+        );
         d.set_rect(cell, 250.0, 1200.0, 150.0, 40.0);
         assert_eq!(unpainted_for(&d, cell, PaintGate::Text), None);
     }
@@ -5669,9 +6721,16 @@ mod tests {
         d.add_text(edge, "2026.08.09");
         d.set_rect(edge, -66.0, 560.0, 70.0, 20.0);
         assert_eq!(why(&d, edge), None);
-        assert_eq!(unpainted_for(&d, edge, PaintGate::Text), Some(Unpainted::OutsideDocument));
+        assert_eq!(
+            unpainted_for(&d, edge, PaintGate::Text),
+            Some(Unpainted::OutsideDocument)
+        );
         d.set_rect(edge, -30.0, 560.0, 70.0, 20.0);
-        assert_eq!(unpainted_for(&d, edge, PaintGate::Text), None, "40 of 70px on the page");
+        assert_eq!(
+            unpainted_for(&d, edge, PaintGate::Text),
+            None,
+            "40 of 70px on the page"
+        );
         // Past the document's far edge the page shell cuts a line that starts
         // in view: a layout bug a visitor sees, which keeps reporting.
         d.set_rect(edge, 1270.0, 560.0, 70.0, 20.0);
@@ -5684,7 +6743,10 @@ mod tests {
         d.set_rect(edge, -66.0, 560.0, 70.0, 20.0);
         assert_eq!(unpainted_for(&d, edge, PaintGate::Text), None);
         d.set_rect(edge, 1276.0, 560.0, 70.0, 20.0);
-        assert_eq!(unpainted_for(&d, edge, PaintGate::Text), Some(Unpainted::OutsideDocument));
+        assert_eq!(
+            unpainted_for(&d, edge, PaintGate::Text),
+            Some(Unpainted::OutsideDocument)
+        );
     }
 
     /// The review's overflow probe at 390px: a non-wrapping row's second
@@ -5712,9 +6774,16 @@ mod tests {
         let right = d.add(Some(row), "div");
         d.set_rect(right, 320.0, 400.0, 320.0, 120.0);
         let p = d.add(Some(right), "p");
-        d.add_text(p, "The right column of the same row starts near the right edge of the phone screen");
+        d.add_text(
+            p,
+            "The right column of the same row starts near the right edge of the phone screen",
+        );
         d.set_rect(p, 340.0, 400.0, 280.0, 120.0);
-        assert_eq!(unpainted_for(&d, p, PaintGate::Text), None, "50 of 280px in view, cut by the page shell");
+        assert_eq!(
+            unpainted_for(&d, p, PaintGate::Text),
+            None,
+            "50 of 280px in view, cut by the page shell"
+        );
         // A desktop column 1,700px wide in the same shell.
         d.set_rect(p, 20.0, 400.0, 1700.0, 120.0);
         assert_eq!(unpainted_for(&d, p, PaintGate::Text), None);
@@ -5730,18 +6799,27 @@ mod tests {
 
         // A clip narrower than the page parks copies.
         d.set_rect(shell, 0.0, 0.0, 360.0, 2000.0);
-        assert_eq!(unpainted_for(&d, p, PaintGate::Text), Some(Unpainted::ClippedOut));
+        assert_eq!(
+            unpainted_for(&d, p, PaintGate::Text),
+            Some(Unpainted::ClippedOut)
+        );
         d.set_rect(shell, 0.0, 0.0, 390.0, 2000.0);
 
         // A scroller as wide as the page brings its cells into view.
         d.set_style(shell, "overflowX", "auto");
-        assert_eq!(unpainted_for(&d, p, PaintGate::Text), Some(Unpainted::ClippedOut));
+        assert_eq!(
+            unpainted_for(&d, p, PaintGate::Text),
+            Some(Unpainted::ClippedOut)
+        );
         d.set_style(shell, "overflowX", "hidden");
 
         // A track a script moves with transforms, as wide as the page.
         d.set_style(row, "transform", "matrix(1, 0, 0, 1, -40, 0)");
         d.el_mut(row).scroll_width = 640.0;
-        assert_eq!(unpainted_for(&d, p, PaintGate::Text), Some(Unpainted::ClippedOut));
+        assert_eq!(
+            unpainted_for(&d, p, PaintGate::Text),
+            Some(Unpainted::ClippedOut)
+        );
         d.set_style(row, "transform", "none");
 
         // With no measured viewport the width test proves nothing.
@@ -5758,12 +6836,23 @@ mod tests {
     fn a_zero_box_shows_the_text_that_overflows_it() {
         let (mut d, body) = page();
         let pin = d.add(Some(body), "span");
-        d.set_styles(pin, &[("position", "absolute"), ("overflowX", "visible"), ("overflowY", "visible")]);
+        d.set_styles(
+            pin,
+            &[
+                ("position", "absolute"),
+                ("overflowX", "visible"),
+                ("overflowY", "visible"),
+            ],
+        );
         d.add_text(pin, "Harbour office, open 9 to 5");
         d.set_rect(pin, 120.0, 60.0, 0.0, 0.0);
         d.el_mut(pin).scroll_width = 140.0;
         d.el_mut(pin).scroll_height = Some(15.0);
-        assert_eq!(unpainted_for(&d, pin, PaintGate::Text), None, "the label overflows visibly");
+        assert_eq!(
+            unpainted_for(&d, pin, PaintGate::Text),
+            None,
+            "the label overflows visibly"
+        );
         assert_eq!(unpainted_for(&d, pin, PaintGate::Box), None);
         // A metric the capture did not record keeps it.
         d.el_mut(pin).scroll_width = f64::NAN;
@@ -5772,12 +6861,18 @@ mod tests {
         // Nothing runs past its edges: no text shows.
         d.el_mut(pin).scroll_width = 0.0;
         d.el_mut(pin).scroll_height = Some(0.0);
-        assert_eq!(unpainted_for(&d, pin, PaintGate::Text), Some(Unpainted::NoArea));
+        assert_eq!(
+            unpainted_for(&d, pin, PaintGate::Text),
+            Some(Unpainted::NoArea)
+        );
         // A 0x0 box that hides its overflow shows none of it.
         d.el_mut(pin).scroll_width = 140.0;
         d.el_mut(pin).scroll_height = Some(15.0);
         d.set_styles(pin, &[("overflowX", "hidden"), ("overflowY", "hidden")]);
-        assert_eq!(unpainted_for(&d, pin, PaintGate::Text), Some(Unpainted::NoArea));
+        assert_eq!(
+            unpainted_for(&d, pin, PaintGate::Text),
+            Some(Unpainted::NoArea)
+        );
     }
 
     #[test]
@@ -5828,14 +6923,20 @@ mod tests {
     fn set_keyframes(d: &mut FakeDom, name: &str, frames_by_key: &[(&str, &[(&str, &str)])]) {
         let values: Vec<&[(&str, &str)]> = frames_by_key.iter().map(|(_, decls)| *decls).collect();
         d.keyframes.insert(name.into(), frames(&values));
-        d.keyframe_keys.insert(name.into(), frames_by_key.iter().map(|(k, _)| k.to_string()).collect());
+        d.keyframe_keys.insert(
+            name.into(),
+            frames_by_key.iter().map(|(k, _)| k.to_string()).collect(),
+        );
     }
 
     fn frames(values: &[&[(&str, &str)]]) -> Vec<crate::browser::dom::KeyframeFrame> {
         values
             .iter()
             .map(|decls| crate::browser::dom::KeyframeFrame {
-                decls: decls.iter().map(|(p, v)| (p.to_string(), v.to_string())).collect(),
+                decls: decls
+                    .iter()
+                    .map(|(p, v)| (p.to_string(), v.to_string()))
+                    .collect(),
             })
             .collect()
     }
@@ -5869,11 +6970,32 @@ mod tests {
         let bar = d.add(Some(body), "div");
         d.set_rect(bar, 40.0, 200.0, 300.0, 20.0);
         let old = d.add(Some(bar), "span");
-        d.set_styles(old, &[("fontSize", "10.5px"), ("opacity", "1"), ("position", "absolute")]);
+        d.set_styles(
+            old,
+            &[
+                ("fontSize", "10.5px"),
+                ("opacity", "1"),
+                ("position", "absolute"),
+            ],
+        );
         d.set_rect(old, 40.0, 200.0, 174.0, 20.0);
         d.add_text(old, "mail.google.com");
-        set_keyframes(&mut d, "ds-url-old", &[("0%, 35%", &[("opacity", "1")]), ("36%, 100%", &[("opacity", "0")])]);
-        set_keyframes(&mut d, "ds-url-new", &[("0%, 35%", &[("opacity", "0")]), ("37%, 100%", &[("opacity", "1")])]);
+        set_keyframes(
+            &mut d,
+            "ds-url-old",
+            &[
+                ("0%, 35%", &[("opacity", "1")]),
+                ("36%, 100%", &[("opacity", "0")]),
+            ],
+        );
+        set_keyframes(
+            &mut d,
+            "ds-url-new",
+            &[
+                ("0%, 35%", &[("opacity", "0")]),
+                ("37%, 100%", &[("opacity", "1")]),
+            ],
+        );
         one_shot(&mut d, old, "ds-url-old", "forwards");
         assert_eq!(text(&d, old), Some(Unpainted::FadesOut));
         d.set_style(old, "animationFillMode", "both");
@@ -5911,23 +7033,42 @@ mod tests {
         }
         // Two alternating runs end where they started; three end at 0.
         one_shot(&mut d, old, "ds-url-old", "forwards");
-        d.set_styles(old, &[("animationDirection", "alternate"), ("animationIterationCount", "2"), ("animationDuration", "4s")]);
+        d.set_styles(
+            old,
+            &[
+                ("animationDirection", "alternate"),
+                ("animationIterationCount", "2"),
+                ("animationDuration", "4s"),
+            ],
+        );
         assert_eq!(text(&d, old), None);
         d.set_style(old, "animationIterationCount", "3");
         assert_eq!(text(&d, old), Some(Unpainted::FadesOut));
 
         // Paired by position: the second name takes the second fill mode.
-        set_keyframes(&mut d, "drift", &[("to", &[("transform", "translateY(4px)")])]);
+        set_keyframes(
+            &mut d,
+            "drift",
+            &[("to", &[("transform", "translateY(4px)")])],
+        );
         one_shot(&mut d, old, "drift, ds-url-old", "none, forwards");
         assert_eq!(text(&d, old), Some(Unpainted::FadesOut));
         d.set_style(old, "animationFillMode", "forwards, none");
         assert_eq!(text(&d, old), None);
 
         // The end is the frame at 100%, wherever the stylesheet lists it.
-        set_keyframes(&mut d, "out-of-order", &[("to", &[("opacity", "0")]), ("from", &[("opacity", "1")])]);
+        set_keyframes(
+            &mut d,
+            "out-of-order",
+            &[("to", &[("opacity", "0")]), ("from", &[("opacity", "1")])],
+        );
         one_shot(&mut d, old, "out-of-order", "forwards");
         assert_eq!(text(&d, old), Some(Unpainted::FadesOut));
-        set_keyframes(&mut d, "out-of-order", &[("to", &[("opacity", "1")]), ("from", &[("opacity", "0")])]);
+        set_keyframes(
+            &mut d,
+            "out-of-order",
+            &[("to", &[("opacity", "1")]), ("from", &[("opacity", "0")])],
+        );
         assert_eq!(text(&d, old), None);
         // With no frame at 100% the box ends on its own opacity: unknown.
         set_keyframes(&mut d, "dip", &[("50%", &[("opacity", "0")])]);
@@ -5937,7 +7078,14 @@ mod tests {
         d.keyframe_keys.remove("ds-url-old");
         one_shot(&mut d, old, "ds-url-old", "forwards");
         assert_eq!(text(&d, old), None);
-        set_keyframes(&mut d, "ds-url-old", &[("0%, 35%", &[("opacity", "1")]), ("36%, 100%", &[("opacity", "0")])]);
+        set_keyframes(
+            &mut d,
+            "ds-url-old",
+            &[
+                ("0%, 35%", &[("opacity", "1")]),
+                ("36%, 100%", &[("opacity", "0")]),
+            ],
+        );
 
         // A capture that saw nothing running, and a recording made before
         // the fill mode, direction, duration and delay were read, keep base
@@ -5983,7 +7131,14 @@ mod tests {
         let video = d.add(Some(wrap), "video");
         d.set_rect(video, 14.0, 3431.0, 312.0, 553.0);
         let poster = d.add(Some(card), "img");
-        d.set_styles(poster, &[("opacity", "0"), ("transitionProperty", "all"), ("transitionDuration", "0s")]);
+        d.set_styles(
+            poster,
+            &[
+                ("opacity", "0"),
+                ("transitionProperty", "all"),
+                ("transitionDuration", "0s"),
+            ],
+        );
         d.set_rect(poster, 15.0, 3551.0, 312.0, 390.0);
         assert_eq!(raster(&d, poster), Some(Unpainted::StateLayer));
 
@@ -6000,7 +7155,14 @@ mod tests {
         let photo = d.add(Some(photo_wrap), "img");
         d.set_rect(photo, 15.0, 100.0, 312.0, 390.0);
         let buried = d.add(Some(stack), "img");
-        d.set_styles(buried, &[("opacity", "0"), ("transitionProperty", "all"), ("transitionDuration", "0s")]);
+        d.set_styles(
+            buried,
+            &[
+                ("opacity", "0"),
+                ("transitionProperty", "all"),
+                ("transitionDuration", "0s"),
+            ],
+        );
         d.set_rect(buried, 15.0, 100.0, 312.0, 390.0);
         assert_eq!(raster(&d, buried), None);
 
@@ -6025,11 +7187,22 @@ mod tests {
     fn a_loop_through_nothing_is_in_motion_and_a_breath_is_not() {
         let (mut d, body) = page();
         let note = d.add(Some(body), "li");
-        d.set_styles(note, &[("opacity", "1"), ("animationName", "orb-note"), ("animationIterationCount", "infinite")]);
+        d.set_styles(
+            note,
+            &[
+                ("opacity", "1"),
+                ("animationName", "orb-note"),
+                ("animationIterationCount", "infinite"),
+            ],
+        );
         d.set_running_animations(note, &["opacity", "box-shadow", "transform"]);
         d.keyframes.insert(
             "orb-note".into(),
-            frames(&[&[("transform", "scale(.6)"), ("opacity", "0")], &[("opacity", "1")], &[("opacity", "0")]]),
+            frames(&[
+                &[("transform", "scale(.6)"), ("opacity", "0")],
+                &[("opacity", "1")],
+                &[("opacity", "0")],
+            ]),
         );
         assert!(loops_in_motion(&d, note));
         // A recording that read no running animations, or saw none moving
@@ -6043,20 +7216,33 @@ mod tests {
         d.set_style(note, "animationIterationCount", "1");
         assert!(!loops_in_motion(&d, note));
         d.set_style(note, "animationIterationCount", "infinite");
-        d.keyframes.insert("orb-note".into(), frames(&[&[("opacity", "0.7")], &[("opacity", "1")]]));
+        d.keyframes.insert(
+            "orb-note".into(),
+            frames(&[&[("opacity", "0.7")], &[("opacity", "1")]]),
+        );
         assert!(!loops_in_motion(&d, note));
         // Paused, or with a second animation setting opacity: not decided.
-        d.keyframes.insert("orb-note".into(), frames(&[&[("opacity", "0")], &[("opacity", "1")]]));
+        d.keyframes.insert(
+            "orb-note".into(),
+            frames(&[&[("opacity", "0")], &[("opacity", "1")]]),
+        );
         assert!(loops_in_motion(&d, note));
         d.set_style(note, "animationPlayState", "paused");
         assert!(!loops_in_motion(&d, note));
         d.set_style(note, "animationPlayState", "running");
-        d.keyframes.insert("hold".into(), frames(&[&[("opacity", "1")]]));
+        d.keyframes
+            .insert("hold".into(), frames(&[&[("opacity", "1")]]));
         d.set_style(note, "animationName", "orb-note, hold");
         assert!(!loops_in_motion(&d, note));
         d.set_style(note, "animationName", "orb-note");
         // A marquee moves only its transform.
-        d.keyframes.insert("orb-note".into(), frames(&[&[("transform", "translateX(0)")], &[("transform", "translateX(-50%)")]]));
+        d.keyframes.insert(
+            "orb-note".into(),
+            frames(&[
+                &[("transform", "translateX(0)")],
+                &[("transform", "translateX(-50%)")],
+            ]),
+        );
         assert!(!loops_in_motion(&d, note));
     }
 }

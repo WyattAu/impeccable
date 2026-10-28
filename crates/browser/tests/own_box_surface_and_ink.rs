@@ -90,7 +90,11 @@ fn scan(engine: &BrowserEngine, fixture: &str) -> Vec<(String, String, String)> 
         .collect()
 }
 
-fn snippet<'a>(flagged: &'a [(String, String, String)], rule: &str, selector: &str) -> Option<&'a str> {
+fn snippet<'a>(
+    flagged: &'a [(String, String, String)],
+    rule: &str,
+    selector: &str,
+) -> Option<&'a str> {
     flagged
         .iter()
         .find(|(r, s, _)| r == rule && s == selector)
@@ -100,7 +104,10 @@ fn snippet<'a>(flagged: &'a [(String, String, String)], rule: &str, selector: &s
 #[test]
 fn own_box_surfaces_repainted_ink_and_pixel_reads() {
     let Some(engine) = engine() else { return };
-    if !fixtures_dir().join("own-box-surface-and-ink-contrast.html").exists() {
+    if !fixtures_dir()
+        .join("own-box-surface-and-ink-contrast.html")
+        .exists()
+    {
         eprintln!("skip: fixture not present");
         return;
     }
@@ -137,22 +144,45 @@ fn own_box_surfaces_repainted_ink_and_pixel_reads() {
     }
     // No other reveal word, and no SVG label without a fill, reports either.
     assert!(
-        !flagged.iter().any(|(rule, _, s)| rule == "low-contrast" && (s.contains("#acb0cf") || s.contains("#f2f4ef"))),
+        !flagged.iter().any(|(rule, _, s)| rule == "low-contrast"
+            && (s.contains("#acb0cf") || s.contains("#f2f4ef"))),
         "{flagged:#?}"
     );
-    assert!(!flagged.iter().any(|(rule, _, s)| rule == "gray-on-color" && s.contains("#363637")), "{flagged:#?}");
+    assert!(
+        !flagged
+            .iter()
+            .any(|(rule, _, s)| rule == "gray-on-color" && s.contains("#363637")),
+        "{flagged:#?}"
+    );
     // The button is printed against the gradient that paints it, not the
     // fill beneath, and the initials against the wheel, not the section.
-    let label = snippet(&flagged, "low-contrast", "#flag-label-on-pale-gradient-over-dark-fill").unwrap_or_default();
+    let label = snippet(
+        &flagged,
+        "low-contrast",
+        "#flag-label-on-pale-gradient-over-dark-fill",
+    )
+    .unwrap_or_default();
     assert!(
-        label.ends_with("(gradient on a#flag-label-on-pale-gradient-over-dark-fill)") && !label.contains("#1e3a8a"),
+        label.ends_with("(gradient on a#flag-label-on-pale-gradient-over-dark-fill)")
+            && !label.contains("#1e3a8a"),
         "{label}"
     );
-    let initials = snippet(&flagged, "low-contrast", "#flag-pale-initials-on-pastel-layers").unwrap_or_default();
-    assert!(initials.ends_with("(gradient on span.avatar)") && !initials.contains("#13162a"), "{initials}");
+    let initials = snippet(
+        &flagged,
+        "low-contrast",
+        "#flag-pale-initials-on-pastel-layers",
+    )
+    .unwrap_or_default();
+    assert!(
+        initials.ends_with("(gradient on span.avatar)") && !initials.contains("#13162a"),
+        "{initials}"
+    );
     // What only pixels can say is read from pixels: the date inside the
     // `aria-hidden` box, and the copy over the fixed image.
-    for selector in ["#flag-date-on-pale-photo-in-aria-hidden", "#flag-copy-on-fixed-pale-patch"] {
+    for selector in [
+        "#flag-date-on-pale-photo-in-aria-hidden",
+        "#flag-copy-on-fixed-pale-patch",
+    ] {
         let s = snippet(&flagged, "low-contrast", selector).unwrap_or_default();
         assert!(s.starts_with("pixel contrast "), "{selector}: {s}");
     }

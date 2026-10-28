@@ -10,10 +10,14 @@ fn tracking_hits(body: &str) -> usize {
          .run {{ font-size: 16px; line-height: 26px; width: 520px; }}\n\
          </style></head><body>{body}</body></html>\n"
     );
-    detect_html_source(&html, Path::new("/tmp/wide-tracking.html"), &DetectHtmlOptions::default())
-        .iter()
-        .filter(|f| f.antipattern == "wide-tracking")
-        .count()
+    detect_html_source(
+        &html,
+        Path::new("/tmp/wide-tracking.html"),
+        &DetectHtmlOptions::default(),
+    )
+    .iter()
+    .filter(|f| f.antipattern == "wide-tracking")
+    .count()
 }
 
 fn repo_root() -> std::path::PathBuf {
@@ -121,7 +125,11 @@ fn declared_uppercase_stays_exempt() {
 #[test]
 fn fixture_flag_and_pass_cases() {
     let fixture = repo_root().join("tests/fixtures/antipatterns/wide-tracking.html");
-    assert!(fixture.is_file(), "missing fixture at {}", fixture.display());
+    assert!(
+        fixture.is_file(),
+        "missing fixture at {}",
+        fixture.display()
+    );
     let html = std::fs::read_to_string(&fixture).unwrap();
     let findings = detect_html_source(&html, &fixture, &DetectHtmlOptions::default());
     let tracked = findings

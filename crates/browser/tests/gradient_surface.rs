@@ -70,13 +70,18 @@ fn engine() -> Option<BrowserEngine> {
 #[test]
 fn the_url_engine_reads_the_surface_under_the_text() {
     let Some(engine) = engine() else { return };
-    if !fixtures_dir().join("gradient-surface-contrast.html").exists() {
+    if !fixtures_dir()
+        .join("gradient-surface-contrast.html")
+        .exists()
+    {
         eprintln!("skip: fixture not present");
         return;
     }
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/gradient-surface-contrast.html");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     let snippets: Vec<String> = findings
         .iter()
         .filter(|f| f.antipattern == "low-contrast")
@@ -84,14 +89,26 @@ fn the_url_engine_reads_the_surface_under_the_text() {
         .collect();
 
     for (case, expected) in [
-        ("label on the light band of its gradient", "text #fffdf7 on #fde68a (gradient on a.band-button)"),
-        ("copy on a gradient too light everywhere", "(gradient on div.pale-panel)"),
-        ("link filled by a covering gradient", "text #d4d4d8 on #e4e4e7 (gradient on a.fill-link)"),
+        (
+            "label on the light band of its gradient",
+            "text #fffdf7 on #fde68a (gradient on a.band-button)",
+        ),
+        (
+            "copy on a gradient too light everywhere",
+            "(gradient on div.pale-panel)",
+        ),
+        (
+            "link filled by a covering gradient",
+            "text #d4d4d8 on #e4e4e7 (gradient on a.fill-link)",
+        ),
         ("label on a faint orange tint", "text #ea580d on #fdeee7"),
         ("span at half opacity", "text #b5b9c0 on #ffffff"),
         ("copy in a translucent ink", "text #acaeb3 on #ffffff"),
         ("copy inside a faded wrapper", "text #9399a1 on #ffffff"),
-        ("copy running to the light end of a banner", "(gradient on div.edge-banner)"),
+        (
+            "copy running to the light end of a banner",
+            "(gradient on div.edge-banner)",
+        ),
     ] {
         assert!(
             snippets.iter().any(|s| s.contains(expected)),
@@ -103,9 +120,17 @@ fn the_url_engine_reads_the_surface_under_the_text() {
     // and the navy tile beside them passes.
     let header = snippets.iter().filter(|s| s.contains("#cbd5e0")).count();
     assert_eq!(header, 1, "two links on one header, got {snippets:?}");
-    let tiles: Vec<&String> = snippets.iter().filter(|s| s.contains("text #fdfdfd")).collect();
+    let tiles: Vec<&String> = snippets
+        .iter()
+        .filter(|s| s.contains("text #fdfdfd"))
+        .collect();
     assert_eq!(tiles.len(), 2, "amber and lime tiles, got {snippets:?}");
-    assert!(tiles.iter().all(|s| s.ends_with("(gradient on div.feature-tile)")), "{tiles:?}");
+    assert!(
+        tiles
+            .iter()
+            .all(|s| s.ends_with("(gradient on div.feature-tile)")),
+        "{tiles:?}"
+    );
     for (case, color) in [
         ("label on the dark band of its gradient", "#fffdf8"),
         ("short copy at the dark end of a banner", "#dfdfe0"),

@@ -19,7 +19,9 @@ use impeccable_detect::config::{
 pub use impeccable_detect::config::{
     match_configured_extension, merge_extensions, normalize_extension_entries, ExtensionEntry,
 };
-use impeccable_detect::design_system::{load_design_system_for_cwd, resolve_design_md_path, DesignSystem};
+use impeccable_detect::design_system::{
+    load_design_system_for_cwd, resolve_design_md_path, DesignSystem,
+};
 use impeccable_detect::detect_text::{detect_text, TextOptions};
 use impeccable_detect::engines::{HtmlEngine, ScanOptions};
 use once_cell::sync::Lazy;
@@ -187,7 +189,13 @@ fn hook_state_dir(cwd: &str) -> String {
         let resolved = jsp::resolve(&proc_cwd, &[cwd]);
         let slug: String = resolved
             .chars()
-            .map(|c| if matches!(c, ':' | '\\' | '/' | '.') { '-' } else { c })
+            .map(|c| {
+                if matches!(c, ':' | '\\' | '/' | '.') {
+                    '-'
+                } else {
+                    c
+                }
+            })
             .collect();
         let digest = {
             use sha2::Digest;
@@ -195,7 +203,10 @@ fn hook_state_dir(cwd: &str) -> String {
             h.update(resolved.as_bytes());
             format!("{:x}", h.finalize())[..8].to_string()
         };
-        return jsp::join(&[&jsp::resolve(&proc_cwd, &[&root]), &format!("{}-{}", slug, digest)]);
+        return jsp::join(&[
+            &jsp::resolve(&proc_cwd, &[&root]),
+            &format!("{}-{}", slug, digest),
+        ]);
     }
     jsp::join(&[cwd, ".impeccable"])
 }
@@ -753,17 +764,16 @@ pub fn ensure_hook_git_excludes(rt: &Runtime, cwd: &str) -> GitExcludeResult {
         };
         format!("{prefix}{gap}{block}\n")
     };
-    if updated != existing {
-        if std::fs::create_dir_all(jsp::dirname(&target.path)).is_err()
-            || std::fs::write(&target.path, &updated).is_err()
-        {
-            return GitExcludeResult {
-                mode: "error",
-                file: None,
-                changed: false,
-                patterns: default_patterns,
-            };
-        }
+    if updated != existing
+        && (std::fs::create_dir_all(jsp::dirname(&target.path)).is_err()
+            || std::fs::write(&target.path, &updated).is_err())
+    {
+        return GitExcludeResult {
+            mode: "error",
+            file: None,
+            changed: false,
+            patterns: default_patterns,
+        };
     }
     GitExcludeResult {
         mode: "git-info-exclude",
@@ -1631,12 +1641,20 @@ pub fn design_system_options_for_file(
     file_path: &str,
 ) -> HookScanOptions {
     let ignored_linked_stylesheet: Option<Rc<dyn Fn(&str) -> bool>> = {
-        let (proc_cwd, globs, cwd) =
-            (rt.proc_cwd.clone(), config.ignore_files.clone(), project_cwd.to_string());
-        Some(Rc::new(move |path: &str| is_ignored_file(&proc_cwd, path, &cwd, &globs)))
+        let (proc_cwd, globs, cwd) = (
+            rt.proc_cwd.clone(),
+            config.ignore_files.clone(),
+            project_cwd.to_string(),
+        );
+        Some(Rc::new(move |path: &str| {
+            is_ignored_file(&proc_cwd, path, &cwd, &globs)
+        }))
     };
     if !config.design_system_enabled {
-        return HookScanOptions { ignored_linked_stylesheet, ..HookScanOptions::default() };
+        return HookScanOptions {
+            ignored_linked_stylesheet,
+            ..HookScanOptions::default()
+        };
     }
     let project = impeccable_context::context::resolve_project(
         project_cwd,
@@ -1652,7 +1670,10 @@ pub fn design_system_options_for_file(
     } else {
         &project.repo_root
     };
-    HookScanOptions { ignored_linked_stylesheet, ..design_system_options(config, root) }
+    HookScanOptions {
+        ignored_linked_stylesheet,
+        ..design_system_options(config, root)
+    }
 }
 
 /// The detector the hook drives: the regex engine from `impeccable-detect`
@@ -1787,7 +1808,10 @@ pub fn payload(text: &str, event_name: &str, harness: &str) -> String {
         if js::trim(text).is_empty() {
             return String::new();
         }
-        out.insert("decision".into(), Value::String(if harness == "gemini" { "deny" } else { "block" }.to_string()));
+        out.insert(
+            "decision".into(),
+            Value::String(if harness == "gemini" { "deny" } else { "block" }.to_string()),
+        );
         out.insert("reason".into(), Value::String(text.to_string()));
     } else {
         let mut inner = Map::new();
@@ -1873,7 +1897,10 @@ pub fn resolve_harness(rt: &Runtime, event: Option<&Map<String, Value>>) -> &'st
         _ => {}
     }
     if let Some(ev) = event {
-        if matches!(str_field(ev, "hook_event_name"), Some("BeforeTool" | "AfterAgent")) {
+        if matches!(
+            str_field(ev, "hook_event_name"),
+            Some("BeforeTool" | "AfterAgent")
+        ) {
             return "gemini";
         }
         // Grok Build sends camelCase `toolName`/`toolInput`/`hookEventName`
@@ -2055,7 +2082,12 @@ fn normalize_grok_event(
         .get("cwd")
         .filter(|v| truthy_value(Some(v)))
         .cloned()
-        .or_else(|| event.get("workspaceRoot").filter(|v| truthy_value(Some(v))).cloned())
+        .or_else(|| {
+            event
+                .get("workspaceRoot")
+                .filter(|v| truthy_value(Some(v)))
+                .cloned()
+        })
         .or_else(|| {
             rt.env("CURSOR_PROJECT_DIR")
                 .filter(|v| !v.is_empty())
@@ -2089,7 +2121,10 @@ fn normalize_grok_event(
     out.insert("tool_name".into(), tool_name);
     out.insert("tool_input".into(), Value::Object(tool_input));
     if event.contains_key("stopHookActive") && !event.contains_key("stop_hook_active") {
-        out.insert("stop_hook_active".into(), event.get("stopHookActive").cloned().unwrap_or(Value::Null));
+        out.insert(
+            "stop_hook_active".into(),
+            event.get("stopHookActive").cloned().unwrap_or(Value::Null),
+        );
     }
     out
 }

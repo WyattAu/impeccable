@@ -67,7 +67,9 @@ pub fn snapshot_loaded() -> bool {
 /// `snapshot_take_needs`.
 #[wasm_bindgen]
 pub fn snapshot_add_facts(json: &str) -> bool {
-    let Ok(facts) = serde_json::from_str::<Facts>(json) else { return false };
+    let Ok(facts) = serde_json::from_str::<Facts>(json) else {
+        return false;
+    };
     SNAPSHOT.with(|s| match s.borrow().as_ref() {
         Some(d) => {
             d.add_facts(&facts);
@@ -113,12 +115,14 @@ pub fn collect_findings_from_snapshot(snapshot_json: &str, config_json: &str) ->
     if snapshot_load(snapshot_json) == u32::MAX {
         return "{\"error\":\"snapshot did not parse\"}".into();
     }
-    let config: impeccable_core::browser::BrowserConfig = serde_json::from_str(config_json).unwrap_or_default();
+    let config: impeccable_core::browser::BrowserConfig =
+        serde_json::from_str(config_json).unwrap_or_default();
     SNAPSHOT.with(|s| {
         let guard = s.borrow();
         let d = guard.as_ref().expect("loaded");
         match impeccable_core::browser::snapshot::collect_findings_from_snapshot(d, &config) {
-            Ok(out) => serde_json::to_string(&out).unwrap_or_else(|_| "{\"groups\":[],\"pageLevel\":[]}".into()),
+            Ok(out) => serde_json::to_string(&out)
+                .unwrap_or_else(|_| "{\"groups\":[],\"pageLevel\":[]}".into()),
             Err(needs) => serde_json::json!({ "needs": needs }).to_string(),
         }
     })

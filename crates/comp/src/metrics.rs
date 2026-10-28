@@ -30,7 +30,11 @@ pub fn to_gray(img: &Image) -> Gray {
         *gi = (0.2126 * r + 0.7152 * gg + 0.0722 * b) as f32;
         p += 4;
     }
-    Gray { width: img.width, height: img.height, data: g }
+    Gray {
+        width: img.width,
+        height: img.height,
+        data: g,
+    }
 }
 
 #[inline]
@@ -77,12 +81,19 @@ pub fn blur_gray(gray: &Gray, r: i64) -> Gray {
                 - tmp[clampi(out_y, 0, height - 1) * width as usize + xu] as f64;
         }
     }
-    Gray { width: gray.width, height: gray.height, data: out }
+    Gray {
+        width: gray.width,
+        height: gray.height,
+        data: out,
+    }
 }
 
 /// JS: ssim(a, b, win=8). Global SSIM over a window grid.
 pub fn ssim(a: &Gray, b: &Gray, win: usize) -> f64 {
-    assert!(a.width == b.width && a.height == b.height, "ssim: size mismatch");
+    assert!(
+        a.width == b.width && a.height == b.height,
+        "ssim: size mismatch"
+    );
     let c1 = (0.01 * 255.0f64).powi(2);
     let c2 = (0.03 * 255.0f64).powi(2);
     let w = a.width;
@@ -138,8 +149,16 @@ pub fn ssim_shifted(a: &Gray, b: &Gray, dx: i64, dy: i64, win: usize) -> f64 {
         return 0.0;
     }
     let (w, h) = (w as usize, h as usize);
-    let mut sa = Gray { width: w, height: h, data: vec![0f32; w * h] };
-    let mut sb = Gray { width: w, height: h, data: vec![0f32; w * h] };
+    let mut sa = Gray {
+        width: w,
+        height: h,
+        data: vec![0f32; w * h],
+    };
+    let mut sb = Gray {
+        width: w,
+        height: h,
+        data: vec![0f32; w * h],
+    };
     let ax = 0i64.max(-dx) as usize;
     let ay = 0i64.max(-dy) as usize;
     let bx = 0i64.max(dx) as usize;
@@ -162,13 +181,25 @@ pub fn structure_score(img_a: &Image, img_b: &Image, work_width: usize) -> f64 {
     let win = 8f64.min(2f64.max((ww.min(h) / 8.0).floor())) as usize;
     let mut best = ssim(&a, &b, win);
     let max_shift = 2f64.max(round(ww * 0.04));
-    let steps = [-max_shift, -max_shift / 2.0, 0.0, max_shift / 2.0, max_shift];
+    let steps = [
+        -max_shift,
+        -max_shift / 2.0,
+        0.0,
+        max_shift / 2.0,
+        max_shift,
+    ];
     for &dy in &steps {
         for &dx in &steps {
             if dx == 0.0 && dy == 0.0 {
                 continue;
             }
-            best = best.max(ssim_shifted(&a, &b, round(dx) as i64, round(dy) as i64, win));
+            best = best.max(ssim_shifted(
+                &a,
+                &b,
+                round(dx) as i64,
+                round(dy) as i64,
+                win,
+            ));
         }
     }
     best.max(0.0).min(1.0)
@@ -189,7 +220,13 @@ fn rgb_to_lab(r: f64, g: f64, b: f64) -> [f64; 3] {
     let x = (rr * 0.4124 + gg * 0.3576 + bb * 0.1805) / 0.95047;
     let y = rr * 0.2126 + gg * 0.7152 + bb * 0.0722;
     let z = (rr * 0.0193 + gg * 0.1192 + bb * 0.9505) / 1.08883;
-    let f = |t: f64| if t > 0.008856 { t.cbrt() } else { 7.787 * t + 16.0 / 116.0 };
+    let f = |t: f64| {
+        if t > 0.008856 {
+            t.cbrt()
+        } else {
+            7.787 * t + 16.0 / 116.0
+        }
+    };
     let (fx, fy, fz) = (f(x), f(y), f(z));
     [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
 }
@@ -287,7 +324,11 @@ pub fn dominant_colors(img: &Image, k: usize, sample_step: usize) -> Vec<Dominan
             c.lab = rgb_to_lab(c.rgb[0], c.rgb[1], c.rgb[2]);
             c.w = tw;
         } else {
-            clusters.push(Cluster { rgb: [r, g, b], lab, w: ew });
+            clusters.push(Cluster {
+                rgb: [r, g, b],
+                lab,
+                w: ew,
+            });
         }
     }
     clusters.sort_by(|a, b| b.w.partial_cmp(&a.w).unwrap());
@@ -340,7 +381,11 @@ pub struct ColorScore {
 pub fn color_score(img_a: &Image, img_b: &Image) -> ColorScore {
     let inter = histogram_intersection(&color_histogram(img_a, 2), &color_histogram(img_b, 2));
     let pm = palette_match(&dominant_colors(img_a, 6, 3), &dominant_colors(img_b, 6, 3));
-    ColorScore { score: 0.35 * inter + 0.65 * pm, intersection: inter, palette_match: pm }
+    ColorScore {
+        score: 0.35 * inter + 0.65 * pm,
+        intersection: inter,
+        palette_match: pm,
+    }
 }
 
 // ---- detail ----------------------------------------------------------------
@@ -378,7 +423,11 @@ pub fn detail_grid(img: &Image, cols: usize, rows: usize, work_width: usize) -> 
             0.0
         };
     }
-    DetailGrid { cols, rows, cells: grid }
+    DetailGrid {
+        cols,
+        rows,
+        cells: grid,
+    }
 }
 
 /// JS: detailScore(imgA, imgB, cols=12, rows=8) -> { score, rawScore, addedFraction }.
@@ -432,7 +481,14 @@ pub fn diff_map(img_a: &Image, img_b: &Image, work_width: usize) -> Gray {
         *o = (1f64.min((dr * dr + dg * dg + db * db).sqrt() / 200.0)) as f32;
         p += 4;
     }
-    blur_gray(&Gray { width: work_width, height: hh, data: out }, 1)
+    blur_gray(
+        &Gray {
+            width: work_width,
+            height: hh,
+            data: out,
+        },
+        1,
+    )
 }
 
 // ---- bands -----------------------------------------------------------------
@@ -470,7 +526,10 @@ pub fn horizontal_bands(img: &Image, work_width: usize, min_gap: f64) -> Vec<Ban
         let db = row_mean[y * 3 + 2] as f64 - row_mean[(y - 1) * 3 + 2] as f64;
         let d = (dr * dr + dg * dg + db * db).sqrt();
         if d > 18.0 {
-            edges.push(Band { y: y as f64 / h, strength: 1f64.min(d / 120.0) });
+            edges.push(Band {
+                y: y as f64 / h,
+                strength: 1f64.min(d / 120.0),
+            });
         }
     }
     let mut merged: Vec<Band> = Vec::new();

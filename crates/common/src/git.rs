@@ -13,7 +13,8 @@ pub fn git_dir(dir: &str) -> Option<String> {
     }
     let raw = std::fs::read_to_string(&dot_git).ok()?;
     let (key, path) = raw.trim().split_once(':')?;
-    key.eq_ignore_ascii_case("gitdir").then(|| jsp::resolve(dir, &[path.trim()]))
+    key.eq_ignore_ascii_case("gitdir")
+        .then(|| jsp::resolve(dir, &[path.trim()]))
 }
 
 /// The shared directory a linked worktree's gitdir names in its `commondir`
@@ -42,7 +43,8 @@ pub fn linked_worktree_checkout(dir: &str) -> Option<String> {
 
 /// The header line of every `.gitignore` the engine writes into a runtime
 /// directory of the user's project.
-pub const RUNTIME_IGNORE_HEADER: &str = "# Written by Impeccable: local runtime state, never committed.";
+pub const RUNTIME_IGNORE_HEADER: &str =
+    "# Written by Impeccable: local runtime state, never committed.";
 
 /// Makes sure `<dir>/.gitignore` ignores each of `patterns`, creating the
 /// directory and the file when missing and appending only the patterns it
@@ -56,7 +58,11 @@ pub fn ensure_dir_ignored(dir: &str, patterns: &[&str]) {
     let file = jsp::join(&[dir, ".gitignore"]);
     let current = std::fs::read_to_string(&file).unwrap_or_default();
     let have: Vec<&str> = current.lines().map(str::trim).collect();
-    let missing: Vec<&str> = patterns.iter().copied().filter(|p| !have.contains(p)).collect();
+    let missing: Vec<&str> = patterns
+        .iter()
+        .copied()
+        .filter(|p| !have.contains(p))
+        .collect();
     if missing.is_empty() {
         return;
     }
@@ -80,12 +86,16 @@ mod tests {
 
     #[test]
     fn info_exclude_follows_a_linked_worktrees_commondir() {
-        let base = std::env::temp_dir().join(format!("impeccable-common-git-{}", std::process::id()));
+        let base =
+            std::env::temp_dir().join(format!("impeccable-common-git-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let tmp = base.to_string_lossy().into_owned();
 
         let plain = jsp::join(&[&tmp, "plain", ".git"]);
-        assert_eq!(info_exclude(&plain), jsp::join(&[&plain, "info", "exclude"]));
+        assert_eq!(
+            info_exclude(&plain),
+            jsp::join(&[&plain, "info", "exclude"])
+        );
 
         let worktree_git = jsp::join(&[&tmp, "repo", ".git", "worktrees", "wt"]);
         std::fs::create_dir_all(&worktree_git).unwrap();
@@ -100,7 +110,8 @@ mod tests {
 
     #[test]
     fn linked_worktree_checkout_needs_a_git_file_whose_gitdir_has_commondir() {
-        let base = std::env::temp_dir().join(format!("impeccable-common-wt-{}", std::process::id()));
+        let base =
+            std::env::temp_dir().join(format!("impeccable-common-wt-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let tmp = base.to_string_lossy().into_owned();
         let at = |parts: &[&str]| jsp::join(&[&[tmp.as_str()], parts].concat());
@@ -114,7 +125,11 @@ mod tests {
         assert_eq!(linked_worktree_checkout(&at(&["abs"])), checkout);
 
         std::fs::create_dir_all(at(&["rel"])).unwrap();
-        std::fs::write(at(&["rel", ".git"]), "GitDir: ../repo/.git/worktrees/wt\r\n").unwrap();
+        std::fs::write(
+            at(&["rel", ".git"]),
+            "GitDir: ../repo/.git/worktrees/wt\r\n",
+        )
+        .unwrap();
         assert_eq!(linked_worktree_checkout(&at(&["rel"])), checkout);
 
         std::fs::create_dir_all(at(&["plain", ".git"])).unwrap();
@@ -123,14 +138,22 @@ mod tests {
 
         std::fs::create_dir_all(at(&["repo", ".git", "modules", "sub"])).unwrap();
         std::fs::create_dir_all(at(&["repo", "sub"])).unwrap();
-        std::fs::write(at(&["repo", "sub", ".git"]), "gitdir: ../.git/modules/sub\n").unwrap();
+        std::fs::write(
+            at(&["repo", "sub", ".git"]),
+            "gitdir: ../.git/modules/sub\n",
+        )
+        .unwrap();
         assert_eq!(linked_worktree_checkout(&at(&["repo", "sub"])), None);
 
         let bare_git = at(&["bare.git", "worktrees", "wt"]);
         std::fs::create_dir_all(&bare_git).unwrap();
         std::fs::write(jsp::join(&[&bare_git, "commondir"]), "../..\n").unwrap();
         std::fs::create_dir_all(at(&["unrelated", "wt"])).unwrap();
-        std::fs::write(at(&["unrelated", "wt", ".git"]), format!("gitdir: {}\n", bare_git)).unwrap();
+        std::fs::write(
+            at(&["unrelated", "wt", ".git"]),
+            format!("gitdir: {}\n", bare_git),
+        )
+        .unwrap();
         assert_eq!(linked_worktree_checkout(&at(&["unrelated", "wt"])), None);
 
         // --separate-git-dir: the checkout's `.git` is a file naming the common dir.
@@ -138,8 +161,16 @@ mod tests {
         std::fs::create_dir_all(&sep_git).unwrap();
         std::fs::write(jsp::join(&[&sep_git, "commondir"]), "../..\n").unwrap();
         std::fs::create_dir_all(at(&["sep"])).unwrap();
-        std::fs::write(at(&["sep", ".git"]), format!("gitdir: {}\n", at(&["sep.git"]))).unwrap();
-        std::fs::write(at(&["unrelated", "wt", ".git"]), format!("gitdir: {}\n", sep_git)).unwrap();
+        std::fs::write(
+            at(&["sep", ".git"]),
+            format!("gitdir: {}\n", at(&["sep.git"])),
+        )
+        .unwrap();
+        std::fs::write(
+            at(&["unrelated", "wt", ".git"]),
+            format!("gitdir: {}\n", sep_git),
+        )
+        .unwrap();
         assert_eq!(linked_worktree_checkout(&at(&["unrelated", "wt"])), None);
 
         let _ = std::fs::remove_dir_all(&base);
@@ -152,12 +183,22 @@ mod tests {
         let d = dir.join("q").to_string_lossy().into_owned();
         ensure_dir_ignored(&d, &["*"]);
         let file = dir.join("q/.gitignore");
-        assert_eq!(std::fs::read_to_string(&file).unwrap(), format!("{}\n*\n", RUNTIME_IGNORE_HEADER));
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            format!("{}\n*\n", RUNTIME_IGNORE_HEADER)
+        );
         ensure_dir_ignored(&d, &["*"]);
-        assert_eq!(std::fs::read_to_string(&file).unwrap(), format!("{}\n*\n", RUNTIME_IGNORE_HEADER), "idempotent");
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            format!("{}\n*\n", RUNTIME_IGNORE_HEADER),
+            "idempotent"
+        );
         std::fs::write(&file, "mine.txt").unwrap();
         ensure_dir_ignored(&d, &["state.json"]);
-        assert_eq!(std::fs::read_to_string(&file).unwrap(), "mine.txt\nstate.json\n");
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            "mine.txt\nstate.json\n"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

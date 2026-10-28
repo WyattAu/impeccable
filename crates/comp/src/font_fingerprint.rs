@@ -22,8 +22,20 @@ pub const GROSS_STD_WEIGHT: f64 = 0.12;
 /// Feature names in fingerprint order (JS: FEATURES).
 pub static FEATURES: Lazy<Vec<String>> = Lazy::new(|| {
     let mut v: Vec<String> = vec![
-        "advance", "advTall", "advX", "advCV", "gap", "xRatio", "descRatio", "stemW", "contrast",
-        "serif", "roundFrac", "densTall", "densX", "runDensity",
+        "advance",
+        "advTall",
+        "advX",
+        "advCV",
+        "gap",
+        "xRatio",
+        "descRatio",
+        "stemW",
+        "contrast",
+        "serif",
+        "roundFrac",
+        "densTall",
+        "densX",
+        "runDensity",
     ]
     .into_iter()
     .map(String::from)
@@ -44,7 +56,11 @@ pub static FEATURES: Lazy<Vec<String>> = Lazy::new(|| {
 });
 
 static FEATURE_IDX: Lazy<HashMap<String, usize>> = Lazy::new(|| {
-    FEATURES.iter().enumerate().map(|(i, k)| (k.clone(), i)).collect()
+    FEATURES
+        .iter()
+        .enumerate()
+        .map(|(i, k)| (k.clone(), i))
+        .collect()
 });
 
 fn nfeat() -> usize {
@@ -59,7 +75,9 @@ pub struct FeatureVec {
 
 impl FeatureVec {
     pub fn empty() -> Self {
-        FeatureVec { vals: vec![None; nfeat()] }
+        FeatureVec {
+            vals: vec![None; nfeat()],
+        }
     }
     pub fn get(&self, key: &str) -> Option<f64> {
         FEATURE_IDX.get(key).and_then(|&i| self.vals[i])
@@ -123,7 +141,11 @@ fn med(a: &[f64]) -> Option<f64> {
     let mut s = a.to_vec();
     s.sort_by(|p, q| p.partial_cmp(q).unwrap());
     let m = s.len() >> 1;
-    Some(if s.len() % 2 == 1 { s[m] } else { (s[m - 1] + s[m]) / 2.0 })
+    Some(if s.len() % 2 == 1 {
+        s[m]
+    } else {
+        (s[m - 1] + s[m]) / 2.0
+    })
 }
 
 fn pct(a: &[f64], p: f64) -> Option<f64> {
@@ -197,8 +219,8 @@ fn otsu(gray: &crate::metrics::Gray) -> i64 {
         sum += i as f64 * h;
     }
     let (mut sum_b, mut w_b, mut best, mut thr) = (0f64, 0f64, 0f64, 128i64);
-    for t in 0..256 {
-        w_b += hist[t];
+    for (t, &h) in hist.iter().enumerate() {
+        w_b += h;
         if w_b == 0.0 {
             continue;
         }
@@ -206,7 +228,7 @@ fn otsu(gray: &crate::metrics::Gray) -> i64 {
         if w_f == 0.0 {
             break;
         }
-        sum_b += t as f64 * hist[t];
+        sum_b += t as f64 * h;
         let m_b = sum_b / w_b;
         let m_f = (sum - sum_b) / w_f;
         let between = w_b * w_f * (m_b - m_f).powi(2);
@@ -276,7 +298,13 @@ fn binarize(img: &Image) -> Bin {
     for i in 0..g.data.len() {
         cov_a[i] = (0f64.max(1f64.min((ground_level - g.data[i] as f64) / den))) as f32;
     }
-    Bin { w: g.width, h: g.height, ink, ink_is_dark, cov_a }
+    Bin {
+        w: g.width,
+        h: g.height,
+        ink,
+        ink_is_dark,
+        cov_a,
+    }
 }
 
 // ---- lines -----------------------------------------------------------------
@@ -334,8 +362,7 @@ fn find_lines(bin: &Bin) -> Vec<Line> {
         if row_ink[y] as f64 > floor {
             let y0 = y;
             while y < h
-                && (row_ink[y] as f64 > floor
-                    || (y + 1 < h && row_ink[y + 1] as f64 > floor))
+                && (row_ink[y] as f64 > floor || (y + 1 < h && row_ink[y + 1] as f64 > floor))
             {
                 y += 1;
             }
@@ -364,14 +391,29 @@ fn find_lines(bin: &Bin) -> Vec<Line> {
             }
             if !low && in_valley {
                 in_valley = false;
-                if yy - valley_start >= 3 && valley_start.wrapping_sub(start) >= 4 && valley_start >= start {
-                    lines.push(WorkLine { y0: start, y1: valley_start, run: ri, mass: 0.0, tall: false });
+                if yy - valley_start >= 3
+                    && valley_start.wrapping_sub(start) >= 4
+                    && valley_start >= start
+                {
+                    lines.push(WorkLine {
+                        y0: start,
+                        y1: valley_start,
+                        run: ri,
+                        mass: 0.0,
+                        tall: false,
+                    });
                     start = yy;
                 }
             }
         }
         if ry1 - start >= 4 {
-            lines.push(WorkLine { y0: start, y1: ry1, run: ri, mass: 0.0, tall: false });
+            lines.push(WorkLine {
+                y0: start,
+                y1: ry1,
+                run: ri,
+                mass: 0.0,
+                tall: false,
+            });
         }
     }
     for ln in lines.iter_mut() {
@@ -393,14 +435,21 @@ fn find_lines(bin: &Bin) -> Vec<Line> {
             }
         }
     }
-    let max_mass = lines.iter().filter(|l| !l.tall).fold(0f64, |acc, l| acc.max(l.mass));
+    let max_mass = lines
+        .iter()
+        .filter(|l| !l.tall)
+        .fold(0f64, |acc, l| acc.max(l.mass));
     let mut merged: Vec<Line> = Vec::new();
     for i in 0..lines.len() {
         if lines[i].tall {
             continue;
         }
         if lines[i].mass >= max_mass * 0.3 {
-            merged.push(Line { y0: lines[i].y0, y1: lines[i].y1, mass: lines[i].mass });
+            merged.push(Line {
+                y0: lines[i].y0,
+                y1: lines[i].y1,
+                mass: lines[i].mass,
+            });
             continue;
         }
         if i + 1 < lines.len() {
@@ -479,12 +528,20 @@ fn line_metrics(bin: &Bin, ln: &Line) -> Option<LMetrics> {
         return None;
     }
     let h_max_abs = pct(&hs, 0.995)?;
-    let top_cluster: Vec<f64> = hs.iter().cloned().filter(|&h| h >= h_max_abs * 0.94).collect();
+    let top_cluster: Vec<f64> = hs
+        .iter()
+        .cloned()
+        .filter(|&h| h >= h_max_abs * 0.94)
+        .collect();
     let r = med(&top_cluster)?;
     if r < 4.0 {
         return None;
     }
-    let low_hs: Vec<f64> = hs.iter().cloned().filter(|&h| h >= r * 0.3 && h <= r * 0.86).collect();
+    let low_hs: Vec<f64> = hs
+        .iter()
+        .cloned()
+        .filter(|&h| h >= r * 0.3 && h <= r * 0.86)
+        .collect();
     let mut xh: Option<f64> = None;
     if low_hs.len() as f64 >= 6f64.max(hs.len() as f64 * 0.12) {
         let m = mode_of(&low_hs, tol);
@@ -625,12 +682,16 @@ fn measure(bin: &Bin, lines: &[Line]) -> Option<Measured> {
         (vec![], vec![], vec![], vec![]);
     let (mut adv_tall, mut adv_all, mut adv_x, mut gaps): (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) =
         (vec![], vec![], vec![], vec![]);
-    let (mut stems, mut thins, mut serif_r): (Vec<f64>, Vec<f64>, Vec<f64>) = (vec![], vec![], vec![]);
+    let (mut stems, mut thins, mut serif_r): (Vec<f64>, Vec<f64>, Vec<f64>) =
+        (vec![], vec![], vec![]);
     let (mut round_flags, mut dens_tall, mut dens_x): (Vec<f64>, Vec<f64>, Vec<f64>) =
         (vec![], vec![], vec![]);
     let (mut cap_sum, mut cap_n) = (0f64, 0i64);
 
-    let mut metrics: Vec<LMetrics> = lines.iter().filter_map(|ln| line_metrics(bin, ln)).collect();
+    let mut metrics: Vec<LMetrics> = lines
+        .iter()
+        .filter_map(|ln| line_metrics(bin, ln))
+        .collect();
     if metrics.len() >= 2 {
         let with_x = metrics.iter().filter(|m| m.xh.is_some()).count();
         if with_x * 2 <= metrics.len() {
@@ -708,10 +769,14 @@ fn measure(bin: &Bin, lines: &[Line]) -> Option<Measured> {
             .filter(|g| g.w as f64 >= cap * 0.12 && (base - g.top as f64) >= cap * 0.3)
             .collect();
         glyph_n += big.len() as i64;
-        let on_base: Vec<&&Glyph> =
-            big.iter().filter(|g| (g.bot as f64 - base).abs() <= tol * 1.5).collect();
-        let cap_g: Vec<&&&Glyph> =
-            on_base.iter().filter(|g| base - g.top as f64 >= cap * 0.88).collect();
+        let on_base: Vec<&&Glyph> = big
+            .iter()
+            .filter(|g| (g.bot as f64 - base).abs() <= tol * 1.5)
+            .collect();
+        let cap_g: Vec<&&&Glyph> = on_base
+            .iter()
+            .filter(|g| base - g.top as f64 >= cap * 0.88)
+            .collect();
         let xs: Vec<&&&Glyph> = if let Some(xhv) = xh {
             on_base
                 .iter()
@@ -731,7 +796,11 @@ fn measure(bin: &Bin, lines: &[Line]) -> Option<Measured> {
         for g in &on_base {
             adv_all.push(g.w as f64 / cap);
             widths.push(g.w as f64 / cap);
-            round_flags.push(if g.w as f64 / (base - g.top as f64) > 0.9 { 1.0 } else { 0.0 });
+            round_flags.push(if g.w as f64 / (base - g.top as f64) > 0.9 {
+                1.0
+            } else {
+                0.0
+            });
         }
         for i in 0..big.len().saturating_sub(1) {
             let gap = big[i + 1].x0 as f64 - big[i].x1 as f64;
@@ -849,7 +918,14 @@ fn measure(bin: &Bin, lines: &[Line]) -> Option<Measured> {
     feats.set("wq25", pct(&widths, 0.25));
     feats.set("wq75", pct(&widths, 0.75));
     feats.set("advance", adv_m);
-    feats.set("advTall", if adv_tall.is_empty() { None } else { med(&adv_tall) });
+    feats.set(
+        "advTall",
+        if adv_tall.is_empty() {
+            None
+        } else {
+            med(&adv_tall)
+        },
+    );
     feats.set("advX", if adv_x.is_empty() { None } else { med(&adv_x) });
     feats.set(
         "advCV",
@@ -858,9 +934,30 @@ fn measure(bin: &Bin, lines: &[Line]) -> Option<Measured> {
             _ => None,
         },
     );
-    feats.set("gap", Some(if gaps.is_empty() { 0.0 } else { med(&gaps).unwrap() }));
-    feats.set("xRatio", if per_xh.is_empty() { None } else { med(&per_xh) });
-    feats.set("descRatio", if per_desc.is_empty() { None } else { med(&per_desc) });
+    feats.set(
+        "gap",
+        Some(if gaps.is_empty() {
+            0.0
+        } else {
+            med(&gaps).unwrap()
+        }),
+    );
+    feats.set(
+        "xRatio",
+        if per_xh.is_empty() {
+            None
+        } else {
+            med(&per_xh)
+        },
+    );
+    feats.set(
+        "descRatio",
+        if per_desc.is_empty() {
+            None
+        } else {
+            med(&per_desc)
+        },
+    );
     feats.set("runDensity", med(&per_run_density));
     feats.set("stemW", stem_w);
     feats.set(
@@ -870,10 +967,32 @@ fn measure(bin: &Bin, lines: &[Line]) -> Option<Measured> {
             _ => None,
         },
     );
-    feats.set("serif", if serif_r.len() >= 3 { med(&serif_r) } else { None });
-    feats.set("roundFrac", if round_flags.is_empty() { None } else { mean(&round_flags) });
-    let dt = if dens_tall.is_empty() { None } else { med(&dens_tall) };
-    let dx = if dens_x.is_empty() { None } else { med(&dens_x) };
+    feats.set(
+        "serif",
+        if serif_r.len() >= 3 {
+            med(&serif_r)
+        } else {
+            None
+        },
+    );
+    feats.set(
+        "roundFrac",
+        if round_flags.is_empty() {
+            None
+        } else {
+            mean(&round_flags)
+        },
+    );
+    let dt = if dens_tall.is_empty() {
+        None
+    } else {
+        med(&dens_tall)
+    };
+    let dx = if dens_x.is_empty() {
+        None
+    } else {
+        med(&dens_x)
+    };
     feats.set("densTall", dt);
     feats.set("densX", dx);
 
@@ -907,7 +1026,13 @@ fn isolate_dominant(bin: &Bin, lines: &[Line], tol: f64) -> Option<Iso> {
     let mut ms: Vec<Item> = Vec::new();
     for ln in lines {
         if let Some(m) = line_metrics(bin, ln) {
-            ms.push(Item { ln: ln.clone(), cap: m.cap, base: m.base, x_l: m.x_l, x_r: m.x_r });
+            ms.push(Item {
+                ln: ln.clone(),
+                cap: m.cap,
+                base: m.base,
+                x_l: m.x_l,
+                x_r: m.x_r,
+            });
         }
     }
     if ms.is_empty() {
@@ -924,12 +1049,18 @@ fn isolate_dominant(bin: &Bin, lines: &[Line], tol: f64) -> Option<Iso> {
     let mut clusters: Vec<Clu> = Vec::new();
     for &i in &order {
         let cap = ms[i].cap;
-        let found = clusters.iter_mut().find(|cl| (cl.cap - cap).abs() <= cl.cap * tol);
+        let found = clusters
+            .iter_mut()
+            .find(|cl| (cl.cap - cap).abs() <= cl.cap * tol);
         if let Some(c) = found {
             c.idxs.push(i);
             c.mass += ms[i].ln.mass;
         } else {
-            clusters.push(Clu { cap, idxs: vec![i], mass: ms[i].ln.mass });
+            clusters.push(Clu {
+                cap,
+                idxs: vec![i],
+                mass: ms[i].ln.mass,
+            });
         }
     }
     // sort clusters: multi (n>=3) first, then mass desc, then cap desc
@@ -937,7 +1068,11 @@ fn isolate_dominant(bin: &Bin, lines: &[Line], tol: f64) -> Option<Iso> {
         let a_multi = a.idxs.len() >= 3;
         let b_multi = b.idxs.len() >= 3;
         if a_multi != b_multi {
-            return if a_multi { std::cmp::Ordering::Less } else { std::cmp::Ordering::Greater };
+            return if a_multi {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Greater
+            };
         }
         b.mass
             .partial_cmp(&a.mass)
@@ -945,7 +1080,10 @@ fn isolate_dominant(bin: &Bin, lines: &[Line], tol: f64) -> Option<Iso> {
             .then(b.cap.partial_cmp(&a.cap).unwrap())
     });
     let keep_idxs = &clusters[0].idxs;
-    let cap_max = keep_idxs.iter().map(|&i| ms[i].cap).fold(f64::NEG_INFINITY, f64::max);
+    let cap_max = keep_idxs
+        .iter()
+        .map(|&i| ms[i].cap)
+        .fold(f64::NEG_INFINITY, f64::max);
     let (w, ink) = (bin.w, &bin.ink);
     let mut x0 = w;
     let mut x1 = 0usize;
@@ -1019,7 +1157,13 @@ fn mask_outside(bin: &Bin, x0: usize, x1: usize, lines: &[Line]) -> Bin {
             cov2[i] = bin.cov_a[i];
         }
     }
-    Bin { w, h, ink: ink2, ink_is_dark: bin.ink_is_dark, cov_a: cov2 }
+    Bin {
+        w,
+        h,
+        ink: ink2,
+        ink_is_dark: bin.ink_is_dark,
+        cov_a: cov2,
+    }
 }
 
 // ---- public fingerprint ----------------------------------------------------
@@ -1052,7 +1196,11 @@ pub struct FpOpts {
 
 impl Default for FpOpts {
     fn default() -> Self {
-        FpOpts { min_cap: 24.0, min_glyphs: 3, isolate: true }
+        FpOpts {
+            min_cap: 24.0,
+            min_glyphs: 3,
+            isolate: true,
+        }
     }
 }
 
@@ -1092,7 +1240,11 @@ pub fn fingerprint(img: &Image, opts: &FpOpts) -> Option<Fingerprint> {
                 }
             }
         }
-        let f2 = if !lines.is_empty() { measure(&bin, &lines) } else { None };
+        let f2 = if !lines.is_empty() {
+            measure(&bin, &lines)
+        } else {
+            None
+        };
         match f2 {
             Some(v) => f = v,
             None => scale = 1.0,
@@ -1157,7 +1309,10 @@ pub fn gross_gap(a: &dyn Fn(&str) -> Option<f64>, b: &dyn Fn(&str) -> Option<f64
             _ => None,
         }
     };
-    GrossGap { width: gap(wa, wb), weight: gap(ha, hb) }
+    GrossGap {
+        width: gap(wa, wb),
+        weight: gap(ha, hb),
+    }
 }
 
 /// JS: distance(a, b) with defaults p=1, zClip=3, gross=true.

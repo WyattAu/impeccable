@@ -58,11 +58,19 @@ fn handle(mut stream: TcpStream) {
     // 127.0.0.1, so the script is from another origin and the browser hands
     // over only the text of what it throws. No CORS header, no fixture file.
     let (status, content_type, body) = if rel == "vendor/redefine-src.js" {
-        ("200 OK", "text/javascript", VENDOR_TWIN_SCRIPT.as_bytes().to_vec())
+        (
+            "200 OK",
+            "text/javascript",
+            VENDOR_TWIN_SCRIPT.as_bytes().to_vec(),
+        )
     } else {
         match std::fs::read(fixtures_dir().join(&rel)) {
             Ok(body) if !rel.contains("..") => ("200 OK", "text/html; charset=utf-8", body),
-            _ => ("404 Not Found", "text/html; charset=utf-8", b"missing".to_vec()),
+            _ => (
+                "404 Not Found",
+                "text/html; charset=utf-8",
+                b"missing".to_vec(),
+            ),
         }
     };
     let head = format!(
@@ -85,7 +93,9 @@ fn scan(fixture: &str) -> Option<Vec<(String, String, String)>> {
     let engine = BrowserEngine::new(env);
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/{fixture}");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     Some(
         findings
             .iter()
@@ -174,18 +184,27 @@ fn script_errors_name_the_thrown_value_and_where_it_was_thrown() {
         "expected the thrown object with its source, got {errors:?}"
     );
     assert!(
-        errors.iter().any(|s| s.starts_with("Uncaught SyntaxError: ") && s.contains("/script-error.html:")),
+        errors
+            .iter()
+            .any(|s| s.starts_with("Uncaught SyntaxError: ") && s.contains("/script-error.html:")),
         "expected the syntax error, typed, got {errors:?}"
     );
     // Code with no script URL names V8's `<anonymous>` script, and its type.
     assert!(
-        errors.iter().any(|s| s.starts_with("Uncaught ReferenceError: missingAnalyticsQueue is not defined (at ")
+        errors.iter().any(|s| s
+            .starts_with("Uncaught ReferenceError: missingAnalyticsQueue is not defined (at ")
             && s.contains("<anonymous>:")),
         "expected the anonymous script's error with its source, got {errors:?}"
     );
     for snippet in &errors {
-        assert!(snippet.starts_with("Uncaught "), "script error without its marker: {snippet}");
-        assert!(snippet.contains(" (at "), "script error without a source: {snippet}");
+        assert!(
+            snippet.starts_with("Uncaught "),
+            "script error without its marker: {snippet}"
+        );
+        assert!(
+            snippet.contains(" (at "),
+            "script error without a source: {snippet}"
+        );
     }
     assert!(
         !errors.iter().any(|s| s.contains("handled quietly")),
@@ -200,22 +219,40 @@ fn one_throw_reported_sync_and_in_promise_reports_once() {
     };
     let errors = script_errors(&findings);
     // The same-origin pair arrives with an exception object to read.
-    let href: Vec<&&str> = errors.iter().filter(|s| s.contains("Cannot redefine property: href")).collect();
-    assert_eq!(href.len(), 1, "expected one report of the same-origin pair, got {errors:?}");
+    let href: Vec<&&str> = errors
+        .iter()
+        .filter(|s| s.contains("Cannot redefine property: href"))
+        .collect();
+    assert_eq!(
+        href.len(),
+        1,
+        "expected one report of the same-origin pair, got {errors:?}"
+    );
     assert!(
         href[0].starts_with("Uncaught TypeError: Cannot redefine property: href (at redefineHref, http://127.0.0.1:"),
         "expected the first report's text and source, got {errors:?}"
     );
     // The cross-origin pair arrives as CDP's text alone, which used to report twice.
-    let src: Vec<&&str> = errors.iter().filter(|s| s.contains("Cannot redefine property: src")).collect();
-    assert_eq!(src.len(), 1, "expected one report of the cross-origin pair, got {errors:?}");
+    let src: Vec<&&str> = errors
+        .iter()
+        .filter(|s| s.contains("Cannot redefine property: src"))
+        .collect();
+    assert_eq!(
+        src.len(),
+        1,
+        "expected one report of the cross-origin pair, got {errors:?}"
+    );
     assert!(
-        src[0].starts_with("Uncaught TypeError: Cannot redefine property: src (at redefineSrc, http://localhost:"),
+        src[0].starts_with(
+            "Uncaught TypeError: Cannot redefine property: src (at redefineSrc, http://localhost:"
+        ),
         "expected the first report's text and source, got {errors:?}"
     );
     // A different rejection still reports on its own, under the cap.
     assert!(
-        errors.iter().any(|s| s.starts_with("Uncaught (in promise) RangeError: storage quota exceeded")),
+        errors
+            .iter()
+            .any(|s| s.starts_with("Uncaught (in promise) RangeError: storage quota exceeded")),
         "expected the separate rejection, got {errors:?}"
     );
     assert!(
@@ -247,7 +284,9 @@ fn a_production_react_invariant_reads_as_its_message() {
         "expected the unknown invariant undecoded, got {errors:?}"
     );
     assert!(
-        errors.iter().any(|s| s.starts_with("Uncaught Error: Order #418 failed to sync (at syncOrder, ")),
+        errors
+            .iter()
+            .any(|s| s.starts_with("Uncaught Error: Order #418 failed to sync (at syncOrder, ")),
         "expected the plain error untouched, got {errors:?}"
     );
     assert_eq!(errors.len(), 3, "{errors:?}");
@@ -268,14 +307,28 @@ fn contrast_just_under_the_bar_prints_under_the_bar() {
         "2.99:1 (need 3:1) — text #595959 on #000000",
         "4.49:1 (need 4.5:1) — text #7b7b7b on #101010",
     ] {
-        assert!(low.iter().any(|s| s.starts_with(expected)), "expected {expected}, got {low:?}");
+        assert!(
+            low.iter().any(|s| s.starts_with(expected)),
+            "expected {expected}, got {low:?}"
+        );
     }
     for snippet in &low {
-        for bar in ["4.50:1 (need 4.5:1)", "4.5:1 (need 4.5:1)", "3.00:1 (need 3:1)", "3.0:1 (need 3:1)"] {
-            assert!(!snippet.contains(bar), "a failing ratio printed as the bar: {snippet}");
+        for bar in [
+            "4.50:1 (need 4.5:1)",
+            "4.5:1 (need 4.5:1)",
+            "3.00:1 (need 3:1)",
+            "3.0:1 (need 3:1)",
+        ] {
+            assert!(
+                !snippet.contains(bar),
+                "a failing ratio printed as the bar: {snippet}"
+            );
         }
         for readable in ["#767676", "#5a5a5a", "#787878"] {
-            assert!(!snippet.contains(readable), "a readable pair flagged: {snippet}");
+            assert!(
+                !snippet.contains(readable),
+                "a readable pair flagged: {snippet}"
+            );
         }
     }
 }
@@ -318,7 +371,9 @@ fn text_overflow_skips_marked_truncation_and_keeps_real_spills() {
         "flag-label-past-button",
     ] {
         assert!(
-            overflow.iter().any(|(s, sel)| s.contains(flag) || sel.contains(flag)),
+            overflow
+                .iter()
+                .any(|(s, sel)| s.contains(flag) || sel.contains(flag)),
             "expected {flag} to flag, got {overflow:?}"
         );
     }

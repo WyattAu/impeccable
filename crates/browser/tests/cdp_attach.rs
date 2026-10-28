@@ -91,7 +91,9 @@ const STRICT_CSP: &str = r#"<meta http-equiv="Content-Security-Policy" content="
 /// applies, and at `/strict` under [`STRICT_CSP`].
 fn serve_app() -> String {
     let open = PAGE.replace("LIST", &list_html()).replace("CSP\n", "");
-    let strict = PAGE.replace("LIST", &list_html()).replace("CSP", STRICT_CSP);
+    let strict = PAGE
+        .replace("LIST", &list_html())
+        .replace("CSP", STRICT_CSP);
     http::serve(move |path| match path {
         "/" => Some(("text/html; charset=utf-8", open.clone().into_bytes())),
         "/strict" => Some(("text/html; charset=utf-8", strict.clone().into_bytes())),
@@ -117,12 +119,20 @@ fn launch() -> Option<Browser> {
 }
 
 fn port_of(browser: &Browser) -> u16 {
-    let rest = browser.ws_url().strip_prefix("ws://127.0.0.1:").expect("ws url");
+    let rest = browser
+        .ws_url()
+        .strip_prefix("ws://127.0.0.1:")
+        .expect("ws url");
     rest.split('/').next().unwrap().parse().unwrap()
 }
 
 fn endpoint(port: u16) -> CdpEndpoint {
-    CdpEndpoint { host: "127.0.0.1".into(), port, browser_path: None, page_id: None }
+    CdpEndpoint {
+        host: "127.0.0.1".into(),
+        port,
+        browser_path: None,
+        page_id: None,
+    }
 }
 
 /// A plain CDP client: the test plays the app (and its owner), not the engine.
@@ -141,10 +151,16 @@ impl Raw {
     }
 
     fn call(&mut self, session: Option<&str>, method: &str, params: Value) -> Value {
-        self.try_call(session, method, params).unwrap_or_else(|e| panic!("{method}: {e}"))
+        self.try_call(session, method, params)
+            .unwrap_or_else(|e| panic!("{method}: {e}"))
     }
 
-    fn try_call(&mut self, session: Option<&str>, method: &str, params: Value) -> Result<Value, Value> {
+    fn try_call(
+        &mut self,
+        session: Option<&str>,
+        method: &str,
+        params: Value,
+    ) -> Result<Value, Value> {
         self.next += 1;
         let id = self.next;
         let mut msg = json!({ "id": id, "method": method, "params": params });
@@ -153,7 +169,9 @@ impl Raw {
         }
         self.ws.send(Message::Text(msg.to_string().into())).unwrap();
         loop {
-            let Message::Text(text) = self.ws.read().expect("raw read") else { continue };
+            let Message::Text(text) = self.ws.read().expect("raw read") else {
+                continue;
+            };
             let v: Value = serde_json::from_str(&text).unwrap();
             if v.get("id").and_then(Value::as_u64) == Some(id) {
                 return match v.get("error") {
@@ -166,19 +184,28 @@ impl Raw {
 
     /// Evaluate in the page's own world, without a user gesture.
     fn eval(&mut self, target: &str, expression: &str) -> Value {
-        self.try_eval(target, expression).unwrap_or_else(|e| panic!("page threw: {e}"))
+        self.try_eval(target, expression)
+            .unwrap_or_else(|e| panic!("page threw: {e}"))
     }
 
     /// [`Raw::eval`], with a page exception or a lost context as an error.
     fn try_eval(&mut self, target: &str, expression: &str) -> Result<Value, Value> {
-        let session = self.call(None, "Target.attachToTarget", json!({ "targetId": target, "flatten": true }));
+        let session = self.call(
+            None,
+            "Target.attachToTarget",
+            json!({ "targetId": target, "flatten": true }),
+        );
         let session = session["sessionId"].as_str().unwrap().to_string();
         let out = self.try_call(
             Some(&session),
             "Runtime.evaluate",
             json!({ "expression": expression, "returnByValue": true, "awaitPromise": true }),
         );
-        self.call(None, "Target.detachFromTarget", json!({ "sessionId": session }));
+        self.call(
+            None,
+            "Target.detachFromTarget",
+            json!({ "sessionId": session }),
+        );
         let out = out?;
         match out.get("exceptionDetails") {
             Some(e) => Err(e.clone()),
@@ -201,12 +228,19 @@ impl Raw {
     /// on `about:blank`, which is already `complete`, so the wait also
     /// checks that the fixture is the document.
     fn open(&mut self, url: &str, background: bool) -> String {
-        let created = self.call(None, "Target.createTarget", json!({ "url": url, "background": background }));
+        let created = self.call(
+            None,
+            "Target.createTarget",
+            json!({ "url": url, "background": background }),
+        );
         let target = created["targetId"].as_str().unwrap().to_string();
         let started = Instant::now();
         let loaded = format!("location.href === {} && document.readyState === 'complete' && !!document.getElementById('list')", json!(url));
         while self.try_eval(&target, &loaded).ok() != Some(json!(true)) {
-            assert!(started.elapsed() < Duration::from_secs(30), "page never loaded");
+            assert!(
+                started.elapsed() < Duration::from_secs(30),
+                "page never loaded"
+            );
             std::thread::sleep(Duration::from_millis(100));
         }
         target
@@ -282,29 +316,62 @@ fn attaches_scans_and_leaves_the_page_as_found() {
     // The launch's own about:blank tab is open too, so a bare --cdp is
     // ambiguous and names both pages.
     let ambiguous = attach::detect_cdp(&endpoint(port), None, &ScanOptions::default()).unwrap_err();
-    assert!(ambiguous.message.starts_with(&format!("2 pages are open on 127.0.0.1:{port}. Rerun with --target")), "{}", ambiguous.message);
-    assert!(ambiguous.message.contains(&format!("\n  {url}  \"Fixture App\"  (id {target})")), "{}", ambiguous.message);
-    assert!(ambiguous.message.contains("\n  about:blank"), "{}", ambiguous.message);
-    let none = attach::detect_cdp(&endpoint(port), Some("billing"), &ScanOptions::default()).unwrap_err();
-    assert!(none.message.contains("has a URL or title containing \"billing\""), "{}", none.message);
+    assert!(
+        ambiguous.message.starts_with(&format!(
+            "2 pages are open on 127.0.0.1:{port}. Rerun with --target"
+        )),
+        "{}",
+        ambiguous.message
+    );
+    assert!(
+        ambiguous
+            .message
+            .contains(&format!("\n  {url}  \"Fixture App\"  (id {target})")),
+        "{}",
+        ambiguous.message
+    );
+    assert!(
+        ambiguous.message.contains("\n  about:blank"),
+        "{}",
+        ambiguous.message
+    );
+    let none =
+        attach::detect_cdp(&endpoint(port), Some("billing"), &ScanOptions::default()).unwrap_err();
+    assert!(
+        none.message
+            .contains("has a URL or title containing \"billing\""),
+        "{}",
+        none.message
+    );
 
-    let scan = attach::detect_cdp(&endpoint(port), Some("fixture app"), &ScanOptions::default())
-        .unwrap_or_else(|e| panic!("scan failed: {}", e.message));
+    let scan = attach::detect_cdp(
+        &endpoint(port),
+        Some("fixture app"),
+        &ScanOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("scan failed: {}", e.message));
     let found = ids(&scan.findings);
     assert!(found.contains(&"tiny-text"), "{found:?}");
     assert!(found.contains(&"low-contrast"), "{found:?}");
-    assert!(scan.findings.iter().all(|f| f.file == url), "every finding names the page");
+    assert!(
+        scan.findings.iter().all(|f| f.file == url),
+        "every finding names the page"
+    );
     // The pixel pass read the text inside the list's scroller, which it had
     // to scroll into view: an attached page is read as it is on screen.
     assert!(
-        scan.findings.iter().any(|f| f.snippet.starts_with("pixel contrast ")
-            && f.extras.get("selector").and_then(Value::as_str) == Some("#list > div.vector-panel > p")),
+        scan.findings
+            .iter()
+            .any(|f| f.snippet.starts_with("pixel contrast ")
+                && f.extras.get("selector").and_then(Value::as_str)
+                    == Some("#list > div.vector-panel > p")),
         "{found:?}"
     );
     assert!(scan.notes.is_empty(), "{:?}", scan.notes);
 
     // Picking by id, as the listing offers, works too.
-    let by_id = attach::detect_cdp(&endpoint(port), Some(&target), &ScanOptions::default()).unwrap();
+    let by_id =
+        attach::detect_cdp(&endpoint(port), Some(&target), &ScanOptions::default()).unwrap();
     assert_eq!(ids(&by_id.findings), found);
 
     let after = raw.eval(&target, STATE_JS);
@@ -312,14 +379,27 @@ fn attaches_scans_and_leaves_the_page_as_found() {
     // The pixel pass ran (it added its hide style, and paused the playing
     // video), and its style is gone. The video it paused plays again; the
     // one the app had paused stays paused.
-    assert_eq!(raw.eval(&target, "document.documentElement.dataset.sawHideStyle"), json!("yes"));
-    assert_eq!(raw.eval(&target, "document.documentElement.dataset.sawPause"), json!("yes"));
+    assert_eq!(
+        raw.eval(&target, "document.documentElement.dataset.sawHideStyle"),
+        json!("yes")
+    );
+    assert_eq!(
+        raw.eval(&target, "document.documentElement.dataset.sawPause"),
+        json!("yes")
+    );
     assert_eq!(raw.eval(&target, MEDIA_STATE_JS), json!([true, false]));
-    let pages: Vec<String> = raw.pages().iter().map(|p| p["targetId"].as_str().unwrap().to_string()).collect();
+    let pages: Vec<String> = raw
+        .pages()
+        .iter()
+        .map(|p| p["targetId"].as_str().unwrap().to_string())
+        .collect();
     assert_eq!(pages.len(), 2, "no page opened or closed: {pages:?}");
     assert!(pages.contains(&target));
     let version = raw.call(None, "Browser.getVersion", json!({}));
-    assert!(version["product"].as_str().is_some_and(|p| !p.is_empty()), "browser still answers");
+    assert!(
+        version["product"].as_str().is_some_and(|p| !p.is_empty()),
+        "browser still answers"
+    );
     browser.close();
 }
 
@@ -333,11 +413,16 @@ fn an_attached_scan_reports_what_a_url_scan_reports() {
     let url = format!("{origin}/");
     let mut raw = Raw::connect(browser.ws_url());
     raw.open(&url, false);
-    let attached = attach::detect_cdp(&endpoint(port), Some(&origin), &ScanOptions::default()).unwrap();
+    let attached =
+        attach::detect_cdp(&endpoint(port), Some(&origin), &ScanOptions::default()).unwrap();
     browser.close();
     let engine = impeccable_browser::BrowserEngine::from_process_env();
-    let options = ScanOptions { viewport: None, ..ScanOptions::default() };
-    let loaded = impeccable_detect::engines::UrlEngine::detect_url_scan(&engine, &url, &options).unwrap();
+    let options = ScanOptions {
+        viewport: None,
+        ..ScanOptions::default()
+    };
+    let loaded =
+        impeccable_detect::engines::UrlEngine::detect_url_scan(&engine, &url, &options).unwrap();
     // The launch's headless window is smaller than a URL scan's 1280x800,
     // so compare the rules, not the geometry each one quotes.
     let mut a = ids(&attached.findings);
@@ -361,7 +446,10 @@ fn a_hidden_page_still_scans() {
     let url = format!("{origin}/strict");
     let mut raw = Raw::connect(browser.ws_url());
     let target = raw.open(&url, true);
-    assert_eq!(raw.eval(&target, "document.visibilityState"), json!("hidden"));
+    assert_eq!(
+        raw.eval(&target, "document.visibilityState"),
+        json!("hidden")
+    );
     assert_eq!(raw.eval(&target, SEED_JS), json!([411, 137]));
     let before = raw.eval(&target, STATE_JS);
     let started = Instant::now();
@@ -369,16 +457,26 @@ fn a_hidden_page_still_scans() {
         .unwrap_or_else(|e| panic!("scan failed: {}", e.message));
     let took = started.elapsed();
     assert!(took < Duration::from_secs(60), "hidden scan took {took:?}");
-    assert!(ids(&scan.findings).contains(&"tiny-text"), "{:?}", ids(&scan.findings));
+    assert!(
+        ids(&scan.findings).contains(&"tiny-text"),
+        "{:?}",
+        ids(&scan.findings)
+    );
     // A hidden page paints no frames, and on Linux a screenshot of it waits
     // for one forever: the pixel pass skips it and says so.
-    assert!(!scan.findings.iter().any(|f| f.snippet.starts_with("pixel contrast ")));
+    assert!(!scan
+        .findings
+        .iter()
+        .any(|f| f.snippet.starts_with("pixel contrast ")));
     assert_eq!(
         scan.notes,
         vec![format!("Capture note: {url} was hidden (minimized, or a background tab or window), so the pixel pass read nothing there. Bring it on screen, focused or not, and scan again for those contrast verdicts.")]
     );
     assert_eq!(raw.eval(&target, STATE_JS), before);
-    assert_eq!(raw.eval(&target, "document.visibilityState"), json!("hidden"));
+    assert_eq!(
+        raw.eval(&target, "document.visibilityState"),
+        json!("hidden")
+    );
     browser.close();
 }
 
@@ -403,13 +501,23 @@ fn work_left_running_stops_when_the_page_is_restored() {
     )
     .expect("start sweep");
     std::thread::sleep(Duration::from_millis(150));
-    assert_ne!(raw.eval(&target, "window.scrollY"), json!(411), "the sweep is running");
+    assert_ne!(
+        raw.eval(&target, "window.scrollY"),
+        json!(411),
+        "the sweep is running"
+    );
     let restored = page.evaluate_value(attach::RESTORE_JS).expect("restore");
     assert_eq!(restored["restored"], json!(true));
     page.close();
     attached.close();
     std::thread::sleep(Duration::from_millis(400));
-    assert_eq!(raw.eval(&target, "[window.scrollY, document.getElementById('list').scrollTop]"), json!([411, 137]));
+    assert_eq!(
+        raw.eval(
+            &target,
+            "[window.scrollY, document.getElementById('list').scrollTop]"
+        ),
+        json!([411, 137])
+    );
     browser.close();
 }
 
@@ -423,5 +531,9 @@ fn a_port_that_is_not_devtools_is_refused() {
         "{}",
         err.message
     );
-    assert!(err.message.contains("--remote-debugging-port"), "{}", err.message);
+    assert!(
+        err.message.contains("--remote-debugging-port"),
+        "{}",
+        err.message
+    );
 }

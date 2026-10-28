@@ -33,7 +33,11 @@ const COPY: &str = "This paragraph is reading copy that is comfortably longer th
 #[test]
 fn fixture_flag_and_pass_cases() {
     let fixture = repo_root().join("tests/fixtures/antipatterns/tight-leading.html");
-    assert!(fixture.is_file(), "missing fixture at {}", fixture.display());
+    assert!(
+        fixture.is_file(),
+        "missing fixture at {}",
+        fixture.display()
+    );
     let html = std::fs::read_to_string(&fixture).unwrap();
     let snippets = leading_snippets(&html, &fixture);
 
@@ -97,7 +101,11 @@ fn a_bold_title_in_a_line_clamp_passes() {
             &format!("span {{ {clamp} width: 290px; font-size: 15px; line-height: 18px; font-weight: {weight}; }}"),
             &format!("<span>{COPY}</span>"),
         ));
-        assert_eq!(hits.len(), 1, "weight {weight} in a clamp keeps the floor: {hits:?}");
+        assert_eq!(
+            hits.len(),
+            1,
+            "weight {weight} in a clamp keeps the floor: {hits:?}"
+        );
     }
     // Bold without a clamp: the lines cannot be counted without layout, so
     // the static engine keeps the floor.
@@ -148,7 +156,10 @@ fn heading_exemption_follows_the_ancestor() {
         "h3 { font-size: 30px; line-height: 34px; } a { color: #111; }",
         &format!("<h3><a href=\"/story\">{COPY}</a></h3>"),
     ));
-    assert!(link.is_empty(), "heading text in a child anchor passes: {link:?}");
+    assert!(
+        link.is_empty(),
+        "heading text in a child anchor passes: {link:?}"
+    );
 
     let role = scan(&page(
         "span { font-size: 22px; line-height: 28px; }",
@@ -162,14 +173,22 @@ fn heading_exemption_follows_the_ancestor() {
         "h3 { font-size: 16px; } p { width: 300px; font-size: 16px; line-height: 17.6px; }",
         &format!("<h3><p>{COPY}</p></h3>"),
     ));
-    assert_eq!(nested.len(), 1, "paragraph nested in a heading still flags: {nested:?}");
+    assert_eq!(
+        nested.len(),
+        1,
+        "paragraph nested in a heading still flags: {nested:?}"
+    );
 
     // So is an inline run inside that paragraph.
     let run = scan(&page(
         "h3 { font-size: 16px; } p { width: 300px; } span { font-size: 16px; line-height: 17.6px; }",
         &format!("<h3><p><span>{COPY}</span></p></h3>"),
     ));
-    assert_eq!(run.len(), 1, "span in a paragraph nested in a heading still flags: {run:?}");
+    assert_eq!(
+        run.len(),
+        1,
+        "span in a paragraph nested in a heading still flags: {run:?}"
+    );
 }
 
 #[test]
@@ -193,5 +212,8 @@ fn source_text_is_never_measured() {
              <p class=\"gone\">{COPY}</p><p class=\"off\">{COPY}</p>"
         ),
     ));
-    assert!(hits.is_empty(), "non-rendered text has no leading to judge: {hits:?}");
+    assert!(
+        hits.is_empty(),
+        "non-rendered text has no leading to judge: {hits:?}"
+    );
 }

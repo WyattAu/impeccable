@@ -161,7 +161,7 @@ mod tests {
     fn matching_geometry_with_different_color_or_aspect_is_not_enough() {
         let original = reference();
         let mut recolored = original.clone();
-        for pixel in recolored.data.chunks_exact_mut(4) {
+        for pixel in recolored.data.as_chunks_mut::<4>().0 {
             pixel[0] = pixel[0].saturating_sub(25);
             pixel[2] = pixel[2].saturating_add(25);
         }

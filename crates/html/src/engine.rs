@@ -271,7 +271,9 @@ pub fn detect_html_source(
                 if h.id == "bounce-easing"
                     && h.snippet.strip_prefix("animation: ").is_some_and(|names| {
                         impeccable_core::checks::css_scan::bounce_names_only_pulse(names, |name| {
-                            impeccable_core::checks::css_scan::css_keyframes_only_pulse(&css_text, name)
+                            impeccable_core::checks::css_scan::css_keyframes_only_pulse(
+                                &css_text, name,
+                            )
                         })
                     })
                 {
@@ -445,7 +447,9 @@ pub fn detect_html_source(
             || scan_css_text_for_row_stripe(&corpora.style_text, None),
         );
         for f in row_hits {
-            let Some(selector) = f.selector.as_deref() else { continue };
+            let Some(selector) = f.selector.as_deref() else {
+                continue;
+            };
             // The selector as written when the engine reads it, so a
             // `:not()` keeps excluding; stripped of what it cannot read
             // otherwise.
@@ -474,9 +478,13 @@ pub fn detect_html_source(
                         return true;
                     }
                     let style = el.style();
-                    resolve_side_accent_corners(el, style, pf0(sv(style, "width"))).is_some_and(|c| {
-                        [c.top_left, c.top_right, c.bottom_right, c.bottom_left].iter().all(|r| *r <= 0.0)
-                    })
+                    resolve_side_accent_corners(el, style, pf0(sv(style, "width"))).is_some_and(
+                        |c| {
+                            [c.top_left, c.top_right, c.bottom_right, c.bottom_left]
+                                .iter()
+                                .all(|r| *r <= 0.0)
+                        },
+                    )
                 })
                 .collect();
             if hosts.is_empty() || hosts.iter().all(|el| scoped_ignore_active(el, &f.id)) {

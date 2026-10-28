@@ -73,7 +73,12 @@ pub fn ink_box(img: &Image) -> Option<InkBox> {
     if x1 < 0 {
         return None;
     }
-    Some(InkBox { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 })
+    Some(InkBox {
+        x: x0,
+        y: y0,
+        w: x1 - x0 + 1,
+        h: y1 - y0 + 1,
+    })
 }
 
 /// JS: inkColor(img). Heaviest non-ground cluster.
@@ -105,33 +110,62 @@ fn text_ink_color(img: &Image) -> Option<InkColor> {
     let polarity = fingerprint(img, &FpOpts::default())
         .filter(|fp| fp.glyphs >= 6 && fp.cap_height_px < img.height as f64 * 0.6)
         .map(|fp| fp.ink_is_dark);
-    let ink = cols.iter().skip(1).find(|c| {
-        delta_e(c.lab, ground.lab) > 20.0 && !colour_spans_edge(img, &c.hex)
-            && polarity.is_none_or(|dark| (c.lab[0] < ground.lab[0]) == dark)
-    }).cloned();
+    let ink = cols
+        .iter()
+        .skip(1)
+        .find(|c| {
+            delta_e(c.lab, ground.lab) > 20.0
+                && !colour_spans_edge(img, &c.hex)
+                && polarity.is_none_or(|dark| (c.lab[0] < ground.lab[0]) == dark)
+        })
+        .cloned();
     Some(InkColor { ground, ink })
 }
 
 fn colour_spans_edge(img: &Image, hex: &str) -> bool {
-    if img.width == 0 || img.height == 0 { return true; }
-    let rgb: Vec<u8> = (1..7).step_by(2).filter_map(|i| u8::from_str_radix(&hex[i..i+2], 16).ok()).collect();
-    if rgb.len() != 3 { return true; }
+    if img.width == 0 || img.height == 0 {
+        return true;
+    }
+    let rgb: Vec<u8> = (1..7)
+        .step_by(2)
+        .filter_map(|i| u8::from_str_radix(&hex[i..i + 2], 16).ok())
+        .collect();
+    if rgb.len() != 3 {
+        return true;
+    }
     let matches = |x: usize, y: usize| {
         let p = &img.data[(y * img.width + x) * 4..];
-        (0..3).map(|i| (p[i] as i32 - rgb[i] as i32).pow(2)).sum::<i32>() < 40 * 40
+        (0..3)
+            .map(|i| (p[i] as i32 - rgb[i] as i32).pow(2))
+            .sum::<i32>()
+            < 40 * 40
     };
     // A surround runs unbroken (1px gaps tolerated) along a long edge. Lettering cropped
     // to its ink touches edges too, but in stem-wide runs, or along the short sides.
     let spans = |len: usize, hit: &dyn Fn(usize) -> bool| {
         let (mut run, mut gap, mut best) = (0, 0, 0);
         for i in 0..len {
-            if hit(i) { run += gap + 1; gap = 0; best = best.max(run); }
-            else if run > 0 && gap < 1 { gap += 1; } else { run = 0; gap = 0; }
+            if hit(i) {
+                run += gap + 1;
+                gap = 0;
+                best = best.max(run);
+            } else if run > 0 && gap < 1 {
+                gap += 1;
+            } else {
+                run = 0;
+                gap = 0;
+            }
         }
         best * 4 > len
     };
-    (img.width >= img.height && [0, img.height - 1].iter().any(|&y| spans(img.width, &|x| matches(x, y))))
-        || (img.height >= img.width && [0, img.width - 1].iter().any(|&x| spans(img.height, &|y| matches(x, y))))
+    (img.width >= img.height
+        && [0, img.height - 1]
+            .iter()
+            .any(|&y| spans(img.width, &|x| matches(x, y))))
+        || (img.height >= img.width
+            && [0, img.width - 1]
+                .iter()
+                .any(|&x| spans(img.height, &|y| matches(x, y))))
 }
 
 /// A spec region (minimal: only the fields the pure checks read).
@@ -181,9 +215,9 @@ pub fn text_region_check(region: &Region, comp_crop: &Image, build_crop: &Image)
         return colour_only(&mut findings);
     }
     let bfp = fingerprint(build_crop, &FpOpts::default());
-    let metrics_build = bfp.as_ref().map(|b| {
-        json!({ "cap": b.cap_height_px, "lines": b.lines, "glyphs": b.glyphs })
-    });
+    let metrics_build = bfp
+        .as_ref()
+        .map(|b| json!({ "cap": b.cap_height_px, "lines": b.lines, "glyphs": b.glyphs }));
     let mut metrics = json!({
         "comp": { "cap": comp.cap_height_px, "lines": comp.lines, "glyphs": comp.glyphs },
         "build": metrics_build.clone().unwrap_or(Value::Null),
@@ -215,7 +249,10 @@ pub fn text_region_check(region: &Region, comp_crop: &Image, build_crop: &Image)
             chosen
         ));
     }
-    if comp.lines >= 2 && bfp.lines != comp.lines && (bfp.lines as i64 - comp.lines as i64).abs() >= 1 {
+    if comp.lines >= 2
+        && bfp.lines != comp.lines
+        && (bfp.lines as i64 - comp.lines as i64).abs() >= 1
+    {
         findings.push(format!(
             "text {}: {} line{} in the build, {} in the comp; the measure (max-width, font-size, letter-spacing) wraps it differently, so the block is a different shape",
             region.id,
@@ -296,10 +333,10 @@ pub fn text_region_check(region: &Region, comp_crop: &Image, build_crop: &Image)
     // They are not the first line of its lettering. Whole-control placement
     // and shape remain checked by the independent region comparison.
     if region.kind != "control" {
-      if let (Some(ba), Some(bb)) = (ink_box(comp_crop), ink_box(build_crop)) {
-        let dy = bb.y - ba.y;
-        if (dy as f64).abs() > 12f64.max(comp_crop.height as f64 * 0.15) {
-            findings.push(format!(
+        if let (Some(ba), Some(bb)) = (ink_box(comp_crop), ink_box(build_crop)) {
+            let dy = bb.y - ba.y;
+            if (dy as f64).abs() > 12f64.max(comp_crop.height as f64 * 0.15) {
+                findings.push(format!(
                 "text {}: its first line starts {}px {} than in the comp ({}px vs {}px into the region box); the spacing above it is {}",
                 region.id,
                 (round(dy as f64) as i64).abs(),
@@ -308,17 +345,21 @@ pub fn text_region_check(region: &Region, comp_crop: &Image, build_crop: &Image)
                 ba.y,
                 if dy > 0 { "too large" } else { "too small" }
             ));
+            }
+            let dx = bb.x - ba.x;
+            if (dx as f64).abs() > 12f64.max(comp_crop.width as f64 * 0.15) {
+                findings.push(format!(
+                    "text {}: it starts {}px {} than in the comp",
+                    region.id,
+                    (round(dx as f64) as i64).abs(),
+                    if dx > 0 {
+                        "further right"
+                    } else {
+                        "further left"
+                    }
+                ));
+            }
         }
-        let dx = bb.x - ba.x;
-        if (dx as f64).abs() > 12f64.max(comp_crop.width as f64 * 0.15) {
-            findings.push(format!(
-                "text {}: it starts {}px {} than in the comp",
-                region.id,
-                (round(dx as f64) as i64).abs(),
-                if dx > 0 { "further right" } else { "further left" }
-            ));
-        }
-    }
     }
     metrics["capDelta"] = json!(round_fixed(cap_delta, 3));
     json!({ "findings": findings, "metrics": metrics })
@@ -390,7 +431,9 @@ pub fn chrome_strip_check(region: &Region, comp_crop: &Image, build_crop: &Image
         (Some(a), Some(b)) => (a, b),
         _ => return json!({ "findings": findings }),
     };
-    if (ba.w as f64) >= comp_crop.width as f64 * 0.6 && (ba.h as f64) <= comp_crop.height as f64 * 0.6 {
+    if (ba.w as f64) >= comp_crop.width as f64 * 0.6
+        && (ba.h as f64) <= comp_crop.height as f64 * 0.6
+    {
         let dh = bb.h - ba.h;
         if (dh as f64).abs() > 10f64.max(ba.h as f64 * 0.25) {
             findings.push(format!(
@@ -480,9 +523,8 @@ static RE_SHAPE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)<(polyline|polygon|line|circle|ellipse|rect)\b").unwrap());
 static RE_D: Lazy<Regex> = Lazy::new(|| Regex::new(r#"\sd="([^"]*)""#).unwrap());
 static RE_POINTS: Lazy<Regex> = Lazy::new(|| Regex::new(r#"\spoints="([^"]*)""#).unwrap());
-static RE_VB: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"viewBox="\s*[-\d.]+\s+[-\d.]+\s+([\d.]+)\s+([\d.]+)"#).unwrap()
-});
+static RE_VB: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r#"viewBox="\s*[-\d.]+\s+[-\d.]+\s+([\d.]+)\s+([\d.]+)"#).unwrap());
 static RE_W: Lazy<Regex> = Lazy::new(|| Regex::new(r#"\swidth="([\d.]+)(px)?""#).unwrap());
 static RE_H: Lazy<Regex> = Lazy::new(|| Regex::new(r#"\sheight="([\d.]+)(px)?""#).unwrap());
 static RE_USE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)<use\b").unwrap());
@@ -498,7 +540,8 @@ pub fn svg_illustrations(html: &str) -> Vec<Value> {
     for m in RE_SVG.captures_iter(html) {
         let attrs = m.get(1).map(|g| g.as_str()).unwrap_or("");
         let body = m.get(2).map(|g| g.as_str()).unwrap_or("");
-        let paths = RE_PATH.find_iter(body).count() as i64 + RE_SHAPE.find_iter(body).count() as i64;
+        let paths =
+            RE_PATH.find_iter(body).count() as i64 + RE_SHAPE.find_iter(body).count() as i64;
         let mut budget = 0i64;
         for c in RE_D.captures_iter(body) {
             budget += c.get(1).unwrap().as_str().len() as i64;
@@ -525,7 +568,8 @@ pub fn svg_illustrations(html: &str) -> Vec<Value> {
         if icon_sized && budget <= path_budget {
             continue;
         }
-        if budget <= path_budget && paths <= max_paths && long == 0.0 && !RE_TEXTIMG.is_match(body) {
+        if budget <= path_budget && paths <= max_paths && long == 0.0 && !RE_TEXTIMG.is_match(body)
+        {
             continue;
         }
         if budget > path_budget || paths > max_paths || (long > icon_px && paths > 0) {
@@ -536,7 +580,11 @@ pub fn svg_illustrations(html: &str) -> Vec<Value> {
                 RE_WS.replace_all(&attr_slice, " "),
                 paths,
                 budget,
-                if long != 0.0 { format!(", {}px", n(long)) } else { String::new() }
+                if long != 0.0 {
+                    format!(", {}px", n(long))
+                } else {
+                    String::new()
+                }
             );
             out.push(json!({
                 "snippet": snippet,
@@ -555,19 +603,25 @@ mod foreground_tests {
     use super::*;
     use crate::raster::create_image;
 
-    fn button(ink: [u8;4]) -> Image {
-        let mut image = create_image(120, 40, [248,216,71,255]);
-        for y in 0..40 { for x in 0..120 {
-            let colour = if y < 3 || y >= 37 {[190,70,27,255]}
-                else if (12..28).contains(&y) && x > 15 && x < 105 && x % 8 < 3 {ink}
-                else {continue};
-            image.data[(y*120+x)*4..(y*120+x)*4+4].copy_from_slice(&colour);
-        }}
+    fn button(ink: [u8; 4]) -> Image {
+        let mut image = create_image(120, 40, [248, 216, 71, 255]);
+        for y in 0..40 {
+            for x in 0..120 {
+                let colour = if !(3..37).contains(&y) {
+                    [190, 70, 27, 255]
+                } else if (12..28).contains(&y) && x > 15 && x < 105 && x % 8 < 3 {
+                    ink
+                } else {
+                    continue;
+                };
+                image.data[(y * 120 + x) * 4..(y * 120 + x) * 4 + 4].copy_from_slice(&colour);
+            }
+        }
         image
     }
     #[test]
     fn surrounding_panel_is_not_prescribed_as_control_lettering() {
-        let image = button([8,40,72,255]);
+        let image = button([8, 40, 72, 255]);
         let chosen = text_ink_color(&image).unwrap().ink.unwrap();
         assert!(!colour_spans_edge(&image, &chosen.hex));
         assert_ne!(chosen.hex, "#be461b");
@@ -575,42 +629,87 @@ mod foreground_tests {
     }
     #[test]
     fn incorrect_interior_lettering_still_produces_colour_feedback() {
-        let region = Region { id:"action".into(), kind:"control".into(), chosen:None };
-        let result = text_region_check(&region, &button([8,40,72,255]), &button([180,20,180,255]));
-        assert!(result["findings"].as_array().unwrap().iter().any(|f|f.as_str().unwrap().contains("ink is")), "{result}");
+        let region = Region {
+            id: "action".into(),
+            kind: "control".into(),
+            chosen: None,
+        };
+        let result = text_region_check(
+            &region,
+            &button([8, 40, 72, 255]),
+            &button([180, 20, 180, 255]),
+        );
+        assert!(
+            result["findings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|f| f.as_str().unwrap().contains("ink is")),
+            "{result}"
+        );
     }
     #[test]
     fn control_outline_does_not_become_text_colour_or_first_line() {
-        let a = button([8,40,72,255]);
+        let a = button([8, 40, 72, 255]);
         let mut b = a.clone();
         // A different outer surround must not move the lettering's first line.
-        for y in [0,1,2,37,38,39] { for x in 0..120 {
-            b.data[(y*120+x)*4..(y*120+x)*4+4].copy_from_slice(&[248,216,71,255]);
-        }}
-        let region = Region { id:"action".into(), kind:"control".into(), chosen:None };
-        let result = text_region_check(&region,&a,&b);
-        assert!(!result["findings"].as_array().unwrap().iter().any(|f| {
-            let s=f.as_str().unwrap();s.contains("first line") || s.contains("ink is")
-        }), "{result}");
+        for y in [0, 1, 2, 37, 38, 39] {
+            for x in 0..120 {
+                b.data[(y * 120 + x) * 4..(y * 120 + x) * 4 + 4]
+                    .copy_from_slice(&[248, 216, 71, 255]);
+            }
+        }
+        let region = Region {
+            id: "action".into(),
+            kind: "control".into(),
+            chosen: None,
+        };
+        let result = text_region_check(&region, &a, &b);
+        assert!(
+            !result["findings"].as_array().unwrap().iter().any(|f| {
+                let s = f.as_str().unwrap();
+                s.contains("first line") || s.contains("ink is")
+            }),
+            "{result}"
+        );
     }
-    fn lettering(ink: [u8;4], margin: usize) -> Image {
+    fn lettering(ink: [u8; 4], margin: usize) -> Image {
         // Eight H glyphs 10x16, 3px stems and bar, 4px apart, cropped to the ink plus `margin`.
         let (w, h) = (8 * 14 - 4 + 2 * margin, 16 + 2 * margin);
-        let mut image = create_image(w, h, [255,255,255,255]);
-        for g in 0..8 { for y in 0..16 { for x in 0..10 {
-            if x < 3 || x >= 7 || (7..10).contains(&y) {
-                let (px, py) = (margin + g * 14 + x, margin + y);
-                image.data[(py*w+px)*4..(py*w+px)*4+4].copy_from_slice(&ink);
+        let mut image = create_image(w, h, [255, 255, 255, 255]);
+        for g in 0..8 {
+            for y in 0..16 {
+                for x in 0..10 {
+                    if !(3..7).contains(&x) || (7..10).contains(&y) {
+                        let (px, py) = (margin + g * 14 + x, margin + y);
+                        image.data[(py * w + px) * 4..(py * w + px) * 4 + 4].copy_from_slice(&ink);
+                    }
+                }
             }
-        }}}
+        }
         image
     }
     #[test]
     fn lettering_cropped_to_its_ink_keeps_its_colour() {
-        let region = Region { id:"title".into(), kind:"text".into(), chosen:None };
+        let region = Region {
+            id: "title".into(),
+            kind: "text".into(),
+            chosen: None,
+        };
         for margin in [0, 4] {
-            let result = text_region_check(&region, &lettering([24,24,24,255], margin), &lettering([200,30,30,255], margin));
-            assert!(result["findings"].as_array().unwrap().iter().any(|f| f.as_str().unwrap().contains("ink is")), "margin {margin}: {result}");
+            let result = text_region_check(
+                &region,
+                &lettering([24, 24, 24, 255], margin),
+                &lettering([200, 30, 30, 255], margin),
+            );
+            assert!(
+                result["findings"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|f| f.as_str().unwrap().contains("ink is")),
+                "margin {margin}: {result}"
+            );
         }
     }
 }

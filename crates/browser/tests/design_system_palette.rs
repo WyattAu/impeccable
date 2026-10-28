@@ -96,7 +96,11 @@ fn ai_palette_respects_a_documented_oklch_palette() {
     std::fs::create_dir_all(&dir).expect("temp dir");
     // A project marker, so the DESIGN.md walk-up stops here rather than
     // climbing out of the temp directory.
-    std::fs::write(dir.join("package.json"), "{\"name\":\"ds-palette-fixture\"}\n").unwrap();
+    std::fs::write(
+        dir.join("package.json"),
+        "{\"name\":\"ds-palette-fixture\"}\n",
+    )
+    .unwrap();
     std::fs::write(dir.join("DESIGN.md"), DESIGN_MD).unwrap();
     std::fs::write(
         dir.join("declared.html"),

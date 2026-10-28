@@ -104,7 +104,10 @@ pub struct BuilderBadge {
 }
 
 /// Every known builder badge, in the order a report names them.
-pub const BUILDER_BADGES: &[BuilderBadge] = &[BuilderBadge { name: "Lovable", roots: &["#lovable-badge"] }];
+pub const BUILDER_BADGES: &[BuilderBadge] = &[BuilderBadge {
+    name: "Lovable",
+    roots: &["#lovable-badge"],
+}];
 
 /// The id of the style element the tour and badge hide step injects.
 pub const HIDE_STYLE_ID: &str = "impeccable-overlay-hide";
@@ -125,11 +128,34 @@ pub const PRELOADER_POLL_MS: u64 = 250;
 /// when, after any trailing [`WRAPPER_WORDS`], its last hyphen- or
 /// underscore-separated word is one of these (`preloader`, `pre-loader`,
 /// `page_loader_bg`, `loader-wrapper`, `is-loading`; not `lazyloading`).
-pub const LOADER_WORDS: &[&str] =
-    &["preloader", "preload", "preloading", "loader", "loading", "pageloader", "siteloader", "loadingscreen", "spinner"];
+pub const LOADER_WORDS: &[&str] = &[
+    "preloader",
+    "preload",
+    "preloading",
+    "loader",
+    "loading",
+    "pageloader",
+    "siteloader",
+    "loadingscreen",
+    "spinner",
+];
 pub const WRAPPER_WORDS: &[&str] = &[
-    "wrap", "wrapper", "container", "overlay", "screen", "area", "bg", "background", "mask", "page", "box",
-    "holder", "inner", "outer", "layer", "main",
+    "wrap",
+    "wrapper",
+    "container",
+    "overlay",
+    "screen",
+    "area",
+    "bg",
+    "background",
+    "mask",
+    "page",
+    "box",
+    "holder",
+    "inner",
+    "outer",
+    "layer",
+    "main",
 ];
 
 /// Most visible characters a preloader may carry ("Loading...", "75%", a
@@ -382,7 +408,10 @@ pub fn preloader_js() -> String {
 /// The wait probe: the preloaders and intros covering the page now, each as
 /// `<kind> <name>` (`preloader div#preloader`, `intro div.cine-intro`).
 pub fn preloader_probe_js() -> String {
-    format!("(() => {{\n  {}\n  return preloaders().map(p => p.kind + ' ' + p.name);\n}})()", preloader_js())
+    format!(
+        "(() => {{\n  {}\n  return preloaders().map(p => p.kind + ' ' + p.name);\n}})()",
+        preloader_js()
+    )
 }
 
 fn tours_json() -> Value {
@@ -571,15 +600,30 @@ impl OverlayReport {
     pub fn merge(&mut self, v: &Value) {
         let strs = |v: Option<&Value>| -> Vec<String> {
             v.and_then(Value::as_array)
-                .map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(Value::as_str)
+                        .map(String::from)
+                        .collect()
+                })
                 .unwrap_or_default()
         };
-        for h in v.get("hidden").and_then(Value::as_array).into_iter().flatten() {
-            let (Some(kind), Some(name)) = (h.get("kind").and_then(Value::as_str), h.get("name").and_then(Value::as_str))
-            else {
+        for h in v
+            .get("hidden")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let (Some(kind), Some(name)) = (
+                h.get("kind").and_then(Value::as_str),
+                h.get("name").and_then(Value::as_str),
+            ) else {
                 continue;
             };
-            let item = HiddenOverlay { kind: kind.to_string(), name: name.to_string() };
+            let item = HiddenOverlay {
+                kind: kind.to_string(),
+                name: name.to_string(),
+            };
             if !self.hidden.contains(&item) {
                 self.hidden.push(item);
             }
@@ -617,8 +661,11 @@ impl OverlayReport {
     }
 
     pub fn to_value(&self) -> Value {
-        let matched: serde_json::Map<String, Value> =
-            self.matched.iter().map(|(n, s)| (n.clone(), json!(s))).collect();
+        let matched: serde_json::Map<String, Value> = self
+            .matched
+            .iter()
+            .map(|(n, s)| (n.clone(), json!(s)))
+            .collect();
         json!({
             "hidden": self.hidden_value(),
             "matched": matched,
@@ -665,7 +712,12 @@ mod tests {
     fn badge_selectors_name_their_builder() {
         for b in BUILDER_BADGES {
             for s in b.roots {
-                assert!(s.to_ascii_lowercase().contains(&b.name.to_ascii_lowercase()), "{}: {s}", b.name);
+                assert!(
+                    s.to_ascii_lowercase()
+                        .contains(&b.name.to_ascii_lowercase()),
+                    "{}: {s}",
+                    b.name
+                );
             }
         }
     }
@@ -681,7 +733,10 @@ mod tests {
         r.merge(&json!({ "hidden": [{ "kind": "tour", "name": "driver.js" }], "matched": { "driver.js": [".driver-popover"] }, "unlocked": [] }));
         let kinds: Vec<&str> = r.hidden.iter().map(|h| h.kind.as_str()).collect();
         assert_eq!(kinds, vec!["tour", "badge", "preloader"]);
-        assert_eq!(r.matched[0], ("Lovable".to_string(), vec!["#lovable-badge".to_string()]));
+        assert_eq!(
+            r.matched[0],
+            ("Lovable".to_string(), vec!["#lovable-badge".to_string()])
+        );
     }
 
     #[test]

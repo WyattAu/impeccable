@@ -16,7 +16,9 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 
-use impeccable_browser::{detect_url_evidence, origin, replay_url_scan, BrowserEngine, EvidenceRequest};
+use impeccable_browser::{
+    detect_url_evidence, origin, replay_url_scan, BrowserEngine, EvidenceRequest,
+};
 use impeccable_core::findings::Finding;
 use impeccable_detect::engines::{ScanOptions, UrlEngine};
 
@@ -78,14 +80,21 @@ fn scroll_linked_reveals_leave_the_hidden_share() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/content-hidden-scroll-linked.html");
 
-    let scrubbed = engine.detect_url_scan(&url, &ScanOptions::default()).expect("scan");
+    let scrubbed = engine
+        .detect_url_scan(&url, &ScanOptions::default())
+        .expect("scan");
     let hidden = of(&scrubbed.findings, "content-hidden-at-rest");
     assert!(hidden.is_empty(), "{hidden:#?}");
     assert!(scrubbed.notes.is_empty(), "{:?}", scrubbed.notes);
 
     // The same markup with nothing driving it: every section is hidden.
-    let frozen = engine.detect_url(&format!("{url}#frozen"), &ScanOptions::default()).expect("scan");
-    let hidden: Vec<&str> = of(&frozen, "content-hidden-at-rest").iter().map(|f| f.snippet.as_str()).collect();
+    let frozen = engine
+        .detect_url(&format!("{url}#frozen"), &ScanOptions::default())
+        .expect("scan");
+    let hidden: Vec<&str> = of(&frozen, "content-hidden-at-rest")
+        .iter()
+        .map(|f| f.snippet.as_str())
+        .collect();
     assert_eq!(hidden, vec![FROZEN], "{hidden:#?}");
 }
 
@@ -96,7 +105,9 @@ fn unstarted_sliders_are_a_capture_note() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/content-hidden-unstarted-slider.html");
-    let scan = engine.detect_url_scan(&url, &ScanOptions::default()).expect("scan");
+    let scan = engine
+        .detect_url_scan(&url, &ScanOptions::default())
+        .expect("scan");
     let hidden = of(&scan.findings, "content-hidden-at-rest");
     assert!(hidden.is_empty(), "{hidden:#?}");
     assert_eq!(
@@ -121,26 +132,49 @@ fn the_probe_and_the_note_replay() {
     ] {
         let url = format!("http://127.0.0.1:{port}/{fixture}");
         let options = ScanOptions::default();
-        let (findings, evidence) =
-            detect_url_evidence(&mut browser, &url, &options, "networkidle0", 0, &EvidenceRequest::default())
-                .expect("evidence scan");
+        let (findings, evidence) = detect_url_evidence(
+            &mut browser,
+            &url,
+            &options,
+            "networkidle0",
+            0,
+            &EvidenceRequest::default(),
+        )
+        .expect("evidence scan");
         // In document order: the scrubbed section, the sticky stage's copy,
         // the stalled block.
-        let mut answers: Vec<(u32, bool)> =
-            evidence.scan_facts.shown_on_scroll.iter().map(|s| (s.el, s.shown)).collect();
+        let mut answers: Vec<(u32, bool)> = evidence
+            .scan_facts
+            .shown_on_scroll
+            .iter()
+            .map(|s| (s.el, s.shown))
+            .collect();
         answers.sort_by_key(|a| a.0);
-        assert_eq!(answers.iter().map(|a| a.1).collect::<Vec<_>>(), shown, "{fixture}: {answers:?}");
+        assert_eq!(
+            answers.iter().map(|a| a.1).collect::<Vec<_>>(),
+            shown,
+            "{fixture}: {answers:?}"
+        );
         let snapshot = evidence.scan_snapshot.as_deref().expect("snapshot");
-        let replay = replay_url_scan(&url, snapshot, &evidence.scan_facts, None, &options).expect("replay");
+        let replay =
+            replay_url_scan(&url, snapshot, &evidence.scan_facts, None, &options).expect("replay");
         let replayable: Vec<&Finding> = findings
             .iter()
             .zip(&evidence.origins)
             .filter(|(_, o)| **o == origin::SCAN || **o == origin::CONTENT_HIDDEN)
             .map(|(f, _)| f)
             .collect();
-        assert_eq!(replay.findings.iter().collect::<Vec<_>>(), replayable, "{fixture}");
+        assert_eq!(
+            replay.findings.iter().collect::<Vec<_>>(),
+            replayable,
+            "{fixture}"
+        );
         assert_eq!(replay.capture_notes, evidence.capture_notes, "{fixture}");
-        assert_eq!(evidence.capture_notes.is_empty(), fixture.contains("scroll-linked"), "{fixture}");
+        assert_eq!(
+            evidence.capture_notes.is_empty(),
+            fixture.contains("scroll-linked"),
+            "{fixture}"
+        );
     }
     browser.close();
 }

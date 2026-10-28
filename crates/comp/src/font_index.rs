@@ -13,8 +13,7 @@ use std::collections::HashMap;
 pub const ROUTE_CAP_PX: f64 = 22.0;
 pub const MIN_RANK_CAP_PX: f64 = 10.0;
 pub const CATEGORIES: [&str; 5] = ["sans", "serif", "display", "handwriting", "mono"];
-pub const GROSS_FEATURES: [&str; 6] =
-    ["advance", "advTall", "advX", "densTall", "densX", "stemW"];
+pub const GROSS_FEATURES: [&str; 6] = ["advance", "advTall", "advX", "densTall", "densX", "stemW"];
 
 const NULL_TOKEN: &str = "___";
 const MAX_Q: i64 = 36 * 36 * 36 - 1; // 46655
@@ -140,12 +139,20 @@ pub fn load_font_index(path: &std::path::Path) -> Option<FontIndex> {
     let features: Vec<String> = v
         .get("features")
         .and_then(|f| f.as_array())
-        .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_else(|| INDEX_FEATURES.clone());
     let cats: Vec<String> = v
         .get("categories")
         .and_then(|c| c.as_array())
-        .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_else(|| CATEGORIES.iter().map(|s| s.to_string()).collect());
     let sizes: Vec<SizeKey> = v
         .get("sizes")
@@ -163,7 +170,11 @@ pub fn load_font_index(path: &std::path::Path) -> Option<FontIndex> {
         })
         .unwrap_or_else(index_sizes);
     let schema = v.get("schema").and_then(|s| s.as_i64()).unwrap_or(0);
-    let text = v.get("text").and_then(|t| t.as_str()).unwrap_or("").to_string();
+    let text = v
+        .get("text")
+        .and_then(|t| t.as_str())
+        .unwrap_or("")
+        .to_string();
     let mut entries = Vec::new();
     if let Some(arr) = v.get("entries").and_then(|e| e.as_array()) {
         for e in arr {
@@ -178,7 +189,11 @@ pub fn load_font_index(path: &std::path::Path) -> Option<FontIndex> {
                 .get(cat_idx as usize)
                 .cloned()
                 .unwrap_or_else(|| cat_idx.to_string());
-            let variable = e.get(3).and_then(|x| x.as_i64()).map(|n| n != 0).unwrap_or(false)
+            let variable = e
+                .get(3)
+                .and_then(|x| x.as_i64())
+                .map(|n| n != 0)
+                .unwrap_or(false)
                 || e.get(3).and_then(|x| x.as_bool()).unwrap_or(false);
             let mut fp: HashMap<String, Option<FeatureVec>> = HashMap::new();
             for (i, sz) in sizes.iter().enumerate() {
@@ -189,16 +204,36 @@ pub fn load_font_index(path: &std::path::Path) -> Option<FontIndex> {
                 };
                 fp.insert(sz.key(), val);
             }
-            entries.push(Entry { family, weight, category, variable, fp });
+            entries.push(Entry {
+                family,
+                weight,
+                category,
+                variable,
+                fp,
+            });
         }
     }
-    Some(FontIndex { schema, text, sizes, features, entries })
+    Some(FontIndex {
+        schema,
+        text,
+        sizes,
+        features,
+        entries,
+    })
 }
 
 /// JS: routeSize(capHeightPx, sizes, {allCaps}).
 pub fn route_size(cap_height_px: f64, sizes: &[SizeKey], all_caps: bool) -> SizeKey {
-    let mut numeric: Vec<f64> =
-        sizes.iter().filter_map(|s| if let SizeKey::Num(n) = s { Some(*n) } else { None }).collect();
+    let mut numeric: Vec<f64> = sizes
+        .iter()
+        .filter_map(|s| {
+            if let SizeKey::Num(n) = s {
+                Some(*n)
+            } else {
+                None
+            }
+        })
+        .collect();
     numeric.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let has_caps = sizes.iter().any(|s| matches!(s, SizeKey::Caps));
     if all_caps && cap_height_px >= ROUTE_CAP_PX && has_caps {
@@ -230,16 +265,28 @@ pub struct CandOpts {
 
 impl Default for CandOpts {
     fn default() -> Self {
-        CandOpts { n: 25, category: None, per_family: 2, include_non_text: false }
+        CandOpts {
+            n: 25,
+            category: None,
+            per_family: 2,
+            include_non_text: false,
+        }
     }
 }
 
 /// JS: candidatesFromIndex(fp, index, opts).
-pub fn candidates_from_index(fp: &Fingerprint, index: &FontIndex, opts: &CandOpts) -> Vec<Candidate> {
+pub fn candidates_from_index(
+    fp: &Fingerprint,
+    index: &FontIndex,
+    opts: &CandOpts,
+) -> Vec<Candidate> {
     let size = route_size(fp.cap_height_px, &index.sizes, fp.all_caps);
     let size_key = size.key();
     let want_cat: Option<Vec<String>> = opts.category.as_ref().map(|c| {
-        c.split(',').map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()).collect()
+        c.split(',')
+            .map(|s| s.trim().to_lowercase())
+            .filter(|s| !s.is_empty())
+            .collect()
     });
     let mut scored: Vec<Candidate> = Vec::new();
     for e in &index.entries {

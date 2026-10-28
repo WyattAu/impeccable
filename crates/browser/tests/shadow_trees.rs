@@ -13,12 +13,12 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::time::Duration;
 
+use base64::Engine as _;
 use impeccable_browser::{
     cdp::Browser, detect_url_evidence, discovery, fullpage, snapshot_engine, BrowserEngine,
     EvidenceRequest,
 };
 use impeccable_detect::engines::ScanOptions;
-use base64::Engine as _;
 use serde_json::Value;
 
 fn serve(body: &'static str) -> u16 {
@@ -76,8 +76,12 @@ fn shadow_trees_never_push_a_page_past_the_element_budget() {
     let Some(mut browser) = browser() else { return };
     let port = serve(BUDGET_PAGE);
     let mut page = browser.new_page().unwrap();
-    page.goto(&format!("http://127.0.0.1:{port}/"), "load", Duration::from_secs(15))
-        .unwrap();
+    page.goto(
+        &format!("http://127.0.0.1:{port}/"),
+        "load",
+        Duration::from_secs(15),
+    )
+    .unwrap();
     snapshot_engine::ensure_snapshot_js(&mut page).unwrap();
     let out = page
         .evaluate_value(
@@ -85,7 +89,12 @@ fn shadow_trees_never_push_a_page_past_the_element_budget() {
         )
         .unwrap();
     assert!(out.get("error").is_none(), "{out}");
-    let tags: Vec<&str> = out["tags"].as_array().unwrap().iter().filter_map(Value::as_str).collect();
+    let tags: Vec<&str> = out["tags"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
     assert_eq!(tags.iter().filter(|t| **t == "P").count(), 40, "{tags:?}");
     // The 100-span tree would cross the budget, so it is left out whole.
     assert_eq!(tags.iter().filter(|t| **t == "SPAN").count(), 0, "{tags:?}");
@@ -102,7 +111,9 @@ fn shadow_trees_never_push_a_page_past_the_element_budget() {
     assert_eq!(out["anim"], Value::Bool(true), "{out}");
     let fading = out["fading"].as_array().unwrap();
     assert!(
-        fading.iter().any(|an| an.as_array().unwrap().iter().any(|p| p == "opacity")),
+        fading
+            .iter()
+            .any(|an| an.as_array().unwrap().iter().any(|p| p == "opacity")),
         "the shadow-tree animation was not recorded: {out}"
     );
     page.close();
@@ -127,8 +138,12 @@ fn pseudo_class_states_inside_shadow_trees_are_recorded() {
     let Some(mut browser) = browser() else { return };
     let port = serve(SHADOW_STATES_PAGE);
     let mut page = browser.new_page().unwrap();
-    page.goto(&format!("http://127.0.0.1:{port}/"), "load", Duration::from_secs(15))
-        .unwrap();
+    page.goto(
+        &format!("http://127.0.0.1:{port}/"),
+        "load",
+        Duration::from_secs(15),
+    )
+    .unwrap();
     snapshot_engine::ensure_snapshot_js(&mut page).unwrap();
     let out = page
         .evaluate_value(
@@ -137,7 +152,11 @@ fn pseudo_class_states_inside_shadow_trees_are_recorded() {
         .unwrap();
     assert!(out.get("error").is_none(), "{out}");
     let rows: Vec<(String, Vec<String>)> = serde_json::from_value(out.clone()).unwrap();
-    let has = |tag: &str, state: &str| rows.iter().filter(|(t, st)| t == tag && st.iter().any(|s| s == state)).count();
+    let has = |tag: &str, state: &str| {
+        rows.iter()
+            .filter(|(t, st)| t == tag && st.iter().any(|s| s == state))
+            .count()
+    };
     assert_eq!(has("BUTTON", "disabled"), 2, "{out}");
     assert_eq!(has("INPUT", "checked"), 2, "{out}");
     assert_eq!(has("INPUT", "disabled"), 1, "{out}");
@@ -166,8 +185,12 @@ fn the_page_probe_lists_open_shadow_children() {
     let Some(mut browser) = browser() else { return };
     let port = serve(SHADOW_DECK_PAGE);
     let mut page = browser.new_page().unwrap();
-    page.goto(&format!("http://127.0.0.1:{port}/"), "load", Duration::from_secs(15))
-        .unwrap();
+    page.goto(
+        &format!("http://127.0.0.1:{port}/"),
+        "load",
+        Duration::from_secs(15),
+    )
+    .unwrap();
     let script = format!(
         "(() => {{ {PROBE_JS}\n const kids = id => __impeccableDom.shadow_children(__intern(document.getElementById(id))).map(h => __el(h).tagName); return {{ deck: kids('deck'), plain: kids('plain') }}; }})()"
     );
@@ -204,7 +227,10 @@ fn a_shadow_root_scroll_frame_is_captured_by_scrolling_the_frame() {
     let port = serve(SHADOW_SHELL_PAGE);
     let engine = BrowserEngine::new(env);
     let mut browser = engine.launch().expect("launch");
-    let options = ScanOptions { viewport: Some((1280, 800)), ..Default::default() };
+    let options = ScanOptions {
+        viewport: Some((1280, 800)),
+        ..Default::default()
+    };
     let (_, evidence) = detect_url_evidence(
         &mut browser,
         &format!("http://127.0.0.1:{port}/"),
@@ -250,7 +276,10 @@ fn a_fixed_shadow_shell_keeps_its_frame_and_drops_repeated_shadow_chrome() {
     let port = serve(FIXED_SHADOW_SHELL_PAGE);
     let engine = BrowserEngine::new(env);
     let mut browser = engine.launch().expect("launch");
-    let options = ScanOptions { viewport: Some((1280, 800)), ..Default::default() };
+    let options = ScanOptions {
+        viewport: Some((1280, 800)),
+        ..Default::default()
+    };
     let (_, evidence) = detect_url_evidence(
         &mut browser,
         &format!("http://127.0.0.1:{port}/"),
@@ -263,8 +292,12 @@ fn a_fixed_shadow_shell_keeps_its_frame_and_drops_repeated_shadow_chrome() {
     browser.close();
     let shot = evidence.screenshot.as_ref().expect("screenshot");
     assert_eq!(shot.method, fullpage::method::STITCHED);
-    let bytes = base64::engine::general_purpose::STANDARD.decode(&shot.jpeg_base64).expect("base64");
-    let img = image::load_from_memory_with_format(&bytes, image::ImageFormat::Jpeg).expect("jpeg").to_rgb8();
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&shot.jpeg_base64)
+        .expect("base64");
+    let img = image::load_from_memory_with_format(&bytes, image::ImageFormat::Jpeg)
+        .expect("jpeg")
+        .to_rgb8();
     // The fixed host holds the frame being scrolled, so later tiles keep it.
     let (_, blank) = fullpage::longest_uniform_band(&img);
     assert!(blank < 800, "a blank band of {blank} rows");
@@ -278,8 +311,15 @@ fn a_fixed_shadow_shell_keeps_its_frame_and_drops_repeated_shadow_chrome() {
             })
             .count()
     };
-    assert!(green(0, 800) > 5000, "the widget is missing from the first viewport");
-    assert_eq!(green(800, img.height()), 0, "the widget repeats below the first viewport");
+    assert!(
+        green(0, 800) > 5000,
+        "the widget is missing from the first viewport"
+    );
+    assert_eq!(
+        green(800, img.height()),
+        0,
+        "the widget repeats below the first viewport"
+    );
 }
 
 const TRANSLATED_FIXED_PAGE: &str = r#"<!doctype html><html><head><style>
@@ -310,7 +350,10 @@ fn a_fixed_box_under_a_translated_ancestor_scrolls_with_the_page() {
     let port = serve(TRANSLATED_FIXED_PAGE);
     let engine = BrowserEngine::new(env);
     let mut browser = engine.launch().expect("launch");
-    let options = ScanOptions { viewport: Some((1280, 800)), ..Default::default() };
+    let options = ScanOptions {
+        viewport: Some((1280, 800)),
+        ..Default::default()
+    };
     let (_, evidence) = detect_url_evidence(
         &mut browser,
         &format!("http://127.0.0.1:{port}/"),
@@ -323,8 +366,12 @@ fn a_fixed_box_under_a_translated_ancestor_scrolls_with_the_page() {
     browser.close();
     let shot = evidence.screenshot.as_ref().expect("screenshot");
     assert_eq!(shot.method, fullpage::method::STITCHED);
-    let bytes = base64::engine::general_purpose::STANDARD.decode(&shot.jpeg_base64).expect("base64");
-    let img = image::load_from_memory_with_format(&bytes, image::ImageFormat::Jpeg).expect("jpeg").to_rgb8();
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&shot.jpeg_base64)
+        .expect("base64");
+    let img = image::load_from_memory_with_format(&bytes, image::ImageFormat::Jpeg)
+        .expect("jpeg")
+        .to_rgb8();
     let green = (1600..1800u32.min(img.height()))
         .flat_map(|y| (40..240u32).map(move |x| (x, y)))
         .filter(|&(x, y)| {
@@ -332,5 +379,8 @@ fn a_fixed_box_under_a_translated_ancestor_scrolls_with_the_page() {
             p[1] > 120 && p[0] < 60 && p[2] < 110
         })
         .count();
-    assert!(green > 20000, "the box under the translated ancestor is blank: {green}");
+    assert!(
+        green > 20000,
+        "the box under the translated ancestor is blank: {green}"
+    );
 }

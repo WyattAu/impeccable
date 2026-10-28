@@ -22,7 +22,7 @@ use regex::Regex;
 use serde_json::{Map, Value};
 
 use crate::jsp;
-use crate::util::{exists, js_string, re, read_json, read_text, ANY, WS};
+use crate::util::{exists, js_string, re, read_json, read_text, WS};
 
 const DESIGN_NAMES: &[&str] = &["DESIGN.md", "Design.md", "design.md"];
 
@@ -85,7 +85,10 @@ re!(DESIGN_BOTH_SIDES_HEADING, {
     // One joiner or several: "Do's, and Don'ts" and "Do and/or Don't" pair
     // the two sides with a comma plus a conjunction and with a conjunction
     // plus a slash.
-    let joiner = format!(r"(?:{WS}*(?:and|or|&|/|\||\+|,|vs\.?|versus)){{1,4}}{WS}*", WS = WS);
+    let joiner = format!(
+        r"(?:{WS}*(?:and|or|&|/|\||\+|,|vs\.?|versus)){{1,4}}{WS}*",
+        WS = WS
+    );
     let affirmative = r"\bdo'?s?\b";
     let negative = r"\b(?:do ?n[o']?ts?|do not)\b";
     format!("(?i)(?:{affirmative}{joiner}{negative}|{negative}{joiner}{affirmative})")
@@ -141,7 +144,7 @@ re!(
 );
 re!(
     TAILWIND_FONT_SIZE_RE,
-    format!("(?-u:\\b)text-\\[(-?[0-9.]+(?:px|rem))\\]")
+    "(?-u:\\b)text-\\[(-?[0-9.]+(?:px|rem))\\]".to_string()
 );
 re!(GOOGLE_FAMILY_PARAM_RE, "[?&]family=([^&]+)");
 re!(
@@ -760,8 +763,12 @@ impl DesignSystem {
     /// or violet, with the label it was declared under (`colors.primary`).
     pub fn declared_purple(&self) -> Option<(&str, &Rgba)> {
         self.allowed_color_keys.iter().find_map(|(_, entry)| {
-            impeccable_core::checks::rules::is_declared_purple(&entry.color)
-                .then(|| (entry.labels.first().map(String::as_str).unwrap_or(""), &entry.color))
+            impeccable_core::checks::rules::is_declared_purple(&entry.color).then(|| {
+                (
+                    entry.labels.first().map(String::as_str).unwrap_or(""),
+                    &entry.color,
+                )
+            })
         })
     }
 }
@@ -771,13 +778,20 @@ impl DesignSystem {
 /// reported as the AI palette tell (corpus decision
 /// r3-23-ai-color-palette-brand-hue). The cyan-on-dark forms stand. Returns
 /// how many findings were dropped.
-pub fn drop_declared_purple_findings(findings: &mut Vec<Finding>, ds: Option<&DesignSystem>) -> usize {
-    let Some(ds) = ds.filter(|ds| ds.present) else { return 0 };
+pub fn drop_declared_purple_findings(
+    findings: &mut Vec<Finding>,
+    ds: Option<&DesignSystem>,
+) -> usize {
+    let Some(ds) = ds.filter(|ds| ds.present) else {
+        return 0;
+    };
     if ds.declared_purple().is_none() {
         return 0;
     }
     let before = findings.len();
-    findings.retain(|f| !impeccable_core::checks::rules::is_purple_palette_finding(&f.antipattern, &f.snippet));
+    findings.retain(|f| {
+        !impeccable_core::checks::rules::is_purple_palette_finding(&f.antipattern, &f.snippet)
+    });
     before - findings.len()
 }
 
@@ -1206,7 +1220,8 @@ fn read_workspace_pattern_groups(dir: &str) -> (Vec<String>, Vec<String>) {
         }
     }
     let mut pkg: Vec<String> = Vec::new();
-    let workspaces = read_json(&jsp::join(&[dir, "package.json"])).and_then(|v| v.get("workspaces").cloned());
+    let workspaces =
+        read_json(&jsp::join(&[dir, "package.json"])).and_then(|v| v.get("workspaces").cloned());
     match &workspaces {
         Some(Value::Array(ws)) => pkg.extend(ws.iter().map(js_string)),
         Some(other) => {
@@ -1216,7 +1231,9 @@ fn read_workspace_pattern_groups(dir: &str) -> (Vec<String>, Vec<String>) {
         }
         None => {}
     }
-    if let Some(Value::Array(ws)) = read_json(&jsp::join(&[dir, "lerna.json"])).and_then(|v| v.get("packages").cloned()) {
+    if let Some(Value::Array(ws)) =
+        read_json(&jsp::join(&[dir, "lerna.json"])).and_then(|v| v.get("packages").cloned())
+    {
         pkg.extend(ws.iter().map(js_string));
     }
     if let Some(text) = read_text(&jsp::join(&[dir, "pnpm-workspace.yaml"])) {
@@ -1244,7 +1261,11 @@ fn read_workspace_pattern_groups(dir: &str) -> (Vec<String>, Vec<String>) {
                 continue;
             }
             if let Some(caps) = PNPM_ITEM_RE.captures(trimmed) {
-                pkg.push(EDGE_QUOTE_RE.replace_all(js::trim(caps.get(1).map(|m| m.as_str()).unwrap_or("")), "").into_owned());
+                pkg.push(
+                    EDGE_QUOTE_RE
+                        .replace_all(js::trim(caps.get(1).map(|m| m.as_str()).unwrap_or("")), "")
+                        .into_owned(),
+                );
             } else if PNPM_KEY_RE.is_match(trimmed) {
                 break;
             }
@@ -1260,7 +1281,8 @@ fn read_workspace_patterns(dir: &str) -> Vec<String> {
     a
 }
 
-const MONOREPO_MARKER_FILES: &[&str] = &["pnpm-workspace.yaml", "turbo.json", "nx.json", "lerna.json"];
+const MONOREPO_MARKER_FILES: &[&str] =
+    &["pnpm-workspace.yaml", "turbo.json", "nx.json", "lerna.json"];
 const MONOREPO_FALLBACK_PROJECT_DIRS: &[&str] = &["apps", "packages"];
 
 re!(PNPM_FLOW_RE, format!("^packages:{WS}*\\[(.*)\\]{WS}*$"));
@@ -1270,10 +1292,16 @@ re!(PNPM_KEY_RE, format!("^[A-Za-z0-9_-]+:{WS}*"));
 
 /// JS: design-system.mjs#isMonorepoRoot
 fn is_monorepo_root(dir: &str) -> bool {
-    if read_workspace_patterns(dir).iter().any(|p| !js::trim(p).starts_with('!')) {
+    if read_workspace_patterns(dir)
+        .iter()
+        .any(|p| !js::trim(p).starts_with('!'))
+    {
         return true;
     }
-    if !MONOREPO_MARKER_FILES.iter().any(|f| exists(&jsp::join(&[dir, f]))) {
+    if !MONOREPO_MARKER_FILES
+        .iter()
+        .any(|f| exists(&jsp::join(&[dir, f])))
+    {
         return false;
     }
     MONOREPO_FALLBACK_PROJECT_DIRS.iter().any(|name| {
@@ -1289,7 +1317,9 @@ fn is_monorepo_root(dir: &str) -> bool {
 
 /// JS: design-system.mjs#monorepoOwnsPath > normalizeWorkspacePattern
 fn normalize_workspace_pattern(pattern: &str) -> String {
-    let mut s = EDGE_QUOTE_RE.replace_all(js::trim(pattern), "").into_owned();
+    let mut s = EDGE_QUOTE_RE
+        .replace_all(js::trim(pattern), "")
+        .into_owned();
     if let Some(rest) = s.strip_prefix("./") {
         s = rest.to_string();
     }
@@ -1308,7 +1338,9 @@ fn segment_matches(pattern_segment: &str, rel_segment: &str) -> bool {
         return pattern_segment == rel_segment;
     }
     let escaped = regex::escape(pattern_segment).replace("\\*", "[^/]*");
-    Regex::new(&format!("^{}$", escaped)).map(|re| re.is_match(rel_segment)).unwrap_or(false)
+    Regex::new(&format!("^{}$", escaped))
+        .map(|re| re.is_match(rel_segment))
+        .unwrap_or(false)
 }
 
 /// JS: design-system.mjs#monorepoOwnsPath > matchGlobSegments
@@ -1382,7 +1414,11 @@ fn monorepo_owns_path(root: &str, boundary_dir: &str) -> bool {
         if rel_segments.len() < pattern_segments.len() {
             return false;
         }
-        if !pattern_segments.iter().zip(rel_segments.iter()).all(|(p, r)| segment_matches(p, r)) {
+        if !pattern_segments
+            .iter()
+            .zip(rel_segments.iter())
+            .all(|(p, r)| segment_matches(p, r))
+        {
             return false;
         }
         if rel_segments.len() == pattern_segments.len() {
@@ -1446,7 +1482,10 @@ fn home_dir_forms(cwd: &str, home: &str) -> Vec<String> {
     let mut forms = vec![home_dir.clone()];
     if let Ok(real) = std::fs::canonicalize(&home_dir) {
         let real = real.to_string_lossy().into_owned();
-        let real = real.strip_prefix("\\\\?\\").map(|s| s.to_string()).unwrap_or(real);
+        let real = real
+            .strip_prefix("\\\\?\\")
+            .map(|s| s.to_string())
+            .unwrap_or(real);
         if !forms.contains(&real) {
             forms.push(real);
         }
@@ -1470,7 +1509,10 @@ pub fn find_design_root(start_dir: &str, cwd: &str, home: &str) -> Option<Design
     let mut boundary: Option<DesignRoot> = None;
     loop {
         if boundary.is_none() && resolve_design_md_path(&dir).is_some() {
-            return Some(DesignRoot { dir, has_design: true });
+            return Some(DesignRoot {
+                dir,
+                has_design: true,
+            });
         }
         if let Some(b) = &boundary {
             // Past the boundary the walk only looks for the monorepo root
@@ -1489,8 +1531,14 @@ pub fn find_design_root(start_dir: &str, cwd: &str, home: &str) -> Option<Design
             if exists(&jsp::join(&[&dir, ".git"])) {
                 return boundary;
             }
-        } else if PROJECT_ROOT_MARKERS.iter().any(|marker| exists(&jsp::join(&[&dir, marker]))) {
-            boundary = Some(DesignRoot { dir: dir.clone(), has_design: false });
+        } else if PROJECT_ROOT_MARKERS
+            .iter()
+            .any(|marker| exists(&jsp::join(&[&dir, marker])))
+        {
+            boundary = Some(DesignRoot {
+                dir: dir.clone(),
+                has_design: false,
+            });
             // A boundary that is itself a monorepo root, or a separate
             // repository with its own .git, inherits nothing from above.
             if is_monorepo_root(&dir) || exists(&jsp::join(&[&dir, ".git"])) {
@@ -2263,7 +2311,11 @@ mod tests {
         // Compound separators pair the two sides just as well.
         for heading in ["Do's, and Don'ts", "Do and/or Don't", "Don'ts / Dos"] {
             let md = format!("## {heading}\n\n### Do\n\n- Use `.kicker`.\n");
-            assert_eq!(declared_component_selectors(&md), vec![".kicker"], "{heading}");
+            assert_eq!(
+                declared_component_selectors(&md),
+                vec![".kicker"],
+                "{heading}"
+            );
         }
 
         // A heading that only puts a `do` beside a `don't` is not a section
@@ -2279,7 +2331,13 @@ mod tests {
         let md = "- No Title Case, no ALL CAPS outside the `.eyebrow` class.\n                  - **Button.** Four kinds and no more: `.btn-primary` (one per\n                  surface), `.btn-secondary`, `.btn-ghost`, `.btn-danger`.\n";
         assert_eq!(
             declared_component_selectors(md),
-            vec![".eyebrow", ".btn-primary", ".btn-secondary", ".btn-ghost", ".btn-danger"]
+            vec![
+                ".eyebrow",
+                ".btn-primary",
+                ".btn-secondary",
+                ".btn-ghost",
+                ".btn-danger"
+            ]
         );
     }
 
@@ -2324,7 +2382,8 @@ mod tests {
     const DESIGN_MD: &str = "---\ntypography:\n  body:\n    fontFamily: \"Palatino, Georgia, serif\"\n---\n# Project A Design System\n";
 
     fn ds_with(colors: serde_json::Value) -> DesignSystem {
-        let fm: Map<String, Value> = serde_json::from_value(serde_json::json!({ "colors": colors })).unwrap();
+        let fm: Map<String, Value> =
+            serde_json::from_value(serde_json::json!({ "colors": colors })).unwrap();
         normalize_design_system(Some(&fm), None, Some("/p/DESIGN.md"), None, false)
     }
 
@@ -2337,7 +2396,10 @@ mod tests {
     #[test]
     fn a_declared_purple_switches_the_purple_forms_off() {
         let purple = ds_with(serde_json::json!({ "surface": "#ffffff", "primary": "#5c2d91" }));
-        assert_eq!(purple.declared_purple().map(|(label, _)| label), Some("colors.primary"));
+        assert_eq!(
+            purple.declared_purple().map(|(label, _)| label),
+            Some("colors.primary")
+        );
         assert_eq!(
             declared_purple_note(&purple).as_deref(),
             Some("Note: ai-color-palette's purple/violet check is off: /p/DESIGN.md declares colors.primary (#5c2d91).")
@@ -2348,11 +2410,25 @@ mod tests {
             palette("from-violet-600 gradient"),
             palette("Purple/violet accent colors detected"),
             palette("Cyan neon text on dark background"),
-            finding("gradient-text", "f.html", "background-clip: text + gradient", 0.0),
+            finding(
+                "gradient-text",
+                "f.html",
+                "background-clip: text + gradient",
+                0.0,
+            ),
         ];
-        assert_eq!(drop_declared_purple_findings(&mut findings, Some(&purple)), 4);
+        assert_eq!(
+            drop_declared_purple_findings(&mut findings, Some(&purple)),
+            4
+        );
         let left: Vec<&str> = findings.iter().map(|f| f.snippet.as_str()).collect();
-        assert_eq!(left, vec!["Cyan neon text on dark background", "background-clip: text + gradient"]);
+        assert_eq!(
+            left,
+            vec![
+                "Cyan neon text on dark background",
+                "background-clip: text + gradient"
+            ]
+        );
 
         // Blue, grey and a desaturated mauve are not purples.
         for colors in [
@@ -2366,8 +2442,12 @@ mod tests {
             assert_eq!(drop_declared_purple_findings(&mut findings, Some(&ds)), 0);
         }
         // Violet-500 and a plum count.
-        assert!(ds_with(serde_json::json!({ "accent": "#8b5cf6" })).declared_purple().is_some());
-        assert!(ds_with(serde_json::json!({ "accent": "#7a2a6e" })).declared_purple().is_some());
+        assert!(ds_with(serde_json::json!({ "accent": "#8b5cf6" }))
+            .declared_purple()
+            .is_some());
+        assert!(ds_with(serde_json::json!({ "accent": "#7a2a6e" }))
+            .declared_purple()
+            .is_some());
         let mut findings = vec![palette("text-purple-700 on heading")];
         assert_eq!(drop_declared_purple_findings(&mut findings, None), 0);
     }
@@ -2396,14 +2476,20 @@ mod tests {
     fn monorepo_npm_workspaces_and_yarn_object_form() {
         let d = TempDir::new("npm");
         d.write("DESIGN.md", DESIGN_MD);
-        d.write("package.json", "{\"name\":\"mono\",\"workspaces\":[\"packages/*\"]}");
+        d.write(
+            "package.json",
+            "{\"name\":\"mono\",\"workspaces\":[\"packages/*\"]}",
+        );
         d.write("packages/ui/package.json", "{\"name\":\"ui\"}");
         let found = root_of(&d, "packages/ui", &far_home()).unwrap();
         assert_eq!((found.dir, found.has_design), (d.path(), true));
 
         let y = TempDir::new("yarnobj");
         y.write("DESIGN.md", DESIGN_MD);
-        y.write("package.json", "{\"name\":\"mono\",\"workspaces\":{\"packages\":[\"packages/*\"]}}");
+        y.write(
+            "package.json",
+            "{\"name\":\"mono\",\"workspaces\":{\"packages\":[\"packages/*\"]}}",
+        );
         y.write("packages/ui/package.json", "{\"name\":\"ui\"}");
         let found = root_of(&y, "packages/ui", &far_home()).unwrap();
         assert_eq!((found.dir, found.has_design), (y.path(), true));
@@ -2418,7 +2504,12 @@ mod tests {
             d.write(marker, "{}");
             d.write("apps/web/package.json", "{\"name\":\"web\"}");
             let found = root_of(&d, "apps/web", &far_home()).unwrap();
-            assert_eq!((found.dir, found.has_design), (d.path(), true), "{}", marker);
+            assert_eq!(
+                (found.dir, found.has_design),
+                (d.path(), true),
+                "{}",
+                marker
+            );
         }
     }
 
@@ -2433,7 +2524,10 @@ mod tests {
 
         let i = TempDir::new("iroots");
         i.write("DESIGN.md", DESIGN_MD);
-        i.write(".impeccable/config.json", "{\"projectRoots\":[\"sites/*\"]}");
+        i.write(
+            ".impeccable/config.json",
+            "{\"projectRoots\":[\"sites/*\"]}",
+        );
         i.write("sites/docs/package.json", "{\"name\":\"docs\"}");
         let found = root_of(&i, "sites/docs", &far_home()).unwrap();
         assert_eq!((found.dir, found.has_design), (i.path(), true));
@@ -2444,7 +2538,10 @@ mod tests {
         // 91f2c7b4: an inline YAML comment must not defeat glob recognition.
         let d = TempDir::new("flow");
         d.write("DESIGN.md", DESIGN_MD);
-        d.write("pnpm-workspace.yaml", "packages: [\"services/*\"] # deploy targets\n");
+        d.write(
+            "pnpm-workspace.yaml",
+            "packages: [\"services/*\"] # deploy targets\n",
+        );
         d.write("services/api/package.json", "{\"name\":\"api\"}");
         let found = root_of(&d, "services/api", &far_home()).unwrap();
         assert_eq!((found.dir, found.has_design), (d.path(), true));
@@ -2474,7 +2571,10 @@ mod tests {
         let inc = root_of(&d, "packages/included", &far_home()).unwrap();
         assert_eq!((inc.dir, inc.has_design), (d.path(), true));
         let exc = root_of(&d, "packages/excluded", &far_home()).unwrap();
-        assert_eq!((exc.dir.clone(), exc.has_design), (d.join("packages/excluded"), false));
+        assert_eq!(
+            (exc.dir.clone(), exc.has_design),
+            (d.join("packages/excluded"), false)
+        );
     }
 
     #[test]
@@ -2487,7 +2587,10 @@ mod tests {
         let web = root_of(&d, "apps/web", &far_home()).unwrap();
         assert!(web.has_design);
         let vendor = root_of(&d, "vendor/tool", &far_home()).unwrap();
-        assert_eq!((vendor.dir.clone(), vendor.has_design), (d.join("vendor/tool"), false));
+        assert_eq!(
+            (vendor.dir.clone(), vendor.has_design),
+            (d.join("vendor/tool"), false)
+        );
     }
 
     #[test]
@@ -2498,7 +2601,10 @@ mod tests {
         d.mkdir("vendor/other/.git");
         d.write("vendor/other/package.json", "{\"name\":\"other\"}");
         let found = root_of(&d, "vendor/other", &far_home()).unwrap();
-        assert_eq!((found.dir.clone(), found.has_design), (d.join("vendor/other"), false));
+        assert_eq!(
+            (found.dir.clone(), found.has_design),
+            (d.join("vendor/other"), false)
+        );
     }
 
     #[test]
@@ -2509,7 +2615,10 @@ mod tests {
         d.mkdir(".git");
         d.write("packages/nested/package.json", "{\"name\":\"nested\"}");
         let found = root_of(&d, "packages/nested", &far_home()).unwrap();
-        assert_eq!((found.dir.clone(), found.has_design), (d.join("packages/nested"), false));
+        assert_eq!(
+            (found.dir.clone(), found.has_design),
+            (d.join("packages/nested"), false)
+        );
     }
 
     #[test]
@@ -2539,7 +2648,10 @@ mod tests {
         );
         d.write("packages/ui/package.json", "{\"name\":\"ui\"}");
         d.write("components/button/package.json", "{\"name\":\"button\"}");
-        d.write("packages/ui/test/fixture/package.json", "{\"name\":\"fixture\"}");
+        d.write(
+            "packages/ui/test/fixture/package.json",
+            "{\"name\":\"fixture\"}",
+        );
         let ui = root_of(&d, "packages/ui", &far_home()).unwrap();
         assert_eq!((ui.dir, ui.has_design), (d.path(), true));
         let button = root_of(&d, "components/button", &far_home()).unwrap();
@@ -2565,7 +2677,10 @@ mod tests {
         let nested = root_of(&d, "web/examples", &far_home()).unwrap();
         assert_eq!((nested.dir, nested.has_design), (d.path(), true));
         let vendor = root_of(&d, "vendor/tool", &far_home()).unwrap();
-        assert_eq!((vendor.dir.clone(), vendor.has_design), (d.join("vendor/tool"), false));
+        assert_eq!(
+            (vendor.dir.clone(), vendor.has_design),
+            (d.join("vendor/tool"), false)
+        );
     }
 
     #[test]
@@ -2574,7 +2689,10 @@ mod tests {
         // package-manager workspaces exclude it.
         let d = TempDir::new("irootswin");
         d.write("DESIGN.md", DESIGN_MD);
-        d.write(".impeccable/config.json", "{\"projectRoots\":[\"sites/*\"]}");
+        d.write(
+            ".impeccable/config.json",
+            "{\"projectRoots\":[\"sites/*\"]}",
+        );
         d.write(
             "package.json",
             "{\"name\":\"mono\",\"workspaces\":[\"sites/*\",\"!sites/docs\"]}",
@@ -2593,7 +2711,10 @@ mod tests {
         home.write("pnpm-workspace.yaml", "packages:\n  - 'apps/*'\n");
         home.write("project/package.json", "{\"name\":\"p\"}");
         let found = find_design_root(&home.join("project"), "/", &home.path()).unwrap();
-        assert_eq!((found.dir.clone(), found.has_design), (home.join("project"), false));
+        assert_eq!(
+            (found.dir.clone(), found.has_design),
+            (home.join("project"), false)
+        );
     }
 
     #[cfg(unix)]
@@ -2603,14 +2724,18 @@ mod tests {
         real.write("DESIGN.md", DESIGN_MD);
         real.write("pnpm-workspace.yaml", "packages:\n  - 'apps/*'\n");
         real.write("project/package.json", "{\"name\":\"p\"}");
-        let link = std::env::temp_dir().join(format!("impeccable-ds-linkhome-{}", std::process::id()));
+        let link =
+            std::env::temp_dir().join(format!("impeccable-ds-linkhome-{}", std::process::id()));
         let _ = std::fs::remove_file(&link);
         std::os::unix::fs::symlink(&real.0, &link).unwrap();
         // HOME is the symlink; the target is the physical path, so a
         // logical-only comparison would walk straight past home and inherit.
         let found = find_design_root(&real.join("project"), "/", &link.to_string_lossy()).unwrap();
         let _ = std::fs::remove_file(&link);
-        assert_eq!((found.dir.clone(), found.has_design), (real.join("project"), false));
+        assert_eq!(
+            (found.dir.clone(), found.has_design),
+            (real.join("project"), false)
+        );
     }
 
     #[test]
@@ -2680,7 +2805,9 @@ mod tests {
             .map(|item| {
                 (
                     item.antipattern.clone(),
-                    item.extras.get("ignoreValue").and_then(|v| v.as_str().map(String::from)),
+                    item.extras
+                        .get("ignoreValue")
+                        .and_then(|v| v.as_str().map(String::from)),
                 )
             })
             .collect();
@@ -2703,7 +2830,9 @@ mod tests {
             .map(|item| {
                 (
                     item.antipattern.clone(),
-                    item.extras.get("ignoreValue").and_then(|v| v.as_str().map(String::from)),
+                    item.extras
+                        .get("ignoreValue")
+                        .and_then(|v| v.as_str().map(String::from)),
                 )
             })
             .collect();

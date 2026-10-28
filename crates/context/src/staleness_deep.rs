@@ -4,13 +4,23 @@ use crate::context::{extract_platform, TargetCandidate};
 use crate::design_parser::parse_design_md;
 use crate::jsp;
 use crate::signals::git_run;
-use crate::staleness::{check_native_platform_evidence, finding, js_truthy, to_relative, unique_roots, Finding};
+use crate::staleness::{
+    check_native_platform_evidence, finding, js_truthy, to_relative, unique_roots, Finding,
+};
 use crate::util::{exists, js_trim, read_json, safe_read};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::{Map, Value};
 
-const VISUAL_SOURCE_DIRS: [&str; 7] = ["src", "app", "pages", "components", "site", "styles", "public"];
+const VISUAL_SOURCE_DIRS: [&str; 7] = [
+    "src",
+    "app",
+    "pages",
+    "components",
+    "site",
+    "styles",
+    "public",
+];
 const LEGACY_LIVE_PATHS: [&str; 2] = [".impeccable-live.json", ".impeccable-live"];
 
 fn git(args: &[&str], cwd: &str) -> Option<String> {
@@ -18,8 +28,14 @@ fn git(args: &[&str], cwd: &str) -> Option<String> {
 }
 
 /// JS: checkDesignDrift
-pub fn check_design_drift(design_path: Option<&str>, project_root: &str, threshold: usize) -> Vec<Finding> {
-    let Some(design_path) = design_path else { return vec![] };
+pub fn check_design_drift(
+    design_path: Option<&str>,
+    project_root: &str,
+    threshold: usize,
+) -> Vec<Finding> {
+    let Some(design_path) = design_path else {
+        return vec![];
+    };
     if project_root.is_empty() {
         return vec![];
     }
@@ -28,11 +44,18 @@ pub fn check_design_drift(design_path: Option<&str>, project_root: &str, thresho
         _ => return vec![],
     }
     let rel_design = to_relative(Some(design_path), project_root).unwrap();
-    let last = match git(&["log", "-1", "--format=%H", "--", &rel_design], project_root) {
+    let last = match git(
+        &["log", "-1", "--format=%H", "--", &rel_design],
+        project_root,
+    ) {
         Some(s) if !s.is_empty() => s,
         _ => return vec![],
     };
-    let dirs: Vec<&str> = VISUAL_SOURCE_DIRS.iter().copied().filter(|d| exists(&jsp::join(&[project_root, d]))).collect();
+    let dirs: Vec<&str> = VISUAL_SOURCE_DIRS
+        .iter()
+        .copied()
+        .filter(|d| exists(&jsp::join(&[project_root, d])))
+        .collect();
     if dirs.is_empty() {
         return vec![];
     }
@@ -41,12 +64,29 @@ pub fn check_design_drift(design_path: Option<&str>, project_root: &str, thresho
     args.push(&range);
     args.push("--");
     args.extend(dirs.iter());
-    let Some(log) = git(&args, project_root) else { return vec![] };
-    let commits = if log.is_empty() { 0 } else { log.split('\n').filter(|l| !l.is_empty()).count() };
+    let Some(log) = git(&args, project_root) else {
+        return vec![];
+    };
+    let commits = if log.is_empty() {
+        0
+    } else {
+        log.split('\n').filter(|l| !l.is_empty()).count()
+    };
     if commits < threshold {
         return vec![];
     }
-    let when = git(&["log", "-1", "--format=%ad", "--date=short", "--", &rel_design], project_root).filter(|s| !s.is_empty());
+    let when = git(
+        &[
+            "log",
+            "-1",
+            "--format=%ad",
+            "--date=short",
+            "--",
+            &rel_design,
+        ],
+        project_root,
+    )
+    .filter(|s| !s.is_empty());
     vec![finding(
         "design-md-drift",
         "DESIGN.md",
@@ -75,7 +115,10 @@ fn has_coverage_value(v: Option<&Value>) -> bool {
             }
             // /^(?:\[\s*\]|\{\s*\})$/
             let inner_empty = |open: char, close: char| -> bool {
-                t.starts_with(open) && t.ends_with(close) && t.len() >= 2 && t[1..t.len() - 1].chars().all(|c| c.is_whitespace())
+                t.starts_with(open)
+                    && t.ends_with(close)
+                    && t.len() >= 2
+                    && t[1..t.len() - 1].chars().all(|c| c.is_whitespace())
             };
             !(inner_empty('[', ']') || inner_empty('{', '}'))
         }
@@ -83,19 +126,32 @@ fn has_coverage_value(v: Option<&Value>) -> bool {
     }
 }
 
-const SEED_MARKER_TAIL: &str = "impeccable document once there's code to capture the actual tokens and components. -->";
+const SEED_MARKER_TAIL: &str =
+    "impeccable document once there's code to capture the actual tokens and components. -->";
 
 /// JS: checkDesignCoverage
 pub fn check_design_coverage(design: Option<&str>, design_path: Option<&str>) -> Vec<Finding> {
-    let Some(design) = design.filter(|d| !d.is_empty()) else { return vec![] };
+    let Some(design) = design.filter(|d| !d.is_empty()) else {
+        return vec![];
+    };
     let model = parse_design_md(design);
     let is_seed = ["/", "$"].iter().any(|p| {
-        design.contains(&format!("<!-- SEED: established with the user before implementation; re-run {}{}", p, SEED_MARKER_TAIL))
+        design.contains(&format!(
+            "<!-- SEED: established with the user before implementation; re-run {}{}",
+            p, SEED_MARKER_TAIL
+        ))
     });
-    let required: Vec<&str> = if is_seed { vec!["colors", "typography"] } else { vec!["colors", "typography", "components"] };
+    let required: Vec<&str> = if is_seed {
+        vec!["colors", "typography"]
+    } else {
+        vec!["colors", "typography", "components"]
+    };
     let missing: Vec<&str> = required
         .into_iter()
-        .filter(|s| !model.has_section(s) && !has_coverage_value(model.frontmatter.as_ref().and_then(|f| f.get(*s))))
+        .filter(|s| {
+            !model.has_section(s)
+                && !has_coverage_value(model.frontmatter.as_ref().and_then(|f| f.get(*s)))
+        })
         .collect();
     if missing.is_empty() {
         return vec![];
@@ -115,7 +171,11 @@ pub fn check_design_coverage(design: Option<&str>, design_path: Option<&str>) ->
 }
 
 fn wrap_ticks(items: &[String]) -> String {
-    items.iter().map(|k| format!("`{}`", k)).collect::<Vec<_>>().join(", ")
+    items
+        .iter()
+        .map(|k| format!("`{}`", k))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// JS String(x) for config list entries.
@@ -128,7 +188,10 @@ fn js_string(v: &Value) -> String {
 }
 
 /// JS: checkDetectorIgnores
-pub fn check_detector_ignores(project_root: &str, known_rule_ids: Option<&[String]>) -> Vec<Finding> {
+pub fn check_detector_ignores(
+    project_root: &str,
+    known_rule_ids: Option<&[String]>,
+) -> Vec<Finding> {
     let mut out = Vec::new();
     if project_root.is_empty() {
         return out;
@@ -136,12 +199,17 @@ pub fn check_detector_ignores(project_root: &str, known_rule_ids: Option<&[Strin
     for name in ["config.json", "config.local.json"] {
         let fp = jsp::join(&[project_root, ".impeccable", name]);
         let Some(raw) = read_json(&fp) else { continue };
-        let Some(detector) = raw.get("detector") else { continue };
+        let Some(detector) = raw.get("detector") else {
+            continue;
+        };
         if !js_truthy(detector) || !(detector.is_object() || detector.is_array()) {
             continue;
         }
         let rel = to_relative(Some(&fp), project_root).unwrap();
-        if let (Some(known), Some(rules)) = (known_rule_ids, detector.get("ignoreRules").and_then(|v| v.as_array())) {
+        if let (Some(known), Some(rules)) = (
+            known_rule_ids,
+            detector.get("ignoreRules").and_then(|v| v.as_array()),
+        ) {
             let unknown: Vec<String> = rules
                 .iter()
                 .map(|r| js_trim(&js_string_or_empty(r)).to_lowercase())
@@ -166,7 +234,9 @@ pub fn check_detector_ignores(project_root: &str, known_rule_ids: Option<&[Strin
             let missing: Vec<String> = files
                 .iter()
                 .map(|e| js_trim(&js_string_or_empty(e)).to_string())
-                .filter(|e| !e.is_empty() && !e.contains('*') && !exists(&jsp::join(&[project_root, e])))
+                .filter(|e| {
+                    !e.is_empty() && !e.contains('*') && !exists(&jsp::join(&[project_root, e]))
+                })
                 .collect();
             if !missing.is_empty() {
                 out.push(finding(
@@ -232,7 +302,11 @@ fn resolve_hook_script_path(token: &str, root: &str) -> Option<String> {
     if PLACEHOLDER.is_match(&expanded) {
         return None;
     }
-    Some(if jsp::is_absolute(&expanded) { expanded } else { jsp::join(&[root, &expanded]) })
+    Some(if jsp::is_absolute(&expanded) {
+        expanded
+    } else {
+        jsp::join(&[root, &expanded])
+    })
 }
 
 /// JS: checkHookInstallation
@@ -263,7 +337,9 @@ pub fn check_hook_installation(
     let mut installed_at: Option<String> = None;
     for (root, mp, is_user) in &entries {
         let Some(raw) = read_json(mp) else { continue };
-        let Some(hooks) = raw.get("hooks") else { continue };
+        let Some(hooks) = raw.get("hooks") else {
+            continue;
+        };
         if !js_truthy(hooks) {
             continue;
         }
@@ -272,13 +348,21 @@ pub fn check_hook_installation(
         if commands.is_empty() {
             continue;
         }
-        let base = if project_root.is_empty() { *root } else { project_root };
+        let base = if project_root.is_empty() {
+            *root
+        } else {
+            project_root
+        };
         installed_at = to_relative(Some(mp), base);
         let broken: Vec<&String> = commands
             .iter()
             .filter(|c| {
-                let Some(token) = hook_script_token_from(c) else { return false };
-                let Some(abs) = resolve_hook_script_path(&token, root) else { return false };
+                let Some(token) = hook_script_token_from(c) else {
+                    return false;
+                };
+                let Some(abs) = resolve_hook_script_path(&token, root) else {
+                    return false;
+                };
                 !exists(&abs)
             })
             .collect();
@@ -327,9 +411,15 @@ pub fn check_hook_installation(
             for name in ["config.json", "config.local.json"] {
                 let cp = jsp::join(&[root, ".impeccable", name]);
                 let Some(raw) = read_json(&cp) else { continue };
-                let Some(hook) = raw.get("hook") else { continue };
+                let Some(hook) = raw.get("hook") else {
+                    continue;
+                };
                 if js_truthy(hook) && hook.get("enabled") == Some(&Value::Bool(false)) {
-                    let base = if project_root.is_empty() { root.as_str() } else { project_root };
+                    let base = if project_root.is_empty() {
+                        root.as_str()
+                    } else {
+                        project_root
+                    };
                     out.push(finding(
                         "hook-enabled-conflict",
                         "config.json",
@@ -354,7 +444,11 @@ pub fn check_legacy_live_state(project_root: &str) -> Vec<Finding> {
     if project_root.is_empty() {
         return vec![];
     }
-    let present: Vec<&str> = LEGACY_LIVE_PATHS.iter().copied().filter(|rel| exists(&jsp::join(&[project_root, rel]))).collect();
+    let present: Vec<&str> = LEGACY_LIVE_PATHS
+        .iter()
+        .copied()
+        .filter(|rel| exists(&jsp::join(&[project_root, rel])))
+        .collect();
     if present.is_empty() {
         return vec![];
     }
@@ -386,17 +480,44 @@ impl WorkspaceRow {
         let mut m = Map::new();
         m.insert("name".into(), Value::String(self.name.clone()));
         m.insert("path".into(), Value::String(self.path.clone()));
-        m.insert("productStatus".into(), Value::String(self.product_status.to_string()));
-        m.insert("productPath".into(), self.product_path.clone().map(Value::String).unwrap_or(Value::Null));
-        m.insert("designStatus".into(), Value::String(self.design_status.to_string()));
-        m.insert("designPath".into(), self.design_path.clone().map(Value::String).unwrap_or(Value::Null));
-        m.insert("platform".into(), self.platform.clone().map(Value::String).unwrap_or(Value::Null));
+        m.insert(
+            "productStatus".into(),
+            Value::String(self.product_status.to_string()),
+        );
+        m.insert(
+            "productPath".into(),
+            self.product_path
+                .clone()
+                .map(Value::String)
+                .unwrap_or(Value::Null),
+        );
+        m.insert(
+            "designStatus".into(),
+            Value::String(self.design_status.to_string()),
+        );
+        m.insert(
+            "designPath".into(),
+            self.design_path
+                .clone()
+                .map(Value::String)
+                .unwrap_or(Value::Null),
+        );
+        m.insert(
+            "platform".into(),
+            self.platform
+                .clone()
+                .map(Value::String)
+                .unwrap_or(Value::Null),
+        );
         Value::Object(m)
     }
 }
 
 /// JS: checkWorkspaces
-pub fn check_workspaces(repo_root: &str, candidates: &[TargetCandidate]) -> (Vec<Finding>, Vec<WorkspaceRow>) {
+pub fn check_workspaces(
+    repo_root: &str,
+    candidates: &[TargetCandidate],
+) -> (Vec<Finding>, Vec<WorkspaceRow>) {
     if repo_root.is_empty() || candidates.is_empty() {
         return (vec![], vec![]);
     }
@@ -404,7 +525,10 @@ pub fn check_workspaces(repo_root: &str, candidates: &[TargetCandidate]) -> (Vec
     let mut workspaces = Vec::new();
     for c in candidates {
         let workspace_root = jsp::join(&[repo_root, &c.path]);
-        let product_path = c.product_path.as_deref().map(|p| jsp::join(&[repo_root, p]));
+        let product_path = c
+            .product_path
+            .as_deref()
+            .map(|p| jsp::join(&[repo_root, p]));
         let product = product_path.as_deref().and_then(safe_read);
         let platform = extract_platform(product.as_deref());
         workspaces.push(WorkspaceRow {
@@ -422,7 +546,12 @@ pub fn check_workspaces(repo_root: &str, candidates: &[TargetCandidate]) -> (Vec
                 }
             }),
         });
-        let native = check_native_platform_evidence(&workspace_root, platform.as_deref(), product.as_deref(), c.product_path.as_deref());
+        let native = check_native_platform_evidence(
+            &workspace_root,
+            platform.as_deref(),
+            product.as_deref(),
+            c.product_path.as_deref(),
+        );
         for entry in native {
             let inherited = c.product_status == "inherited";
             findings.push(finding(
@@ -447,7 +576,10 @@ pub fn check_workspaces(repo_root: &str, candidates: &[TargetCandidate]) -> (Vec
             ));
         }
     }
-    let inherited: Vec<&WorkspaceRow> = workspaces.iter().filter(|w| w.product_status == "inherited").collect();
+    let inherited: Vec<&WorkspaceRow> = workspaces
+        .iter()
+        .filter(|w| w.product_status == "inherited")
+        .collect();
     if !inherited.is_empty() {
         findings.push(finding(
             "workspace-context-inherited",
@@ -468,7 +600,12 @@ pub fn check_workspaces(repo_root: &str, candidates: &[TargetCandidate]) -> (Vec
 
 /// JS: loadKnownRuleIds -> the bundled registry, lowercased ids.
 pub fn load_known_rule_ids() -> Option<Vec<String>> {
-    Some(impeccable_core::registry::ANTIPATTERNS.iter().map(|r| r.id.to_lowercase()).collect())
+    Some(
+        impeccable_core::registry::ANTIPATTERNS
+            .iter()
+            .map(|r| r.id.to_lowercase())
+            .collect(),
+    )
 }
 
 #[cfg(test)]
@@ -481,7 +618,10 @@ mod tests {
         let base = std::env::temp_dir().join(format!(
             "impeccable-doctor-hook-{}-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
             // A per-process counter: Windows' clock is coarse enough that two
             // parallel tests can share a nanosecond stamp and then delete each
             // other's directories.
@@ -491,8 +631,13 @@ mod tests {
         // Like Node's `realpathSync`: on Windows, `canonicalize` yields a
         // `\\?\` verbatim path, which the kernel takes literally, so the `/`
         // separators a hook command appends would not resolve under it.
-        let real = std::fs::canonicalize(&base).unwrap().to_string_lossy().into_owned();
-        real.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(real)
+        let real = std::fs::canonicalize(&base)
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        real.strip_prefix(r"\\?\")
+            .map(str::to_string)
+            .unwrap_or(real)
     }
 
     fn write(root: &str, rel: &str, body: &str) {
@@ -505,7 +650,11 @@ mod tests {
     fn hook_script_missing_resolves_launcher_and_legacy_forms() {
         let root = tmp();
         // Launcher form pointing at a launcher that exists: no finding.
-        write(&root, ".claude/skills/impeccable/scripts/impeccable", "#!/bin/sh\n");
+        write(
+            &root,
+            ".claude/skills/impeccable/scripts/impeccable",
+            "#!/bin/sh\n",
+        );
         write(
             &root,
             ".claude/settings.local.json",
@@ -539,13 +688,30 @@ mod tests {
     #[test]
     fn cursor_gate_is_an_auto_finding_and_the_post_edit_hook_is_not() {
         let root = tmp();
-        write(&root, ".cursor/skills/impeccable/scripts/impeccable", "#!/bin/sh\n");
-        write(&root, ".cursor/hooks.json", r#"{"version":1,"hooks":{"preToolUse":[{"command":"\".cursor/skills/impeccable/scripts/impeccable\" hook-before-edit","timeout":5}]}}"#);
+        write(
+            &root,
+            ".cursor/skills/impeccable/scripts/impeccable",
+            "#!/bin/sh\n",
+        );
+        write(
+            &root,
+            ".cursor/hooks.json",
+            r#"{"version":1,"hooks":{"preToolUse":[{"command":"\".cursor/skills/impeccable/scripts/impeccable\" hook-before-edit","timeout":5}]}}"#,
+        );
         let f = check_hook_installation(&root, None, "cursor", None);
-        assert_eq!(f.len(), 1, "{:?}", f.iter().map(|x| &x.id).collect::<Vec<_>>());
+        assert_eq!(
+            f.len(),
+            1,
+            "{:?}",
+            f.iter().map(|x| &x.id).collect::<Vec<_>>()
+        );
         assert_eq!(f[0].id, "cursor-hook-pre-edit-gate");
         assert_eq!(f[0].severity, "auto");
-        write(&root, ".cursor/hooks.json", r#"{"version":1,"hooks":{"postToolUse":[{"command":"\".cursor/skills/impeccable/scripts/impeccable\" hook","matcher":"^Write$","timeout":5}]}}"#);
+        write(
+            &root,
+            ".cursor/hooks.json",
+            r#"{"version":1,"hooks":{"postToolUse":[{"command":"\".cursor/skills/impeccable/scripts/impeccable\" hook","matcher":"^Write$","timeout":5}]}}"#,
+        );
         assert!(check_hook_installation(&root, None, "cursor", None).is_empty());
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -565,7 +731,11 @@ mod tests {
             "impeccable",
         ]);
         let manifest = crate::jsp::join(&[&home, ".claude", "settings.json"]);
-        write(&home, ".claude/skills/impeccable/scripts/impeccable", "#!/bin/sh\n");
+        write(
+            &home,
+            ".claude/skills/impeccable/scripts/impeccable",
+            "#!/bin/sh\n",
+        );
         write(
             &home,
             ".claude/settings.json",
@@ -592,7 +762,13 @@ mod tests {
         let findings = check_hook_installation(&project, None, "claude-code", Some(&manifest));
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert_eq!(findings[0].id, "hook-script-missing");
-        assert!(findings[0].fix.starts_with("Reinstall with `impeccable update --user`"), "{:?}", findings[0].fix);
+        assert!(
+            findings[0]
+                .fix
+                .starts_with("Reinstall with `impeccable update --user`"),
+            "{:?}",
+            findings[0].fix
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -602,9 +778,20 @@ mod tests {
         let project = crate::jsp::join(&[&root, "project"]);
         let home = crate::jsp::join(&[&root, "home"]);
         std::fs::create_dir_all(&project).unwrap();
-        let launcher = crate::jsp::join(&[&home, ".agents", "skills", "impeccable", "scripts", "impeccable"]);
+        let launcher = crate::jsp::join(&[
+            &home,
+            ".agents",
+            "skills",
+            "impeccable",
+            "scripts",
+            "impeccable",
+        ]);
         let manifest = crate::jsp::join(&[&root, "codex-home", "hooks.json"]);
-        write(&home, ".agents/skills/impeccable/scripts/impeccable", "#!/bin/sh\n");
+        write(
+            &home,
+            ".agents/skills/impeccable/scripts/impeccable",
+            "#!/bin/sh\n",
+        );
         write(
             &root,
             "codex-home/hooks.json",

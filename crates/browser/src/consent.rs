@@ -98,7 +98,11 @@ pub struct ConsentManager {
 pub const CONSENT_MANAGERS: &[ConsentManager] = &[
     ConsentManager {
         name: "OneTrust",
-        roots: &["#onetrust-consent-sdk", "#onetrust-banner-sdk", "#onetrust-pc-sdk"],
+        roots: &[
+            "#onetrust-consent-sdk",
+            "#onetrust-banner-sdk",
+            "#onetrust-pc-sdk",
+        ],
         backdrops: &[".onetrust-pc-dark-filter"],
         html_lock_classes: &[],
         body_lock_classes: &[],
@@ -122,7 +126,11 @@ pub const CONSENT_MANAGERS: &[ConsentManager] = &[
     },
     ConsentManager {
         name: "TrustArc",
-        roots: &["#consent_blackbar", "#truste-consent-track", ".truste_box_overlay"],
+        roots: &[
+            "#consent_blackbar",
+            "#truste-consent-track",
+            ".truste_box_overlay",
+        ],
         backdrops: &[".truste_overlay"],
         html_lock_classes: &[],
         body_lock_classes: &[],
@@ -162,7 +170,11 @@ pub const CONSENT_MANAGERS: &[ConsentManager] = &[
     },
     ConsentManager {
         name: "Cookie Consent",
-        roots: &[".cc-window[aria-label='cookieconsent']", ".cc-window.cc-banner", ".cc-grower"],
+        roots: &[
+            ".cc-window[aria-label='cookieconsent']",
+            ".cc-window.cc-banner",
+            ".cc-grower",
+        ],
         backdrops: &[],
         html_lock_classes: &[],
         body_lock_classes: &[],
@@ -170,7 +182,12 @@ pub const CONSENT_MANAGERS: &[ConsentManager] = &[
     },
     ConsentManager {
         name: "CookieYes",
-        roots: &[".cky-consent-container", ".cky-modal", "#cookie-law-info-bar", "#cliSettingsPopup"],
+        roots: &[
+            ".cky-consent-container",
+            ".cky-modal",
+            "#cookie-law-info-bar",
+            "#cliSettingsPopup",
+        ],
         backdrops: &[".cky-overlay", ".cli-modal-backdrop"],
         html_lock_classes: &[],
         body_lock_classes: &[],
@@ -210,7 +227,11 @@ pub const CONSENT_MANAGERS: &[ConsentManager] = &[
     },
     ConsentManager {
         name: "Borlabs Cookie",
-        roots: &["#BorlabsCookieBox", "#BorlabsCookieBoxWrap", "#BorlabsCookieWidget"],
+        roots: &[
+            "#BorlabsCookieBox",
+            "#BorlabsCookieBoxWrap",
+            "#BorlabsCookieWidget",
+        ],
         backdrops: &["#BorlabsDialogBackdrop"],
         html_lock_classes: &[],
         body_lock_classes: &[],
@@ -991,7 +1012,12 @@ impl ConsentReport {
     pub fn merge(&mut self, v: &Value) {
         let strs = |v: Option<&Value>| -> Vec<String> {
             v.and_then(Value::as_array)
-                .map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(Value::as_str)
+                        .map(String::from)
+                        .collect()
+                })
                 .unwrap_or_default()
         };
         for name in strs(v.get("hidden")) {
@@ -1015,7 +1041,12 @@ impl ConsentReport {
                 self.unlocked.push(u);
             }
         }
-        let order = |n: &String| CONSENT_MANAGERS.iter().position(|m| m.name == n).unwrap_or(usize::MAX);
+        let order = |n: &String| {
+            CONSENT_MANAGERS
+                .iter()
+                .position(|m| m.name == n)
+                .unwrap_or(usize::MAX)
+        };
         self.hidden.sort_by_key(order);
         self.matched.sort_by_key(|(n, _)| order(n));
     }
@@ -1038,11 +1069,27 @@ mod tests {
     /// or class the vendor's own markup carries.
     #[test]
     fn selectors_are_vendor_specific() {
-        let generic = ["cookie", "cookies", "consent", "banner", "gdpr", "privacy", "cookie-banner", "cookie-consent", "consent-banner", "modal", "overlay"];
+        let generic = [
+            "cookie",
+            "cookies",
+            "consent",
+            "banner",
+            "gdpr",
+            "privacy",
+            "cookie-banner",
+            "cookie-consent",
+            "consent-banner",
+            "modal",
+            "overlay",
+        ];
         for m in CONSENT_MANAGERS {
             for s in m.roots.iter().chain(m.backdrops) {
                 let bare = s.trim_start_matches(['#', '.']).to_ascii_lowercase();
-                assert!(!generic.contains(&bare.as_str()), "{}: {s} is generic", m.name);
+                assert!(
+                    !generic.contains(&bare.as_str()),
+                    "{}: {s} is generic",
+                    m.name
+                );
             }
         }
     }
@@ -1050,9 +1097,28 @@ mod tests {
     #[test]
     fn every_requested_vendor_is_listed() {
         for name in [
-            "OneTrust", "Cookiebot", "Usercentrics", "TrustArc", "Didomi", "Quantcast Choice", "Sourcepoint",
-            "Osano", "CookieYes", "Complianz", "iubenda", "Termly", "Axeptio", "Borlabs Cookie", "Klaro",
-            "Cookie Notice", "Shopify", "consentmanager", "Tealium", "Transcend", "Enzuzo", "Tarteaucitron",
+            "OneTrust",
+            "Cookiebot",
+            "Usercentrics",
+            "TrustArc",
+            "Didomi",
+            "Quantcast Choice",
+            "Sourcepoint",
+            "Osano",
+            "CookieYes",
+            "Complianz",
+            "iubenda",
+            "Termly",
+            "Axeptio",
+            "Borlabs Cookie",
+            "Klaro",
+            "Cookie Notice",
+            "Shopify",
+            "consentmanager",
+            "Tealium",
+            "Transcend",
+            "Enzuzo",
+            "Tarteaucitron",
         ] {
             assert!(CONSENT_MANAGERS.iter().any(|m| m.name == name), "{name}");
         }

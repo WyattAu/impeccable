@@ -10,12 +10,11 @@ use impeccable_core::registry::{all_antipatterns, filter_by_scopes, rule_scopes}
 use serde_json::Value;
 
 use crate::config::{
-    filter_detection_findings, normalize_ignore_rule, read_detection_config, should_ignore_detection_file,
-    DetectionConfig,
+    filter_detection_findings, normalize_ignore_rule, read_detection_config,
+    should_ignore_detection_file, DetectionConfig,
 };
 use crate::design_system::{load_design_system_for_target, DesignSystemCache};
 use crate::detect_text::{detect_text, ext_from_file_path, TextOptions};
-use crate::project_tokens::{may_need_tokens, ProjectTokens};
 use crate::engines::{EngineError, Engines, ScanOptions};
 use crate::file_system::{
     build_import_graph_reporting, detect_framework_config, is_port_listening, uses_html_engine,
@@ -29,7 +28,8 @@ use crate::list_rules::{
     collect_catalog_rules, format_list_rules_ids, format_list_rules_json, format_list_rules_text,
     LIST_RULES_SCAN_ERROR,
 };
-use crate::util::{exists, re, D};
+use crate::project_tokens::{may_need_tokens, ProjectTokens};
+use crate::util::{exists, re};
 
 pub const USAGE: &str = "Usage: impeccable detect [options] [file-or-dir-or-url...]
 
@@ -323,7 +323,8 @@ impl<'a> Ctx<'a> {
     /// JS: main.mjs#reportLocalScanFailure
     fn report_local_scan_failure(&mut self, target: &str, message: &str) {
         self.had_operational_failure = true;
-        self.io.err(&format!("Error: cannot scan {target}: {message}\n"));
+        self.io
+            .err(&format!("Error: cannot scan {target}: {message}\n"));
     }
 
     fn scan_options_for(&mut self, local_path: Option<&str>) -> ScanOptions {
@@ -336,12 +337,10 @@ impl<'a> Ctx<'a> {
             &self.cwd,
             &self.home,
         ) {
-            Some(ds) => {
-                ScanOptions {
-                    design_system: Some(ds),
-                    ..self.base.clone()
-                }
-            }
+            Some(ds) => ScanOptions {
+                design_system: Some(ds),
+                ..self.base.clone()
+            },
             None => self.base.clone(),
         }
     }
@@ -349,7 +348,9 @@ impl<'a> Ctx<'a> {
     /// Record the note a design system owes for a target once its scan has
     /// run: a scan that failed switched nothing off.
     fn note_scanned(&mut self, options: &ScanOptions) {
-        let Some(ds) = options.design_system.as_deref() else { return };
+        let Some(ds) = options.design_system.as_deref() else {
+            return;
+        };
         if let Some(note) = crate::design_system::declared_purple_note(ds) {
             if !self.design_notes.contains(&note) {
                 self.design_notes.push(note);
@@ -624,7 +625,9 @@ fn detect_cli(args_in: &[String], io: &mut Io, engines: &Engines) -> Result<i32,
         return Err(Exit(1));
     }
     if cdp.is_some() && viewport.is_some() {
-        io.err("Error: --viewport does not apply with --cdp: the attached window keeps its own size\n");
+        io.err(
+            "Error: --viewport does not apply with --cdp: the attached window keeps its own size\n",
+        );
         return Err(Exit(1));
     }
     let design_system_enabled = config_enabled
@@ -788,7 +791,11 @@ fn detect_cli(args_in: &[String], io: &mut Io, engines: &Engines) -> Result<i32,
         }
         result?;
         if !json_mode && !quiet_mode && !github_mode && ctx.regex_only_files > 0 {
-            let note = regex_only_note(ctx.regex_only_files, &ctx.regex_only_exts, &ctx.dev_server_ports);
+            let note = regex_only_note(
+                ctx.regex_only_files,
+                &ctx.regex_only_exts,
+                &ctx.dev_server_ports,
+            );
             ctx.io.err(&note);
         }
     }
@@ -863,10 +870,17 @@ const HTML_LIKE_TEMPLATE_EXTS: &[&str] = &[".astro", ".svelte", ".vue"];
 /// entry, and, when `--scope` narrows the report, every registered rule in
 /// none of the requested scopes ([`filter_by_scopes`]).
 fn unreported_rules(ignore_rules: &[String], scopes: &[String]) -> Vec<String> {
-    let mut out: Vec<String> = ignore_rules.iter().map(|r| normalize_ignore_rule(r)).collect();
+    let mut out: Vec<String> = ignore_rules
+        .iter()
+        .map(|r| normalize_ignore_rule(r))
+        .collect();
     if !scopes.is_empty() {
         for rule in all_antipatterns() {
-            let in_scope = rule.scopes.unwrap_or(&[]).iter().any(|s| scopes.iter().any(|w| w == s));
+            let in_scope = rule
+                .scopes
+                .unwrap_or(&[])
+                .iter()
+                .any(|s| scopes.iter().any(|w| w == s));
             if !in_scope {
                 out.push(rule.id.to_string());
             }
@@ -878,7 +892,11 @@ fn unreported_rules(ignore_rules: &[String], scopes: &[String]) -> Vec<String> {
 }
 
 fn regex_only_note(n: usize, exts: &BTreeSet<String>, ports: &BTreeSet<u32>) -> String {
-    let listed: Vec<&str> = exts.iter().map(String::as_str).filter(|e| !e.is_empty()).collect();
+    let listed: Vec<&str> = exts
+        .iter()
+        .map(String::as_str)
+        .filter(|e| !e.is_empty())
+        .collect();
     let mut note = format!(
         "\n{n} file{} scanned with regex matching only{}.\nRules that need a parsed page (tiny-text, low-contrast and other element rules) did not run on them; findings are an undercount, not a clean bill of health.\n",
         if n == 1 { "" } else { "s" },
@@ -1032,12 +1050,13 @@ fn scan_targets(
             // Unreadable directories and files are reported, not silently
             // skipped, and each one forces exit 1 (#711).
             let mut walk_failures: Vec<(String, String)> = Vec::new();
-            let files: Vec<String> = walk_dir_reporting(&resolved, &ctx.config.extensions, &mut |dir, err| {
-                walk_failures.push((dir.to_string(), node_scan_error(dir, err)));
-            })
-            .into_iter()
-            .filter(|f| !should_ignore_detection_file(f, &cwd, &ctx.config))
-            .collect();
+            let files: Vec<String> =
+                walk_dir_reporting(&resolved, &ctx.config.extensions, &mut |dir, err| {
+                    walk_failures.push((dir.to_string(), node_scan_error(dir, err)));
+                })
+                .into_iter()
+                .filter(|f| !should_ignore_detection_file(f, &cwd, &ctx.config))
+                .collect();
             for (dir, message) in walk_failures {
                 ctx.report_local_scan_failure(&dir, &message);
             }
@@ -1045,7 +1064,12 @@ fn scan_targets(
                 .iter()
                 .filter(|f| uses_html_engine(f, &ctx.config.extensions))
                 .count();
-            if files.len() > 50 && ctx.stdin_tty && !ctx.json_mode && !ctx.quiet_mode && !ctx.github_mode {
+            if files.len() > 50
+                && ctx.stdin_tty
+                && !ctx.json_mode
+                && !ctx.quiet_mode
+                && !ctx.github_mode
+            {
                 ctx.io.err(&format!(
                     "\nFound {} files ({} HTML) in {}.\nScanning may take a while{}.\nTarget a specific subdirectory to narrow scope.\n",
                     files.len(),
@@ -1187,10 +1211,15 @@ mod design_note_tests {
 
     #[test]
     fn the_purple_note_follows_only_a_scan_that_ran() {
-        let dir = std::env::temp_dir().join(format!("impeccable-design-note-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("impeccable-design-note-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("DESIGN.md"), "---\ncolors:\n  primary: \"#5c2d91\"\n---\n# Design\n").unwrap();
+        std::fs::write(
+            dir.join("DESIGN.md"),
+            "---\ncolors:\n  primary: \"#5c2d91\"\n---\n# Design\n",
+        )
+        .unwrap();
         std::fs::write(dir.join("page.html"), "<!doctype html><p>Hi</p>").unwrap();
         let page = dir.join("page.html").to_string_lossy().into_owned();
 

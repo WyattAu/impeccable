@@ -179,7 +179,10 @@ fn uppercase_var_fallback_in_border_shorthand_still_reports_cramped_padding() {
     "#;
     let lower = html.replace("VAR(", "var(");
 
-    assert_eq!(cramped_padding_ids(html, None), cramped_padding_ids(&lower, None));
+    assert_eq!(
+        cramped_padding_ids(html, None),
+        cramped_padding_ids(&lower, None)
+    );
     assert!(!cramped_padding_ids(&lower, None).is_empty());
 }
 

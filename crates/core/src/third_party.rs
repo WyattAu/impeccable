@@ -70,14 +70,25 @@ pub const WIDGET_VENDORS: &[WidgetVendor] = &[
         scope: WidgetScope::OwnElement,
         id_prefixes: &["swiper-wrapper-"],
         class_prefixes: &[],
-        classes: &["swiper", "swiper-container", "swiper-wrapper", "swiper-slide"],
+        classes: &[
+            "swiper",
+            "swiper-container",
+            "swiper-wrapper",
+            "swiper-slide",
+        ],
     },
     WidgetVendor {
         name: "Slick",
         scope: WidgetScope::OwnElement,
         id_prefixes: &[],
         class_prefixes: &[],
-        classes: &["slick-slider", "slick-list", "slick-track", "slick-slide", "slick-arrow"],
+        classes: &[
+            "slick-slider",
+            "slick-list",
+            "slick-track",
+            "slick-slide",
+            "slick-arrow",
+        ],
     },
     WidgetVendor {
         name: "Slick",
@@ -119,10 +130,11 @@ fn marks(dom: &dyn Dom, el: ElId, vendor: &WidgetVendor) -> bool {
     }
     let class = dom.attr(el, "class").unwrap_or_default();
     class
-        .split(|c: char| matches!(c, ' ' | '\t' | '\n' | '\x0C' | '\r'))
+        .split([' ', '\t', '\n', '\x0C', '\r'])
         .filter(|t| !t.is_empty())
         .any(|token| {
-            vendor.classes.contains(&token) || vendor.class_prefixes.iter().any(|p| token.starts_with(p))
+            vendor.classes.contains(&token)
+                || vendor.class_prefixes.iter().any(|p| token.starts_with(p))
         })
 }
 
@@ -175,18 +187,50 @@ pub struct AdTechVendor {
 /// available` when its load is blocked or slow (findings 10133600,
 /// 10133648, 10133678, 10133733, 10133748, 10133787).
 pub const AD_TECH_VENDORS: &[AdTechVendor] = &[
-    AdTechVendor { name: "AnyMind", sources: &["anymind360.com"], files: &[] },
-    AdTechVendor { name: "Prebid", sources: &[], files: &["prebid"] },
-    AdTechVendor { name: "Meta Pixel", sources: &["connect.facebook.net"], files: &[] },
-    AdTechVendor { name: "Google Tag Manager", sources: &["googletagmanager.com"], files: &[] },
-    AdTechVendor { name: "OneTrust", sources: &["cookielaw.org"], files: &[] },
     AdTechVendor {
-        name: "Google Ads",
-        sources: &["googlesyndication.com", "doubleclick.net", "googleadservices.com"],
+        name: "AnyMind",
+        sources: &["anymind360.com"],
         files: &[],
     },
-    AdTechVendor { name: "Nagich", sources: &["nagich.co.il"], files: &[] },
-    AdTechVendor { name: "Vector", sources: &["cdn.vector.co"], files: &[] },
+    AdTechVendor {
+        name: "Prebid",
+        sources: &[],
+        files: &["prebid"],
+    },
+    AdTechVendor {
+        name: "Meta Pixel",
+        sources: &["connect.facebook.net"],
+        files: &[],
+    },
+    AdTechVendor {
+        name: "Google Tag Manager",
+        sources: &["googletagmanager.com"],
+        files: &[],
+    },
+    AdTechVendor {
+        name: "OneTrust",
+        sources: &["cookielaw.org"],
+        files: &[],
+    },
+    AdTechVendor {
+        name: "Google Ads",
+        sources: &[
+            "googlesyndication.com",
+            "doubleclick.net",
+            "googleadservices.com",
+        ],
+        files: &[],
+    },
+    AdTechVendor {
+        name: "Nagich",
+        sources: &["nagich.co.il"],
+        files: &[],
+    },
+    AdTechVendor {
+        name: "Vector",
+        sources: &["cdn.vector.co"],
+        files: &[],
+    },
     AdTechVendor {
         name: "Chase Reporting",
         sources: &["asset.chase.com/web/library/digddsautomation/reportingjs/"],
@@ -223,7 +267,9 @@ fn served_from(host: &str, path: &str, source: &str) -> bool {
 /// Whether `host` is `domain` or a subdomain of it.
 fn host_is_or_under(host: &str, domain: &str) -> bool {
     host == domain
-        || host.strip_suffix(domain).is_some_and(|head| head.ends_with('.'))
+        || host
+            .strip_suffix(domain)
+            .is_some_and(|head| head.ends_with('.'))
 }
 
 /// The lower-cased file names of the script URLs in a page error's source
@@ -273,8 +319,14 @@ pub fn ad_tech_vendor(message: &str, source: Option<&str>) -> Option<&'static st
         let hosts = script_hosts(source);
         let files = script_file_names(source);
         for vendor in AD_TECH_VENDORS {
-            if vendor.sources.iter().any(|s| hosts.iter().any(|(h, p)| served_from(h, p, s)))
-                || vendor.files.iter().any(|p| files.iter().any(|f| f.starts_with(p)))
+            if vendor
+                .sources
+                .iter()
+                .any(|s| hosts.iter().any(|(h, p)| served_from(h, p, s)))
+                || vendor
+                    .files
+                    .iter()
+                    .any(|p| files.iter().any(|f| f.starts_with(p)))
             {
                 return Some(vendor.name);
             }
@@ -336,18 +388,36 @@ mod tests {
     fn ad_tech_hosts_match_whole_host_names() {
         let msg = "Uncaught TypeError: x is not a function";
         assert_eq!(
-            ad_tech_vendor(msg, Some("at f, https://example.com/assets/googletagmanager.com-helper.js:1:2")),
+            ad_tech_vendor(
+                msg,
+                Some("at f, https://example.com/assets/googletagmanager.com-helper.js:1:2")
+            ),
             None
         );
-        assert_eq!(ad_tech_vendor(msg, Some("at f, https://notgoogletagmanager.com/app.js:1:2")), None);
+        assert_eq!(
+            ad_tech_vendor(
+                msg,
+                Some("at f, https://notgoogletagmanager.com/app.js:1:2")
+            ),
+            None
+        );
         // A host and path prefix matches only under that path.
         assert_eq!(
             ad_tech_vendor(msg, Some("at f, https://asset.chase.com/web/library/digddsautomation/reportingjs/Reporting.js:1:2")),
             Some("Chase Reporting")
         );
-        assert_eq!(ad_tech_vendor(msg, Some("at f, https://asset.chase.com/web/app/main.js:1:2")), None);
         assert_eq!(
-            ad_tech_vendor(msg, Some("at f, https://securepubads.g.doubleclick.net:443/tag/js/gpt.js:3:4")),
+            ad_tech_vendor(
+                msg,
+                Some("at f, https://asset.chase.com/web/app/main.js:1:2")
+            ),
+            None
+        );
+        assert_eq!(
+            ad_tech_vendor(
+                msg,
+                Some("at f, https://securepubads.g.doubleclick.net:443/tag/js/gpt.js:3:4")
+            ),
             Some("Google Ads")
         );
     }
@@ -357,7 +427,10 @@ mod tests {
         let topics = "Uncaught (in promise) NotSupportedError: Failed to execute 'browsingTopics' on 'Document': document.browsingTopics() is deprecated and has been removed.";
         assert_eq!(ad_tech_vendor(topics, None), Some("ad tech"));
         assert_eq!(
-            ad_tech_vendor(topics, Some("at https://anymind360.com/js/17837/prebid_2026_9_10_16_23_39.js:89:956")),
+            ad_tech_vendor(
+                topics,
+                Some("at https://anymind360.com/js/17837/prebid_2026_9_10_16_23_39.js:89:956")
+            ),
             Some("AnyMind")
         );
         assert_eq!(
@@ -368,7 +441,10 @@ mod tests {
             Some("Meta Pixel")
         );
         assert_eq!(
-            ad_tech_vendor("Uncaught [object Object]", Some("at error, https://www.googletagmanager.com/gtm.js?id=GTM-X:272:504")),
+            ad_tech_vendor(
+                "Uncaught [object Object]",
+                Some("at error, https://www.googletagmanager.com/gtm.js?id=GTM-X:272:504")
+            ),
             Some("Google Tag Manager")
         );
         assert_eq!(
@@ -386,19 +462,34 @@ mod tests {
             ),
             None
         );
-        assert_eq!(ad_tech_vendor("Minified React error #418", Some("at https://example.com/app.js:1:1")), None);
+        assert_eq!(
+            ad_tech_vendor(
+                "Minified React error #418",
+                Some("at https://example.com/app.js:1:1")
+            ),
+            None
+        );
         // Prebid is a library sites serve themselves: its file is the
         // vendor's wherever it is hosted, a directory named after it is not.
         assert_eq!(
-            ad_tech_vendor("Uncaught Error: bidder timeout", Some("at https://cdn.example.com/prebid/prebid-9.1.js:4:2")),
+            ad_tech_vendor(
+                "Uncaught Error: bidder timeout",
+                Some("at https://cdn.example.com/prebid/prebid-9.1.js:4:2")
+            ),
             Some("Prebid")
         );
         assert_eq!(
-            ad_tech_vendor("Uncaught Error: x", Some("at load, https://shop.example/assets/prebid.min.js?v=3:1:1")),
+            ad_tech_vendor(
+                "Uncaught Error: x",
+                Some("at load, https://shop.example/assets/prebid.min.js?v=3:1:1")
+            ),
             Some("Prebid")
         );
         assert_eq!(
-            ad_tech_vendor("Uncaught TypeError: cart is undefined", Some("at https://shop.example/prebid/app.js:1:1")),
+            ad_tech_vendor(
+                "Uncaught TypeError: cart is undefined",
+                Some("at https://shop.example/prebid/app.js:1:1")
+            ),
             None
         );
     }
@@ -434,10 +525,19 @@ mod tests {
             Some("Vector")
         );
         // A host that only ends like Vector's is not Vector's.
-        assert_eq!(ad_tech_vendor("Uncaught Error: x", Some("at https://cdn.notvector.co/app.js:1:1")), None);
+        assert_eq!(
+            ad_tech_vendor(
+                "Uncaught Error: x",
+                Some("at https://cdn.notvector.co/app.js:1:1")
+            ),
+            None
+        );
         // Chase's own bundles on the same host stay first-party.
         assert_eq!(
-            ad_tech_vendor("Uncaught TypeError: x is undefined", Some("at a, https://asset.chase.com/web/app/main.js:1:1")),
+            ad_tech_vendor(
+                "Uncaught TypeError: x is undefined",
+                Some("at a, https://asset.chase.com/web/app/main.js:1:1")
+            ),
             None
         );
     }
@@ -492,7 +592,10 @@ mod tests {
     #[test]
     fn tagged_detail_ends_with_the_vendor() {
         assert_eq!(
-            tag_detail("10px functional text \"Learn More\" (below 11px floor)", "Taboola"),
+            tag_detail(
+                "10px functional text \"Learn More\" (below 11px floor)",
+                "Taboola"
+            ),
             "10px functional text \"Learn More\" (below 11px floor) (third-party: Taboola)"
         );
     }

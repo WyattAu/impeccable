@@ -62,11 +62,23 @@ fn comp_diff_scores_match_js() {
 #[test]
 fn grid_to_box_matches_js() {
     // JS: gridToBox on a 10x10 grid.
-    assert_eq!(comp_spec::grid_to_box("E2:J4").unwrap(), (0.4, 0.2, 0.6, 0.3));
-    assert_eq!(comp_spec::grid_to_box("A0:J0").unwrap(), (0.0, 0.0, 1.0, 0.1));
-    assert_eq!(comp_spec::grid_to_box("a0:a0").unwrap(), (0.0, 0.0, 0.1, 0.1));
+    assert_eq!(
+        comp_spec::grid_to_box("E2:J4").unwrap(),
+        (0.4, 0.2, 0.6, 0.3)
+    );
+    assert_eq!(
+        comp_spec::grid_to_box("A0:J0").unwrap(),
+        (0.0, 0.0, 1.0, 0.1)
+    );
+    assert_eq!(
+        comp_spec::grid_to_box("a0:a0").unwrap(),
+        (0.0, 0.0, 0.1, 0.1)
+    );
     // reversed spans normalize the same way
-    assert_eq!(comp_spec::grid_to_box("J4:E2").unwrap(), (0.4, 0.2, 0.6, 0.3));
+    assert_eq!(
+        comp_spec::grid_to_box("J4:E2").unwrap(),
+        (0.4, 0.2, 0.6, 0.3)
+    );
     assert!(comp_spec::grid_to_box("Z9:A0").is_err());
     assert!(comp_spec::grid_to_box("E2-J4").is_err());
 }
@@ -88,13 +100,19 @@ fn measure_regions_shape_matches_js() {
     assert_eq!(regions.len(), 2);
     let art = &regions[0];
     assert_eq!(art.get("medium").and_then(Value::as_str), Some("raster"));
-    assert_eq!(art.get("plate").and_then(Value::as_str), Some("assets/plates/art.png"));
+    assert_eq!(
+        art.get("plate").and_then(Value::as_str),
+        Some("assets/plates/art.png")
+    );
     let body = &regions[1];
     assert_eq!(body.get("medium").and_then(Value::as_str), Some("semantic"));
     assert!(body.get("plate").unwrap().is_null());
     // spec-level fields
     assert_eq!(spec.get("tool").and_then(Value::as_str), Some("comp-spec"));
-    assert_eq!(spec.pointer("/compSize/width").and_then(Value::as_i64), Some(comp.width as i64));
+    assert_eq!(
+        spec.pointer("/compSize/width").and_then(Value::as_i64),
+        Some(comp.width as i64)
+    );
 }
 
 #[test]
@@ -118,7 +136,10 @@ fn measure_regions_refuses_oversized_code_region() {
         "regions": [ { "id": "col", "kind": "chrome", "grid": "A0:J9", "note": "a big column of things" } ]
     });
     let err = comp_spec::measure_regions(&comp, &input, "comp.png").unwrap_err();
-    assert!(err.contains("covers 100% of the comp") || err.contains("% of the comp"), "got: {err}");
+    assert!(
+        err.contains("covers 100% of the comp") || err.contains("% of the comp"),
+        "got: {err}"
+    );
 }
 
 #[test]
@@ -133,26 +154,44 @@ fn remeasure_keeps_only_unchanged_reference_typography() {
     let run = |input: &Value| {
         std::fs::write(dir.join("regions.json"), input.to_string()).unwrap();
         let (mut io, _) = impeccable_common::Io::captured("", dir.clone(), Default::default());
-        let args = ["--comp","comp.png","--regions","regions.json","--spec","spec.json"].map(String::from);
+        let args = [
+            "--comp",
+            "comp.png",
+            "--regions",
+            "regions.json",
+            "--spec",
+            "spec.json",
+        ]
+        .map(String::from);
         assert_eq!(comp_spec::run(&args, &mut io), 0);
         serde_json::from_slice::<Value>(&std::fs::read(dir.join("spec.json")).unwrap()).unwrap()
     };
     let mut first = run(&input);
-    let measured = json!({"comp":{"capHeightPx":12},"chosen":{"family":"Example","stamp":"existing-stamp"}});
+    let measured =
+        json!({"comp":{"capHeightPx":12},"chosen":{"family":"Example","stamp":"existing-stamp"}});
     first["regions"][0]["type"] = measured.clone();
     first["regions"][1]["type"] = measured.clone();
     std::fs::write(dir.join("spec.json"), first.to_string()).unwrap();
     input["regions"][1]["box"]["y"] = json!(0.5);
     let next = run(&input);
-    assert_eq!(next["regions"][0]["type"], measured, "unrelated region edit erased typography");
-    assert!(next["regions"][1]["type"].is_null(), "moved region reused stale measurement");
+    assert_eq!(
+        next["regions"][0]["type"], measured,
+        "unrelated region edit erased typography"
+    );
+    assert!(
+        next["regions"][1]["type"].is_null(),
+        "moved region reused stale measurement"
+    );
     input["regions"][0]["text"] = json!("Different");
     assert!(run(&input)["regions"][0]["type"].is_null());
     let mut prior = run(&input);
     prior["regions"][0]["type"] = measured.clone();
     std::fs::write(dir.join("spec.json"), prior.to_string()).unwrap();
     std::fs::copy(fixtures().join("build_flat.png"), dir.join("comp.png")).unwrap();
-    assert!(run(&input)["regions"][0]["type"].is_null(), "replaced comp reused stale measurement");
+    assert!(
+        run(&input)["regions"][0]["type"].is_null(),
+        "replaced comp reused stale measurement"
+    );
     // Unbound legacy records must be remeasured once, never guessed current.
     let mut legacy = run(&input);
     legacy.as_object_mut().unwrap().remove("compSha256");

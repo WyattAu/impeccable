@@ -203,7 +203,9 @@ pub fn is_wordmark_size(font_size: f64, largest_h1: f64) -> bool {
     font_size.is_finite()
         && font_size > 0.0
         && (font_size >= WORDMARK_MIN_PX
-            || (largest_h1 > 0.0 && font_size >= WORDMARK_H1_PATH_MIN_PX && font_size >= largest_h1 * WORDMARK_H1_SCALE))
+            || (largest_h1 > 0.0
+                && font_size >= WORDMARK_H1_PATH_MIN_PX
+                && font_size >= largest_h1 * WORDMARK_H1_SCALE))
 }
 
 /// The words of `text`, lower-cased, letters and digits only.
@@ -279,7 +281,9 @@ static STAMP_ID_RE: Lazy<Regex> = Lazy::new(|| {
 });
 
 fn is_stamp_id(id: &str) -> bool {
-    let Some(c) = STAMP_ID_RE.captures(id) else { return false };
+    let Some(c) = STAMP_ID_RE.captures(id) else {
+        return false;
+    };
     match c.name("num") {
         Some(n) => {
             let n = n.as_str();
@@ -372,20 +376,49 @@ pub fn is_signature_marker(class_or_id: &str) -> bool {
 /// (`mock-window`, `mockBrowser`) rather than a practice run (`mock-exam`,
 /// `mock-interview`).
 const MOCK_UI_PARTS: &[&str] = &[
-    "app", "browser", "chrome", "dashboard", "desktop", "device", "editor", "frame", "laptop",
-    "phone", "screen", "terminal", "ui", "window",
+    "app",
+    "browser",
+    "chrome",
+    "dashboard",
+    "desktop",
+    "device",
+    "editor",
+    "frame",
+    "laptop",
+    "phone",
+    "screen",
+    "terminal",
+    "ui",
+    "window",
 ];
 /// Parts that make a token name the words about an illustration, which are
 /// read: `illustration-credit`, `mockup-caption`.
 const MOCKUP_COPY_PARTS: &[&str] = &[
-    "attribution", "caption", "captions", "copyright", "credit", "credits", "license",
+    "attribution",
+    "caption",
+    "captions",
+    "copyright",
+    "credit",
+    "credits",
+    "license",
     "licence",
 ];
 
 /// The words a class names page furniture by: a label, a chip, navigation.
 const FURNITURE_WORDS: &[&str] = &[
-    "meta", "label", "badge", "chip", "pill", "tag", "kicker", "eyebrow", "breadcrumb",
-    "timestamp", "category", "caption", "nav",
+    "meta",
+    "label",
+    "badge",
+    "chip",
+    "pill",
+    "tag",
+    "kicker",
+    "eyebrow",
+    "breadcrumb",
+    "timestamp",
+    "category",
+    "caption",
+    "nav",
 ];
 
 /// Parts that start with a furniture word and name something else.
@@ -465,7 +498,15 @@ pub fn is_mockup_marker(class_or_id: &str) -> bool {
 /// Tags whose class or id says nothing about the text inside them being an
 /// illustration: a `<section class="mockups">` holds the copy about them.
 pub const MOCKUP_MARKER_SKIP_TAGS: &[&str] = &[
-    "html", "body", "main", "section", "article", "header", "footer", "nav", "aside",
+    "html",
+    "body",
+    "main",
+    "section",
+    "article",
+    "header",
+    "footer",
+    "nav",
+    "aside",
     "figcaption",
 ];
 
@@ -540,10 +581,13 @@ pub fn is_name_like(text: &str, capitalised: bool) -> bool {
     }
     words.iter().all(|w| {
         let mut chars = w.chars();
-        let Some(first) = chars.next() else { return false };
+        let Some(first) = chars.next() else {
+            return false;
+        };
         first.is_alphabetic()
             && (!capitalised || first.is_uppercase() || !first.is_lowercase())
-            && w.chars().all(|c| c.is_alphabetic() || matches!(c, '.' | '\'' | '’' | '-'))
+            && w.chars()
+                .all(|c| c.is_alphabetic() || matches!(c, '.' | '\'' | '’' | '-'))
     })
 }
 
@@ -552,12 +596,19 @@ mod tests {
     use super::*;
 
     fn facts(text: &str) -> DecorativeTextFacts {
-        DecorativeTextFacts { text: text.to_string(), ..Default::default() }
+        DecorativeTextFacts {
+            text: text.to_string(),
+            ..Default::default()
+        }
     }
 
     #[test]
     fn a_ghost_wordmark_is_the_site_name_as_a_faint_display_shape() {
-        let names = vec!["screenmovie".to_string(), "screen".to_string(), "Screen Movie Blog".to_string()];
+        let names = vec![
+            "screenmovie".to_string(),
+            "screen".to_string(),
+            "Screen Movie Blog".to_string(),
+        ];
         let ghost = |text: &str, size: f64, h1: f64, shown: f64| DecorativeTextFacts {
             font_size_px: size,
             largest_h1_px: h1,
@@ -567,10 +618,19 @@ mod tests {
         };
         let shape = |f: &DecorativeTextFacts| classify_decorative_text(f);
         // screen.movie's footer: 222px at 0.1.
-        assert_eq!(shape(&ghost("Screen Movie", 222.0, 64.0, 0.1)), Some(DecorativeShape::Wordmark));
-        assert_eq!(shape(&ghost("SCREEN", 222.0, 64.0, 0.1)), Some(DecorativeShape::Wordmark));
+        assert_eq!(
+            shape(&ghost("Screen Movie", 222.0, 64.0, 0.1)),
+            Some(DecorativeShape::Wordmark)
+        );
+        assert_eq!(
+            shape(&ghost("SCREEN", 222.0, 64.0, 0.1)),
+            Some(DecorativeShape::Wordmark)
+        );
         // Three times the largest h1 is display type too.
-        assert_eq!(shape(&ghost("Screen Movie", 100.0, 32.0, 0.2)), Some(DecorativeShape::Wordmark));
+        assert_eq!(
+            shape(&ghost("Screen Movie", 100.0, 32.0, 0.2)),
+            Some(DecorativeShape::Wordmark)
+        );
         // Read as a line: visible enough, small, another word, or a control.
         assert_eq!(shape(&ghost("Screen Movie", 222.0, 64.0, 0.4)), None);
         assert_eq!(shape(&ghost("Screen Movie", 96.0, 48.0, 0.1)), None);
@@ -578,9 +638,21 @@ mod tests {
         assert_eq!(shape(&ghost("Screen Movie", 60.0, 16.0, 0.1)), None);
         assert_eq!(shape(&ghost("Record faster", 222.0, 64.0, 0.1)), None);
         assert_eq!(shape(&ghost("Movie", 222.0, 64.0, 0.1)), None);
-        assert_eq!(shape(&DecorativeTextFacts { control_label: true, ..ghost("Screen Movie", 222.0, 64.0, 0.1) }), None);
+        assert_eq!(
+            shape(&DecorativeTextFacts {
+                control_label: true,
+                ..ghost("Screen Movie", 222.0, 64.0, 0.1)
+            }),
+            None
+        );
         // Review of #1044: part of a link's label, beside its other words.
-        assert_eq!(shape(&DecorativeTextFacts { in_control: true, ..ghost("Screen Movie", 222.0, 64.0, 0.1) }), None);
+        assert_eq!(
+            shape(&DecorativeTextFacts {
+                in_control: true,
+                ..ghost("Screen Movie", 222.0, 64.0, 0.1)
+            }),
+            None
+        );
         // An adapter that reads no layout leaves the size at 0.
         assert_eq!(shape(&ghost("Screen Movie", 0.0, 0.0, 0.0)), None);
         assert!(!names_the_site("Sc", &["sc".to_string()]));
@@ -588,28 +660,50 @@ mod tests {
 
     #[test]
     fn initials_need_an_avatar_box_and_letters() {
-        let boxed = |t: &str| DecorativeTextFacts { avatar_box: true, ..facts(t) };
+        let boxed = |t: &str| DecorativeTextFacts {
+            avatar_box: true,
+            ..facts(t)
+        };
         for t in ["J", "AB", "李", "r", "Jd"] {
-            assert_eq!(classify_decorative_text(&boxed(t)), Some(DecorativeShape::AvatarInitials), "{t}");
+            assert_eq!(
+                classify_decorative_text(&boxed(t)),
+                Some(DecorativeShape::AvatarInitials),
+                "{t}"
+            );
         }
         for t in ["3", "12", "A1", "ABC", "A B", "×", "i", "x", "v"] {
             assert_eq!(classify_decorative_text(&boxed(t)), None, "{t}");
         }
         assert_eq!(classify_decorative_text(&facts("JD")), None);
-        let label = DecorativeTextFacts { control_label: true, ..boxed("A") };
+        let label = DecorativeTextFacts {
+            control_label: true,
+            ..boxed("A")
+        };
         assert_eq!(classify_decorative_text(&label), None);
         // A key in a shortcut hint is a key, however avatar-like its box.
-        let key = DecorativeTextFacts { in_kbd: true, ..boxed("K") };
+        let key = DecorativeTextFacts {
+            in_kbd: true,
+            ..boxed("K")
+        };
         assert_eq!(classify_decorative_text(&key), None);
     }
 
     #[test]
     fn stamps_in_headings_and_controls_are_navigation() {
-        let heading = DecorativeTextFacts { in_heading: true, ..facts("v4.2.0") };
+        let heading = DecorativeTextFacts {
+            in_heading: true,
+            ..facts("v4.2.0")
+        };
         assert_eq!(classify_decorative_text(&heading), None);
-        let link = DecorativeTextFacts { control_label: true, ..facts("v3.1.0") };
+        let link = DecorativeTextFacts {
+            control_label: true,
+            ..facts("v3.1.0")
+        };
         assert_eq!(classify_decorative_text(&link), None);
-        assert_eq!(classify_decorative_text(&facts("v3.1.0")), Some(DecorativeShape::VersionStamp));
+        assert_eq!(
+            classify_decorative_text(&facts("v3.1.0")),
+            Some(DecorativeShape::VersionStamp)
+        );
     }
 
     #[test]
@@ -660,7 +754,10 @@ mod tests {
 
     #[test]
     fn signatures_are_short_names_in_a_script_face_or_marked() {
-        let face = |t: &str, fam: &str| DecorativeTextFacts { font_family: fam.to_string(), ..facts(t) };
+        let face = |t: &str, fam: &str| DecorativeTextFacts {
+            font_family: fam.to_string(),
+            ..facts(t)
+        };
         assert_eq!(
             classify_decorative_text(&face("Pedro", "\"Great Vibes\", cursive")),
             Some(DecorativeShape::Signature)
@@ -669,12 +766,27 @@ mod tests {
             classify_decorative_text(&face("— Sarah J.", "Dancing Script")),
             Some(DecorativeShape::Signature)
         );
-        assert_eq!(classify_decorative_text(&face("Made with love", "cursive")), None);
-        assert_eq!(classify_decorative_text(&face("Pedro", "Georgia, serif")), None);
-        let heading = DecorativeTextFacts { in_heading: true, ..face("Pedro", "cursive") };
+        assert_eq!(
+            classify_decorative_text(&face("Made with love", "cursive")),
+            None
+        );
+        assert_eq!(
+            classify_decorative_text(&face("Pedro", "Georgia, serif")),
+            None
+        );
+        let heading = DecorativeTextFacts {
+            in_heading: true,
+            ..face("Pedro", "cursive")
+        };
         assert_eq!(classify_decorative_text(&heading), None);
-        let marked = DecorativeTextFacts { signature_marked: true, ..facts("pedro") };
-        assert_eq!(classify_decorative_text(&marked), Some(DecorativeShape::Signature));
+        let marked = DecorativeTextFacts {
+            signature_marked: true,
+            ..facts("pedro")
+        };
+        assert_eq!(
+            classify_decorative_text(&marked),
+            Some(DecorativeShape::Signature)
+        );
         assert!(is_signature_marker("text-sm author-signature"));
         assert!(is_signature_marker("signature__name"));
         assert!(!is_signature_marker("signature-dish"));
@@ -708,7 +820,10 @@ mod tests {
         ] {
             assert!(!is_mockup_marker(no), "{no}");
         }
-        let m = DecorativeTextFacts { mockup_ancestor: true, ..facts("Ready") };
+        let m = DecorativeTextFacts {
+            mockup_ancestor: true,
+            ..facts("Ready")
+        };
         assert_eq!(classify_decorative_text(&m), Some(DecorativeShape::Mockup));
         // A paragraph under a marked wrapper is copy about the mockups.
         let copy = DecorativeTextFacts {
@@ -717,12 +832,27 @@ mod tests {
         };
         assert_eq!(classify_decorative_text(&copy), None);
         // A picture the author marked role="img" is a picture, sentences and all.
-        let pic = DecorativeTextFacts { picture_ancestor: true, ..copy.clone() };
-        assert_eq!(classify_decorative_text(&pic), Some(DecorativeShape::Mockup));
+        let pic = DecorativeTextFacts {
+            picture_ancestor: true,
+            ..copy.clone()
+        };
+        assert_eq!(
+            classify_decorative_text(&pic),
+            Some(DecorativeShape::Mockup)
+        );
         // A demo framed by structure reads the same way as a marked one.
-        let framed = DecorativeTextFacts { framed_demo: true, ..facts("847 results") };
-        assert_eq!(classify_decorative_text(&framed), Some(DecorativeShape::Mockup));
-        let framed_copy = DecorativeTextFacts { framed_demo: true, ..copy.clone() };
+        let framed = DecorativeTextFacts {
+            framed_demo: true,
+            ..facts("847 results")
+        };
+        assert_eq!(
+            classify_decorative_text(&framed),
+            Some(DecorativeShape::Mockup)
+        );
+        let framed_copy = DecorativeTextFacts {
+            framed_demo: true,
+            ..copy.clone()
+        };
         assert_eq!(classify_decorative_text(&framed_copy), None);
         assert!(!is_sentence_copy("Draft saved"));
         assert!(!is_sentence_copy("$ npm run build --watch"));
@@ -733,20 +863,56 @@ mod tests {
     #[test]
     fn furniture_classes_are_read_by_part() {
         for class in [
-            "meta", "post-meta", "label", "field-label", "tag", "taglist", "tagline",
-            "post__tags", "hottags", "tagChip", "nav", "site-nav", "subnav", "navbar",
-            "mainNavigation", "block-utilitynavigation", "corenavi", "muiBreadcrumbs",
-            "breadcrumb", "badge", "chip", "chips", "pill", "pills", "kicker", "eyebrow",
-            "timestamp", "category", "product-categories", "caption", "figcaption",
+            "meta",
+            "post-meta",
+            "label",
+            "field-label",
+            "tag",
+            "taglist",
+            "tagline",
+            "post__tags",
+            "hottags",
+            "tagChip",
+            "nav",
+            "site-nav",
+            "subnav",
+            "navbar",
+            "mainNavigation",
+            "block-utilitynavigation",
+            "corenavi",
+            "muiBreadcrumbs",
+            "breadcrumb",
+            "badge",
+            "chip",
+            "chips",
+            "pill",
+            "pills",
+            "kicker",
+            "eyebrow",
+            "timestamp",
+            "category",
+            "product-categories",
+            "caption",
+            "figcaption",
             "card x-badge",
         ] {
             assert!(class_names_furniture(class), "{class}");
         }
         for class in [
-            "px-stage-compact", "owl-stage", "instagram", "icon-instagram",
-            "footer__vantagens", "subscription-block__avantages", "icon-percentage",
-            "cmp-unavailable", "hotsite-patagonia", "pillars", "text-navy", "bg-[var(--navy)]",
-            "", "hero",
+            "px-stage-compact",
+            "owl-stage",
+            "instagram",
+            "icon-instagram",
+            "footer__vantagens",
+            "subscription-block__avantages",
+            "icon-percentage",
+            "cmp-unavailable",
+            "hotsite-patagonia",
+            "pillars",
+            "text-navy",
+            "bg-[var(--navy)]",
+            "",
+            "hero",
         ] {
             assert!(!class_names_furniture(class), "{class}");
         }

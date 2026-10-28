@@ -32,7 +32,9 @@ impl Box2 {
         Box2 { x, y, w, h }
     }
     fn finite(&self) -> bool {
-        [self.x, self.y, self.w, self.h].iter().all(|v| v.is_finite())
+        [self.x, self.y, self.w, self.h]
+            .iter()
+            .all(|v| v.is_finite())
     }
 }
 
@@ -81,11 +83,21 @@ struct Premul {
 }
 
 impl Premul {
-    const CLEAR: Premul = Premul { r: 0.0, g: 0.0, b: 0.0, a: 0.0 };
+    const CLEAR: Premul = Premul {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 0.0,
+    };
 
     fn from(c: &Rgba) -> Premul {
         let a = c.alpha_or_one().clamp(0.0, 1.0);
-        Premul { r: c.r * a, g: c.g * a, b: c.b * a, a }
+        Premul {
+            r: c.r * a,
+            g: c.g * a,
+            b: c.b * a,
+            a,
+        }
     }
 
     /// `self` painted over `under`.
@@ -100,7 +112,12 @@ impl Premul {
     }
 
     fn scale(self, o: f64) -> Premul {
-        Premul { r: self.r * o, g: self.g * o, b: self.b * o, a: self.a * o }
+        Premul {
+            r: self.r * o,
+            g: self.g * o,
+            b: self.b * o,
+            a: self.a * o,
+        }
     }
 
     fn lerp(self, other: Premul, f: f64) -> Premul {
@@ -116,7 +133,12 @@ impl Premul {
         if self.a <= 0.0 {
             return Rgba::new(0.0, 0.0, 0.0, 0.0);
         }
-        Rgba::new(self.r / self.a, self.g / self.a, self.b / self.a, self.a.min(1.0))
+        Rgba::new(
+            self.r / self.a,
+            self.g / self.a,
+            self.b / self.a,
+            self.a.min(1.0),
+        )
     }
 
     /// Flattened over an opaque colour, rounded to 8-bit channels.
@@ -180,8 +202,10 @@ fn parse_len(token: &str) -> Option<Len> {
     let t = js::to_lower_case(js::trim(token));
     let num = |s: &str| {
         let v = parse_float(s);
-        (v.is_finite() && s.chars().all(|c| c.is_ascii_digit() || matches!(c, '.' | '-' | '+' | 'e')))
-            .then_some(v)
+        (v.is_finite()
+            && s.chars()
+                .all(|c| c.is_ascii_digit() || matches!(c, '.' | '-' | '+' | 'e')))
+        .then_some(v)
     };
     if let Some(n) = t.strip_suffix('%') {
         return num(n).map(Len::Pct);
@@ -236,7 +260,10 @@ fn parse_stops(args: &[String]) -> Option<Vec<Stop>> {
             stops.push(Stop { color, pos: None });
         }
         for pos in positions {
-            stops.push(Stop { color, pos: Some(pos) });
+            stops.push(Stop {
+                color,
+                pos: Some(pos),
+            });
         }
     }
     (!stops.is_empty()).then_some(stops)
@@ -250,7 +277,10 @@ fn resolve_positions(stops: &[Stop], length: f64) -> Option<Vec<f64>> {
         return None;
     }
     let n = stops.len();
-    let mut pos: Vec<Option<f64>> = stops.iter().map(|s| s.pos.map(|l| l.resolve(length) / length)).collect();
+    let mut pos: Vec<Option<f64>> = stops
+        .iter()
+        .map(|s| s.pos.map(|l| l.resolve(length) / length))
+        .collect();
     if pos[0].is_none() {
         pos[0] = Some(0.0);
     }
@@ -324,7 +354,11 @@ enum RadialSize {
 #[derive(Debug, Clone, PartialEq)]
 enum Geometry {
     Linear(Direction),
-    Radial { circle: bool, size: RadialSize, at: (Len, Len) },
+    Radial {
+        circle: bool,
+        size: RadialSize,
+        at: (Len, Len),
+    },
 }
 
 /// One parsed gradient layer.
@@ -342,10 +376,9 @@ fn parse_angle(token: &str) -> Option<f64> {
         (n, 0.9)
     } else if let Some(n) = t.strip_suffix("rad") {
         (n, 180.0 / std::f64::consts::PI)
-    } else if let Some(n) = t.strip_suffix("turn") {
-        (n, 360.0)
     } else {
-        return None;
+        let n = t.strip_suffix("turn")?;
+        (n, 360.0)
     };
     let v = parse_float(num);
     v.is_finite().then_some(v * scale)
@@ -431,14 +464,22 @@ fn parse_radial_spec(arg: &str) -> Option<Option<Geometry>> {
     let first = tokens.first().map(String::as_str).unwrap_or("");
     let keyword_first = matches!(
         first,
-        "circle" | "ellipse" | "closest-side" | "closest-corner" | "farthest-side" | "farthest-corner" | "at"
+        "circle"
+            | "ellipse"
+            | "closest-side"
+            | "closest-corner"
+            | "farthest-side"
+            | "farthest-corner"
+            | "at"
     );
     // `620px 360px at 50% 38%`: a size written as lengths, which a colour
     // stop never starts with.
     let lengths_first = parse_len(first).is_some()
-        && tokens
-            .iter()
-            .all(|t| parse_len(t).is_some() || is_position_keyword(t) || matches!(t.as_str(), "at" | "circle" | "ellipse"));
+        && tokens.iter().all(|t| {
+            parse_len(t).is_some()
+                || is_position_keyword(t)
+                || matches!(t.as_str(), "at" | "circle" | "ellipse")
+        });
     let names_shape = keyword_first || lengths_first;
     if !names_shape {
         if tokens.iter().any(|t| t == "in") {
@@ -512,12 +553,10 @@ impl Gradient {
             return None;
         }
         let (geometry, stop_args) = match name.as_str() {
-            "linear-gradient" => {
-                match parse_linear_direction(&args[0])? {
-                    Some(d) => (Geometry::Linear(d), &args[1..]),
-                    None => (Geometry::Linear(Direction::Angle(180.0)), &args[..]),
-                }
-            }
+            "linear-gradient" => match parse_linear_direction(&args[0])? {
+                Some(d) => (Geometry::Linear(d), &args[1..]),
+                None => (Geometry::Linear(Direction::Angle(180.0)), &args[..]),
+            },
             "radial-gradient" => match parse_radial_spec(&args[0])? {
                 Some(g) => (g, &args[1..]),
                 None => (
@@ -581,12 +620,14 @@ impl Gradient {
                     }
                     (RadialSize::ClosestSide, false) => (dx_min, dy_min),
                     (RadialSize::FarthestSide, false) => (dx_max, dy_max),
-                    (RadialSize::ClosestCorner, false) => {
-                        (dx_min * std::f64::consts::SQRT_2, dy_min * std::f64::consts::SQRT_2)
-                    }
-                    (RadialSize::FarthestCorner, false) => {
-                        (dx_max * std::f64::consts::SQRT_2, dy_max * std::f64::consts::SQRT_2)
-                    }
+                    (RadialSize::ClosestCorner, false) => (
+                        dx_min * std::f64::consts::SQRT_2,
+                        dy_min * std::f64::consts::SQRT_2,
+                    ),
+                    (RadialSize::FarthestCorner, false) => (
+                        dx_max * std::f64::consts::SQRT_2,
+                        dy_max * std::f64::consts::SQRT_2,
+                    ),
                 };
                 if !(rx > 0.0 && ry > 0.0) {
                     return None;
@@ -599,7 +640,14 @@ impl Gradient {
     }
 }
 
-const REPEAT_KEYWORDS: [&str; 6] = ["repeat", "no-repeat", "repeat-x", "repeat-y", "space", "round"];
+const REPEAT_KEYWORDS: [&str; 6] = [
+    "repeat",
+    "no-repeat",
+    "repeat-x",
+    "repeat-y",
+    "space",
+    "round",
+];
 const BOX_KEYWORDS: [&str; 3] = ["border-box", "padding-box", "content-box"];
 
 /// The parts of one `background` shorthand layer the geometry needs.
@@ -634,7 +682,10 @@ pub fn parse_shorthand_layer(layer: &str) -> ShorthandLayer {
         spaced.push(ch);
     }
     let tokens = top_level_tokens(&spaced);
-    let mut out = ShorthandLayer { repeat: (true, true), ..Default::default() };
+    let mut out = ShorthandLayer {
+        repeat: (true, true),
+        ..Default::default()
+    };
     let mut repeats: Vec<&str> = Vec::new();
     let mut boxes: Vec<&str> = Vec::new();
     let mut i = 0;
@@ -744,7 +795,10 @@ fn point_in_tile(tile: &Box2, repeat: (bool, bool), x: f64, y: f64) -> Option<(f
             None
         }
     };
-    Some((axis(x, tile.x, tile.w, repeat.0)?, axis(y, tile.y, tile.h, repeat.1)?))
+    Some((
+        axis(x, tile.x, tile.w, repeat.0)?,
+        axis(y, tile.y, tile.h, repeat.1)?,
+    ))
 }
 
 /// The sample points inside a text box. Three rows, at a sixth, a half and
@@ -776,7 +830,11 @@ const CLEAR_ALPHA: f64 = 0.005;
 
 /// What a box's background layers paint inside `text`, when every layer is a
 /// gradient (or `none`) whose geometry this can read.
-pub fn gradient_paint_under_text(layers: &BackgroundLayers<'_>, paint: &PaintBox, text: &Box2) -> UnderText {
+pub fn gradient_paint_under_text(
+    layers: &BackgroundLayers<'_>,
+    paint: &PaintBox,
+    text: &Box2,
+) -> UnderText {
     if !text.finite() || !(text.w > 0.0 && text.h > 0.0) || !paint.border_box.finite() {
         return UnderText::Unknown;
     }
@@ -812,7 +870,12 @@ pub fn gradient_paint_under_text(layers: &BackgroundLayers<'_>, paint: &PaintBox
         let [pt, pr, pb, pl] = paint.padding;
         let area = match meta.origin.as_deref() {
             Some("border-box") => *b,
-            Some("content-box") => Box2::new(b.x + bl + pl, b.y + bt + pt, b.w - bl - br - pl - pr, b.h - bt - bb - pt - pb),
+            Some("content-box") => Box2::new(
+                b.x + bl + pl,
+                b.y + bt + pt,
+                b.w - bl - br - pl - pr,
+                b.h - bt - bb - pt - pb,
+            ),
             _ => Box2::new(b.x + bl, b.y + bt, b.w - bl - br, b.h - bt - bb),
         };
         if !area.finite() || !(area.w > 0.0 && area.h > 0.0) {
@@ -823,7 +886,12 @@ pub fn gradient_paint_under_text(layers: &BackgroundLayers<'_>, paint: &PaintBox
         let Some(tile) = tile_box(&size, &position, area.w, area.h) else {
             return UnderText::Unknown;
         };
-        parsed.push(Layer { gradient, tile, area, repeat: meta.repeat });
+        parsed.push(Layer {
+            gradient,
+            tile,
+            area,
+            repeat: meta.repeat,
+        });
     }
     if parsed.is_empty() {
         return UnderText::Misses;
@@ -833,7 +901,12 @@ pub fn gradient_paint_under_text(layers: &BackgroundLayers<'_>, paint: &PaintBox
         let mut acc = Premul::CLEAR;
         // The first layer paints on top, so composite from the last one up.
         for layer in parsed.iter().rev() {
-            let Some((lx, ly)) = point_in_tile(&layer.tile, layer.repeat, px - layer.area.x, py - layer.area.y) else {
+            let Some((lx, ly)) = point_in_tile(
+                &layer.tile,
+                layer.repeat,
+                px - layer.area.x,
+                py - layer.area.y,
+            ) else {
                 continue;
             };
             let Some(color) = layer.gradient.color_at(lx, ly, layer.tile.w, layer.tile.h) else {
@@ -875,7 +948,9 @@ pub fn gradient_tile_misses_text(size: &str, repeat: (bool, bool), font_size_px:
     };
     let zero = |l: Option<Len>| matches!(l, Some(Len::Px(v)) | Some(Len::Pct(v)) if v <= 0.0);
     let short = |l: Option<Len>| {
-        font_size_px.is_finite() && font_size_px > 0.0 && matches!(l, Some(Len::Px(v)) if v < font_size_px)
+        font_size_px.is_finite()
+            && font_size_px > 0.0
+            && matches!(l, Some(Len::Px(v)) if v < font_size_px)
     };
     (!repeat.0 && zero(w)) || (!repeat.1 && (zero(h) || short(h)))
 }
@@ -885,12 +960,18 @@ pub fn gradient_tile_misses_text(size: &str, repeat: (bool, bool), font_size_px:
 pub fn repeat_from(longhand: &str, shorthand: &str) -> (bool, bool) {
     let long = js::trim(longhand);
     if !long.is_empty() {
-        let first = split_top_level_commas(long).into_iter().next().unwrap_or_default();
+        let first = split_top_level_commas(long)
+            .into_iter()
+            .next()
+            .unwrap_or_default();
         let lower = js::to_lower_case(&first);
         let tokens: Vec<&str> = lower.split_ascii_whitespace().collect();
         return repeat_axes(&tokens);
     }
-    let first = split_top_level_commas(shorthand).into_iter().next().unwrap_or_default();
+    let first = split_top_level_commas(shorthand)
+        .into_iter()
+        .next()
+        .unwrap_or_default();
     parse_shorthand_layer(&first).repeat
 }
 
@@ -912,7 +993,11 @@ pub fn fold_opacity(text: &Rgba, layers: &[(Option<Rgba>, f64)], surface: &Rgba)
             fg = fg.over(f);
             bg = bg.over(f);
         }
-        let o = if opacity.is_finite() { opacity.clamp(0.0, 1.0) } else { 1.0 };
+        let o = if opacity.is_finite() {
+            opacity.clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
         fg = fg.scale(o);
         bg = bg.scale(o);
     }
@@ -934,12 +1019,25 @@ mod tests {
         Rgba::new(r, g, b, 1.0)
     }
 
-    fn layers<'a>(image: &'a str, size: &'a str, position: &'a str, shorthand: &'a str) -> BackgroundLayers<'a> {
-        BackgroundLayers { image, size, position, shorthand }
+    fn layers<'a>(
+        image: &'a str,
+        size: &'a str,
+        position: &'a str,
+        shorthand: &'a str,
+    ) -> BackgroundLayers<'a> {
+        BackgroundLayers {
+            image,
+            size,
+            position,
+            shorthand,
+        }
     }
 
     fn plain_box(x: f64, y: f64, w: f64, h: f64) -> PaintBox {
-        PaintBox { border_box: Box2::new(x, y, w, h), ..Default::default() }
+        PaintBox {
+            border_box: Box2::new(x, y, w, h),
+            ..Default::default()
+        }
     }
 
     fn paint(u: UnderText) -> Vec<Rgba> {
@@ -952,10 +1050,16 @@ mod tests {
     #[test]
     fn a_vertical_gradient_is_read_at_the_label_not_at_its_rim() {
         // askjo.ai: a 54px button whose top stop is the light rim.
-        let image = "linear-gradient(rgb(193, 106, 87) 0%, rgb(148, 75, 59) 52%, rgb(149, 69, 52) 100%)";
-        let shorthand = format!("rgba(0, 0, 0, 0) {image} repeat scroll 0% 0% / auto padding-box border-box");
+        let image =
+            "linear-gradient(rgb(193, 106, 87) 0%, rgb(148, 75, 59) 52%, rgb(149, 69, 52) 100%)";
+        let shorthand =
+            format!("rgba(0, 0, 0, 0) {image} repeat scroll 0% 0% / auto padding-box border-box");
         let bg = layers(image, "auto", "0% 0%", &shorthand);
-        let samples = paint(gradient_paint_under_text(&bg, &plain_box(32.0, 606.0, 216.0, 54.0), &Box2::new(59.0, 625.0, 117.0, 15.0)));
+        let samples = paint(gradient_paint_under_text(
+            &bg,
+            &plain_box(32.0, 606.0, 216.0, 54.0),
+            &Box2::new(59.0, 625.0, 117.0, 15.0),
+        ));
         assert_eq!(samples.len(), 15);
         let lightest = samples.iter().map(|c| c.r).fold(0.0, f64::max);
         assert!(lightest < 170.0, "{samples:?}");
@@ -967,15 +1071,25 @@ mod tests {
         // A banner black until 85% of its width, then to white. The copy runs
         // the full width, so its last word sits on the light end, which a
         // grid kept a sixth inside the text box never reaches.
-        let image = "linear-gradient(90deg, rgb(0, 0, 0) 0%, rgb(0, 0, 0) 85%, rgb(255, 255, 255) 100%)";
-        let shorthand = format!("rgba(0, 0, 0, 0) {image} repeat scroll 0% 0% / auto padding-box border-box");
+        let image =
+            "linear-gradient(90deg, rgb(0, 0, 0) 0%, rgb(0, 0, 0) 85%, rgb(255, 255, 255) 100%)";
+        let shorthand =
+            format!("rgba(0, 0, 0, 0) {image} repeat scroll 0% 0% / auto padding-box border-box");
         let bg = layers(image, "auto", "0% 0%", &shorthand);
         let banner = plain_box(0.0, 0.0, 520.0, 36.0);
-        let line = paint(gradient_paint_under_text(&bg, &banner, &Box2::new(16.0, 8.0, 488.0, 20.0)));
+        let line = paint(gradient_paint_under_text(
+            &bg,
+            &banner,
+            &Box2::new(16.0, 8.0, 488.0, 20.0),
+        ));
         let lightest = line.iter().map(|c| c.r).fold(0.0, f64::max);
         assert!(lightest > 190.0, "{line:?}");
         // Short copy at the dark end is read on black.
-        let short = paint(gradient_paint_under_text(&bg, &banner, &Box2::new(16.0, 8.0, 120.0, 20.0)));
+        let short = paint(gradient_paint_under_text(
+            &bg,
+            &banner,
+            &Box2::new(16.0, 8.0, 120.0, 20.0),
+        ));
         assert!(short.iter().all(|c| c.r < 1.0), "{short:?}");
         // A text box that ends where its painting box ends still lands inside
         // it, half a pixel in.
@@ -991,8 +1105,11 @@ mod tests {
 
     #[test]
     fn corner_directions_and_angles_agree_on_a_square() {
-        let a = Gradient::parse("linear-gradient(to right bottom, rgb(0, 0, 0), rgb(255, 255, 255))").unwrap();
-        let b = Gradient::parse("linear-gradient(135deg, rgb(0, 0, 0), rgb(255, 255, 255))").unwrap();
+        let a =
+            Gradient::parse("linear-gradient(to right bottom, rgb(0, 0, 0), rgb(255, 255, 255))")
+                .unwrap();
+        let b =
+            Gradient::parse("linear-gradient(135deg, rgb(0, 0, 0), rgb(255, 255, 255))").unwrap();
         for (x, y) in [(0.0, 0.0), (25.0, 75.0), (100.0, 100.0), (50.0, 50.0)] {
             let ca = a.color_at(x, y, 100.0, 100.0).unwrap();
             let cb = b.color_at(x, y, 100.0, 100.0).unwrap();
@@ -1012,28 +1129,55 @@ mod tests {
         let shorthand = format!("{image} repeat scroll 0% 0% / auto padding-box border-box");
         let bg = layers(image, "auto", "0% 0%", &shorthand);
         // Far outside the ellipse: every sample is clear.
-        assert_eq!(gradient_paint_under_text(&bg, &plain_box(0.0, 0.0, 1280.0, 900.0), &Box2::new(20.0, 850.0, 80.0, 20.0)), UnderText::Misses);
+        assert_eq!(
+            gradient_paint_under_text(
+                &bg,
+                &plain_box(0.0, 0.0, 1280.0, 900.0),
+                &Box2::new(20.0, 850.0, 80.0, 20.0)
+            ),
+            UnderText::Misses
+        );
         // At the centre the first stop paints.
-        let centre = paint(gradient_paint_under_text(&bg, &plain_box(0.0, 0.0, 1280.0, 900.0), &Box2::new(630.0, 332.0, 20.0, 20.0)));
-        assert!(centre.iter().all(|c| (c.alpha_or_one() - 0.2).abs() < 0.02), "{centre:?}");
+        let centre = paint(gradient_paint_under_text(
+            &bg,
+            &plain_box(0.0, 0.0, 1280.0, 900.0),
+            &Box2::new(630.0, 332.0, 20.0, 20.0),
+        ));
+        assert!(
+            centre.iter().all(|c| (c.alpha_or_one() - 0.2).abs() < 0.02),
+            "{centre:?}"
+        );
     }
 
     #[test]
     fn an_underline_tile_is_not_under_the_glyphs() {
         // rtx.com: the hover underline, collapsed to 0% wide.
         let image = "linear-gradient(rgb(0, 0, 0), rgb(0, 0, 0))";
-        let shorthand = format!("rgba(0, 0, 0, 0) {image} no-repeat scroll 0% 100% / 0% 2px padding-box border-box");
+        let shorthand = format!(
+            "rgba(0, 0, 0, 0) {image} no-repeat scroll 0% 100% / 0% 2px padding-box border-box"
+        );
         let bg = layers(image, "0% 2px", "0% 100%", &shorthand);
         let host = plain_box(278.0, 40.0, 111.0, 31.0);
         let text = Box2::new(290.0, 46.0, 90.0, 19.0);
-        assert_eq!(gradient_paint_under_text(&bg, &host, &text), UnderText::Misses);
+        assert_eq!(
+            gradient_paint_under_text(&bg, &host, &text),
+            UnderText::Misses
+        );
         // Drawn full width it is still a 2px rule under the text box.
         let bg = layers(image, "100% 2px", "0% 100%", &shorthand);
-        assert_eq!(gradient_paint_under_text(&bg, &host, &text), UnderText::Misses);
+        assert_eq!(
+            gradient_paint_under_text(&bg, &host, &text),
+            UnderText::Misses
+        );
         // Repeating, a 2px tile covers the whole box.
-        let tiled = format!("rgba(0, 0, 0, 0) {image} repeat scroll 0% 100% / 100% 2px padding-box border-box");
+        let tiled = format!(
+            "rgba(0, 0, 0, 0) {image} repeat scroll 0% 100% / 100% 2px padding-box border-box"
+        );
         let bg = layers(image, "100% 2px", "0% 100%", &tiled);
-        assert!(matches!(gradient_paint_under_text(&bg, &host, &text), UnderText::Paint(_)));
+        assert!(matches!(
+            gradient_paint_under_text(&bg, &host, &text),
+            UnderText::Paint(_)
+        ));
     }
 
     #[test]
@@ -1049,14 +1193,25 @@ mod tests {
         ] {
             let shorthand = format!("{image} repeat scroll 0% 0% / auto padding-box border-box");
             let bg = layers(image, "auto", "0% 0%", &shorthand);
-            assert_eq!(gradient_paint_under_text(&bg, &host, &text), UnderText::Unknown, "{image}");
+            assert_eq!(
+                gradient_paint_under_text(&bg, &host, &text),
+                UnderText::Unknown,
+                "{image}"
+            );
         }
         let image = "linear-gradient(rgb(0, 0, 0), rgb(255, 255, 255))";
         let fixed = format!("{image} repeat fixed 0% 0% / auto padding-box border-box");
-        assert_eq!(gradient_paint_under_text(&layers(image, "auto", "0% 0%", &fixed), &host, &text), UnderText::Unknown);
+        assert_eq!(
+            gradient_paint_under_text(&layers(image, "auto", "0% 0%", &fixed), &host, &text),
+            UnderText::Unknown
+        );
         let shorthand = format!("{image} repeat scroll 0% 0% / auto padding-box border-box");
         assert_eq!(
-            gradient_paint_under_text(&layers(image, "auto", "0% 0%", &shorthand), &host, &Box2::new(0.0, 0.0, 0.0, 0.0)),
+            gradient_paint_under_text(
+                &layers(image, "auto", "0% 0%", &shorthand),
+                &host,
+                &Box2::new(0.0, 0.0, 0.0, 0.0)
+            ),
             UnderText::Unknown
         );
     }
@@ -1070,7 +1225,10 @@ mod tests {
         let p = resolve_positions(&even.stops, 90.0).unwrap();
         assert!((p[1] - 1.0 / 3.0).abs() < 1e-9 && (p[2] - 2.0 / 3.0).abs() < 1e-9);
         // Two positions on one stop make a hard band.
-        let band = Gradient::parse("linear-gradient(to right, rgb(0, 0, 0) 0% 50%, rgb(255, 255, 255) 50% 100%)").unwrap();
+        let band = Gradient::parse(
+            "linear-gradient(to right, rgb(0, 0, 0) 0% 50%, rgb(255, 255, 255) 50% 100%)",
+        )
+        .unwrap();
         assert!(band.color_at(49.0, 0.0, 100.0, 10.0).unwrap().r < 1.0);
         assert!(band.color_at(51.0, 0.0, 100.0, 10.0).unwrap().r > 254.0);
     }
@@ -1080,25 +1238,41 @@ mod tests {
         let layer = parse_shorthand_layer("linear-gradient(#000, #000) no-repeat 0 100% / 0% 2px");
         assert_eq!(layer.repeat, (false, false));
         assert_eq!(layer.size.as_deref(), Some("0% 2px"));
-        let minified = parse_shorthand_layer("linear-gradient(#000,#000) no-repeat 0 100%/100% 2px");
+        let minified =
+            parse_shorthand_layer("linear-gradient(#000,#000) no-repeat 0 100%/100% 2px");
         assert_eq!(minified.size.as_deref(), Some("100% 2px"));
         assert!(gradient_tile_misses_text("0% 2px", layer.repeat, 16.0));
         assert!(gradient_tile_misses_text("100% 2px", (false, false), 16.0));
         assert!(!gradient_tile_misses_text("100% 2px", (true, true), 16.0));
-        assert!(!gradient_tile_misses_text("100% 100%", (false, false), 16.0));
+        assert!(!gradient_tile_misses_text(
+            "100% 100%",
+            (false, false),
+            16.0
+        ));
         assert!(!gradient_tile_misses_text("auto", (false, false), 16.0));
         assert_eq!(repeat_from("repeat-x", ""), (true, false));
-        assert_eq!(repeat_from("", "linear-gradient(red, red) no-repeat"), (false, false));
+        assert_eq!(
+            repeat_from("", "linear-gradient(red, red) no-repeat"),
+            (false, false)
+        );
     }
 
     #[test]
     fn opacity_fades_the_glyphs_toward_their_surface() {
         // yna.co.kr: a span at opacity 0.5 on a white footer.
-        let (fg, bg) = fold_opacity(&rgb(210.0, 152.0, 64.0), &[(None, 0.5)], &rgb(255.0, 255.0, 255.0));
+        let (fg, bg) = fold_opacity(
+            &rgb(210.0, 152.0, 64.0),
+            &[(None, 0.5)],
+            &rgb(255.0, 255.0, 255.0),
+        );
         assert_eq!(fg, rgb(233.0, 204.0, 160.0));
         assert_eq!(bg, rgb(255.0, 255.0, 255.0));
         // A dark card faded to half over white fades its own fill too.
-        let (fg, bg) = fold_opacity(&rgb(255.0, 255.0, 255.0), &[(None, 1.0), (Some(rgb(0.0, 0.0, 0.0)), 0.5)], &rgb(255.0, 255.0, 255.0));
+        let (fg, bg) = fold_opacity(
+            &rgb(255.0, 255.0, 255.0),
+            &[(None, 1.0), (Some(rgb(0.0, 0.0, 0.0)), 0.5)],
+            &rgb(255.0, 255.0, 255.0),
+        );
         assert_eq!(fg, rgb(255.0, 255.0, 255.0));
         assert_eq!(bg, rgb(128.0, 128.0, 128.0));
     }

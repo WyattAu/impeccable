@@ -1,12 +1,12 @@
 //! The browser engines' reading of [`DecorativeTextFacts`] off the `Dom`
 //! probe. The decision is [`classify_decorative_text`]; this only measures.
 
+use super::dom::{class_attr, closest_or_none, pf0, tag_lower, Dom, ElId};
 use crate::checks::decorative_text::{
     avatar_sized, centred_in, classify_decorative_text, is_mockup_marker, is_signature_marker,
-    is_wordmark_size, DecorativeShape, DecorativeTextFacts, MOCKUP_MARKER_SKIP_TAGS, WORDMARK_H1_PATH_MIN_PX, WORDMARK_MAX_OPACITY,
-    WORDMARK_MIN_PX,
+    is_wordmark_size, DecorativeShape, DecorativeTextFacts, MOCKUP_MARKER_SKIP_TAGS,
+    WORDMARK_H1_PATH_MIN_PX, WORDMARK_MAX_OPACITY, WORDMARK_MIN_PX,
 };
-use super::dom::{class_attr, closest_or_none, pf0, tag_lower, Dom, ElId};
 use crate::color::{parse_any_color, parse_rgb, Rgba};
 use crate::js;
 
@@ -82,7 +82,11 @@ fn marked_mockup(dom: &dyn Dom, el: ElId) -> (bool, bool) {
         if tag == "figcaption" {
             return (false, false);
         }
-        if !in_svg && dom.attr(c, "role").is_some_and(|r| js::trim(&r).eq_ignore_ascii_case("img")) {
+        if !in_svg
+            && dom
+                .attr(c, "role")
+                .is_some_and(|r| js::trim(&r).eq_ignore_ascii_case("img"))
+        {
             return (true, false);
         }
         if tag == "svg" {
@@ -132,7 +136,11 @@ fn under_html_picture(dom: &dyn Dom, el: ElId) -> bool {
         if tag == "figcaption" {
             return false;
         }
-        if !in_svg && dom.attr(c, "role").is_some_and(|r| js::trim(&r).eq_ignore_ascii_case("img")) {
+        if !in_svg
+            && dom
+                .attr(c, "role")
+                .is_some_and(|r| js::trim(&r).eq_ignore_ascii_case("img"))
+        {
             return true;
         }
         if tag == "svg" {
@@ -182,9 +190,15 @@ fn site_names(dom: &dyn Dom) -> Vec<String> {
         }
     }
     let mut declared = false;
-    for selector in ["meta[property=\"og:site_name\"]", "meta[name=\"application-name\"]"] {
+    for selector in [
+        "meta[property=\"og:site_name\"]",
+        "meta[name=\"application-name\"]",
+    ] {
         for meta in dom.query_all(None, selector).unwrap_or_default() {
-            if let Some(content) = dom.attr(meta, "content").filter(|c| !js::trim(c).is_empty()) {
+            if let Some(content) = dom
+                .attr(meta, "content")
+                .filter(|c| !js::trim(c).is_empty())
+            {
                 names.push(content);
                 declared = true;
             }
@@ -203,12 +217,19 @@ fn site_names(dom: &dyn Dom) -> Vec<String> {
             .collect();
         if parts.len() > 1 {
             let run = |text: &str| -> String {
-                text.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect()
+                text.chars()
+                    .filter(|c| c.is_alphanumeric())
+                    .flat_map(char::to_lowercase)
+                    .collect()
             };
             // The host read the same way, without its top-level label:
             // `get-acme-studio.com` holds `Acme Studio`, and a part that only
             // repeats the TLD (`Studio` on acme.studio) names nothing.
-            let site_labels = if labels.len() > 1 { &labels[..labels.len() - 1] } else { &labels[..] };
+            let site_labels = if labels.len() > 1 {
+                &labels[..labels.len() - 1]
+            } else {
+                &labels[..]
+            };
             let host_run = run(&site_labels.concat());
             for part in parts {
                 let joined = run(&part);
@@ -289,9 +310,18 @@ mod tests {
         let (_h, body) = d.with_page();
         let tile = d.add(Some(body), "span");
         d.add_text(tile, "JD");
-        d.set_styles(tile, &[("backgroundColor", "rgb(19, 130, 232)"), ("fontFamily", "Inter")]);
+        d.set_styles(
+            tile,
+            &[
+                ("backgroundColor", "rgb(19, 130, 232)"),
+                ("fontFamily", "Inter"),
+            ],
+        );
         d.set_rect(tile, 0.0, 0.0, 40.0, 40.0);
-        assert_eq!(decorative_text_shape_dom(&d, tile), Some(DecorativeShape::AvatarInitials));
+        assert_eq!(
+            decorative_text_shape_dom(&d, tile),
+            Some(DecorativeShape::AvatarInitials)
+        );
         // The same letters as a link's whole label are the control's name.
         let mut d2 = FakeDom::new();
         let (_h, body) = d2.with_page();
@@ -316,7 +346,11 @@ mod tests {
         d.add_text(p, "Body copy");
         for (size, h1_read) in [("14px", 0.0), ("96px", 30.0), ("160px", 0.0)] {
             d.set_style(p, "fontSize", size);
-            assert_eq!(decorative_text_facts_dom(&d, p).largest_h1_px, h1_read, "{size}");
+            assert_eq!(
+                decorative_text_facts_dom(&d, p).largest_h1_px,
+                h1_read,
+                "{size}"
+            );
         }
     }
 
@@ -336,26 +370,40 @@ mod tests {
         let footer = d.add(Some(body), "footer");
         let mark = d.add(Some(footer), "span");
         d.add_text(mark, "Incredible");
-        d.set_styles(mark, &[("fontSize", "272.102px"), ("color", "rgba(0, 0, 0, 0.07)")]);
+        d.set_styles(
+            mark,
+            &[("fontSize", "272.102px"), ("color", "rgba(0, 0, 0, 0.07)")],
+        );
         d.set_rect(mark, 42.0, 10411.0, 1173.0, 201.0);
-        assert_eq!(decorative_text_shape_dom(&d, mark), Some(DecorativeShape::Wordmark));
+        assert_eq!(
+            decorative_text_shape_dom(&d, mark),
+            Some(DecorativeShape::Wordmark)
+        );
         // The same name in ink a reader is meant to read is not.
         d.set_style(mark, "color", "rgba(0, 0, 0, 0.6)");
         assert_eq!(decorative_text_shape_dom(&d, mark), None);
         // Faded by its box rather than its colour, it is.
         d.set_style(mark, "color", "rgb(255, 255, 255)");
         d.set_style(footer, "opacity", "0.1");
-        assert_eq!(decorative_text_shape_dom(&d, mark), Some(DecorativeShape::Wordmark));
+        assert_eq!(
+            decorative_text_shape_dom(&d, mark),
+            Some(DecorativeShape::Wordmark)
+        );
         // Caught at 0 by a timed entrance that settles at 1, it is the name
         // in full ink, not a faint wordmark.
         d.keyframes.insert(
             "reveal".into(),
             vec![
-                crate::browser::dom::KeyframeFrame { decls: vec![("opacity".into(), "0".into())] },
-                crate::browser::dom::KeyframeFrame { decls: vec![("opacity".into(), "1".into())] },
+                crate::browser::dom::KeyframeFrame {
+                    decls: vec![("opacity".into(), "0".into())],
+                },
+                crate::browser::dom::KeyframeFrame {
+                    decls: vec![("opacity".into(), "1".into())],
+                },
             ],
         );
-        d.keyframe_keys.insert("reveal".into(), vec!["0%".into(), "100%".into()]);
+        d.keyframe_keys
+            .insert("reveal".into(), vec!["0%".into(), "100%".into()]);
         d.set_styles(
             footer,
             &[
@@ -379,24 +427,48 @@ mod tests {
         assert_eq!(decorative_text_shape_dom(&d, mark), None);
         // An opacity transition running, whose end the capture cannot read,
         // leaves where it settles unknown: not a wordmark.
-        d.set_styles(footer, &[("animationName", "none"), ("transitionProperty", "opacity"), ("transitionDuration", "0.6s")]);
+        d.set_styles(
+            footer,
+            &[
+                ("animationName", "none"),
+                ("transitionProperty", "opacity"),
+                ("transitionDuration", "0.6s"),
+            ],
+        );
         assert_eq!(decorative_text_shape_dom(&d, mark), None);
         // The same footer at 0.2 with nothing moving it is a faint wordmark.
         d.set_running_animations(footer, &[]);
-        assert_eq!(decorative_text_shape_dom(&d, mark), Some(DecorativeShape::Wordmark));
-        d.set_styles(footer, &[("animationName", "reveal"), ("opacity", "0"), ("transitionProperty", "all"), ("transitionDuration", "0s")]);
+        assert_eq!(
+            decorative_text_shape_dom(&d, mark),
+            Some(DecorativeShape::Wordmark)
+        );
+        d.set_styles(
+            footer,
+            &[
+                ("animationName", "reveal"),
+                ("opacity", "0"),
+                ("transitionProperty", "all"),
+                ("transitionDuration", "0s"),
+            ],
+        );
         d.set_running_animations(footer, &["opacity"]);
         // A section name in the middle of a title is not the site's name,
         // and a hyphen separates nothing.
         d.add_text(title, " | Blog | Latest");
         let blog = d.add(Some(footer), "span");
         d.add_text(blog, "Blog");
-        d.set_styles(blog, &[("fontSize", "272.102px"), ("color", "rgb(255, 255, 255)")]);
+        d.set_styles(
+            blog,
+            &[("fontSize", "272.102px"), ("color", "rgb(255, 255, 255)")],
+        );
         assert_eq!(decorative_text_shape_dom(&d, blog), None);
         // Another word at the same size and opacity is not the site's name.
         let other = d.add(Some(footer), "span");
         d.add_text(other, "Tasks");
-        d.set_styles(other, &[("fontSize", "272.102px"), ("color", "rgb(255, 255, 255)")]);
+        d.set_styles(
+            other,
+            &[("fontSize", "272.102px"), ("color", "rgb(255, 255, 255)")],
+        );
         assert_eq!(decorative_text_shape_dom(&d, other), None);
     }
 
@@ -421,23 +493,47 @@ mod tests {
             }
             let mark = d.add(Some(body), "span");
             d.add_text(mark, text);
-            d.set_styles(mark, &[("fontSize", "160px"), ("color", "rgba(0, 0, 0, 0.1)")]);
+            d.set_styles(
+                mark,
+                &[("fontSize", "160px"), ("color", "rgba(0, 0, 0, 0.1)")],
+            );
             d.set_rect(mark, 0.0, 400.0, 900.0, 160.0);
             decorative_text_shape_dom(&d, mark)
         };
         let wordmark = Some(DecorativeShape::Wordmark);
         assert_eq!(build("", None, "Pricing | Acme", "Pricing"), None);
-        assert_eq!(build("", None, "Pricing | Acme", "Acme"), None, "nothing backs either part");
-        assert_eq!(build("getacme.io", None, "Pricing | Acme", "Acme"), wordmark);
+        assert_eq!(
+            build("", None, "Pricing | Acme", "Acme"),
+            None,
+            "nothing backs either part"
+        );
+        assert_eq!(
+            build("getacme.io", None, "Pricing | Acme", "Acme"),
+            wordmark
+        );
         assert_eq!(build("getacme.io", None, "Pricing | Acme", "Pricing"), None);
-        assert_eq!(build("get-acme-studio.com", None, "Pricing | Acme Studio", "Acme Studio"), wordmark);
-        assert_eq!(build("acme.studio", None, "Pricing | Studio", "Studio"), None);
+        assert_eq!(
+            build(
+                "get-acme-studio.com",
+                None,
+                "Pricing | Acme Studio",
+                "Acme Studio"
+            ),
+            wordmark
+        );
+        assert_eq!(
+            build("acme.studio", None, "Pricing | Studio", "Studio"),
+            None
+        );
         assert_eq!(build("www.acme.io", None, "Acme | io", "io"), None);
         assert_eq!(build("www.acme.io", None, "Acme | io", "Acme"), wordmark);
         assert_eq!(build("", Some("Acme"), "Pricing | Acme", "Acme"), wordmark);
         assert_eq!(build("", Some("Acme"), "Pricing | Acme", "Pricing"), None);
         // A title of one part is the site's name, opened word for word.
-        assert_eq!(build("", None, "Screen Movie Blog", "Screen Movie"), wordmark);
+        assert_eq!(
+            build("", None, "Screen Movie Blog", "Screen Movie"),
+            wordmark
+        );
     }
 
     #[test]
@@ -460,7 +556,10 @@ mod tests {
         d.add_text(brand, "r");
         d.set_styles(brand, &[("backgroundColor", "rgb(19, 130, 232)")]);
         d.set_rect(brand, 0.0, 80.0, 28.0, 28.0);
-        assert_eq!(decorative_text_shape_dom(&d, brand), Some(DecorativeShape::AvatarInitials));
+        assert_eq!(
+            decorative_text_shape_dom(&d, brand),
+            Some(DecorativeShape::AvatarInitials)
+        );
     }
 
     #[test]
@@ -487,7 +586,10 @@ mod tests {
         let row = d.add(Some(frame), "div");
         let label = d.add(Some(row), "span");
         d.add_text(label, "Ready");
-        assert_eq!(decorative_text_shape_dom(&d, label), Some(DecorativeShape::Mockup));
+        assert_eq!(
+            decorative_text_shape_dom(&d, label),
+            Some(DecorativeShape::Mockup)
+        );
         let sec = d.add(Some(body), "section");
         d.set_attr(sec, "class", "mockups");
         let p = d.add(Some(sec), "p");
@@ -511,7 +613,10 @@ mod tests {
         d.set_attr(pic, "role", "img");
         let code = d.add(Some(pic), "code");
         d.add_text(code, "$ npm run build");
-        assert_eq!(decorative_text_shape_dom(&d, code), Some(DecorativeShape::Mockup));
+        assert_eq!(
+            decorative_text_shape_dom(&d, code),
+            Some(DecorativeShape::Mockup)
+        );
         let chart = d.add(Some(body), "svg");
         d.set_attr(chart, "role", "img");
         let label = d.add(Some(chart), "text");

@@ -5,10 +5,12 @@
 
 use crate::jsp;
 use crate::question_page::PAGE;
-use crate::util::{exists, is_dir, iso_now, json_compact, json_pretty, mtime_ms, now_ms, safe_read, utf16_len, Env};
+use crate::util::{
+    exists, is_dir, iso_now, json_compact, json_pretty, mtime_ms, now_ms, safe_read, utf16_len, Env,
+};
+use impeccable_common::http::{Response, SerialServer};
 use impeccable_common::Io;
 use serde_json::{json, Map, Value};
-use impeccable_common::http::{Response, SerialServer};
 use std::sync::{Arc, Mutex};
 
 /// Ceiling on a POST body (`/answer`, `/build-path`, `/heartbeat`). The page
@@ -78,7 +80,10 @@ fn kill_pid(pid: i64) {
 
 fn read_state(qdir: &str, key: &str) -> Option<Map<String, Value>> {
     let text = safe_read(&state_file(qdir, key))?;
-    serde_json::from_str::<Value>(&text).ok()?.as_object().cloned()
+    serde_json::from_str::<Value>(&text)
+        .ok()?
+        .as_object()
+        .cloned()
 }
 
 /// The URL a detached daemon recorded in its state file, polled until
@@ -87,7 +92,12 @@ fn read_state(qdir: &str, key: &str) -> Option<Map<String, Value>> {
 /// between creating the file and writing it.
 fn wait_for_daemon_url(qdir: &str, key: &str, deadline_ms: f64) -> Option<String> {
     loop {
-        let url = read_state(qdir, key).and_then(|s| s.get("url").and_then(Value::as_str).filter(|u| !u.is_empty()).map(str::to_string));
+        let url = read_state(qdir, key).and_then(|s| {
+            s.get("url")
+                .and_then(Value::as_str)
+                .filter(|u| !u.is_empty())
+                .map(str::to_string)
+        });
         if url.is_some() || now_ms() >= deadline_ms {
             return url;
         }
@@ -100,14 +110,18 @@ fn num_field(m: &Map<String, Value>, key: &str) -> Option<f64> {
 }
 
 fn is_alive(qdir: &str, key: &str) -> bool {
-    let Some(state) = read_state(qdir, key) else { return false };
+    let Some(state) = read_state(qdir, key) else {
+        return false;
+    };
     if let Some(lb) = num_field(&state, "lastBeat") {
         if lb != 0.0 && now_ms() - lb < 12000.0 {
             return true;
         }
     }
     // process.kill(state.pid, 0): pid undefined -> throws TypeError (not EPERM) -> false
-    let Some(pid) = state.get("pid").and_then(|p| p.as_f64()) else { return false };
+    let Some(pid) = state.get("pid").and_then(|p| p.as_f64()) else {
+        return false;
+    };
     match pid_probe(pid as i64) {
         Ok(()) => true,
         Err(eperm) => eperm,
@@ -134,21 +148,32 @@ fn is_comp_rounds_option_one(cwd: &str, path: &str, served: &[String]) -> bool {
 }
 
 fn is_open_rounds_decision_comp(cwd: &str, path: &str) -> bool {
-    let Some(state) = safe_read(&jsp::resolve(cwd, &[".impeccable/build/state.json"])).and_then(|raw| serde_json::from_str::<Value>(&raw).ok()) else { return false };
-    let Some(chosen) = state.get("decisionComp").and_then(Value::as_str) else { return false };
-    state.get("phase").and_then(Value::as_str) == Some("comps") && same_path(&jsp::resolve(cwd, &[chosen]), &jsp::resolve(cwd, &[path]))
+    let Some(state) = safe_read(&jsp::resolve(cwd, &[".impeccable/build/state.json"]))
+        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+    else {
+        return false;
+    };
+    let Some(chosen) = state.get("decisionComp").and_then(Value::as_str) else {
+        return false;
+    };
+    state.get("phase").and_then(Value::as_str) == Some("comps")
+        && same_path(&jsp::resolve(cwd, &[chosen]), &jsp::resolve(cwd, &[path]))
 }
 
 fn print_answer(io: &mut Io, raw: &str, served: &[String]) {
     io.out(&format!("ANSWER: {}\n", raw));
-    let Ok(a) = serde_json::from_str::<Value>(raw) else { return };
+    let Ok(a) = serde_json::from_str::<Value>(raw) else {
+        return;
+    };
     let truthy = |k: &str| a.get(k).map(crate::staleness::js_truthy).unwrap_or(false);
     if truthy("hero") || truthy("board") {
         io.out("CHOSEN CARD: open the chosen world's board and hero images now, before any code. When your harness only reads files, or runs sandboxed, download them INTO the workspace and open the relative path; a sandboxed viewer rejects absolute paths outside it. They set the craft bar the build must reach.\n");
     }
     let comp = a.get("comp").map(js_str).unwrap_or_default();
     let cwd = io.cwd.to_string_lossy().to_string();
-    if truthy("comp") && (is_comp_round_comp(&comp) || is_comp_rounds_option_one(&cwd, &comp, served)) {
+    if truthy("comp")
+        && (is_comp_round_comp(&comp) || is_comp_rounds_option_one(&cwd, &comp, served))
+    {
         io.out("APPROVED COMP: the user picked this composition in the comp round, so it is the approved comp. Set \"approved\": true in its prompt sidecar, the image's full file name plus .json (a.png gets a.png.json), record its path in the surface brief, then close the comps phase with build-phase advance. Build from it as it stands; never regenerate it.\n");
     } else if truthy("comp") {
         io.out("CHOSEN COMP: the decision comp at that path is compositional option one. On a comp-led build pass it to build-phase start as --decision-comp <that path>, and the comp round adds two variations beside it where it stands; on a code-led build it returns at the finish review as the critique reference. Never regenerate it from scratch.\n");
@@ -191,14 +216,23 @@ fn print_answer(io: &mut Io, raw: &str, served: &[String]) {
 /// (or the legacy `sketch`) and the canon card's, as written in the payload.
 /// URLs are left out: they are rendered already, never generated here.
 fn declared_comps(payload: &Value) -> Vec<String> {
-    let mut cards: Vec<&Value> = payload.get("options").and_then(Value::as_array).map(|o| o.iter().collect()).unwrap_or_default();
+    let mut cards: Vec<&Value> = payload
+        .get("options")
+        .and_then(Value::as_array)
+        .map(|o| o.iter().collect())
+        .unwrap_or_default();
     if let Some(c) = payload.get("canonCard").filter(|c| c.is_object()) {
         cards.push(c);
     }
     let mut out: Vec<String> = Vec::new();
     for card in cards {
-        let comp = card.get("comp").filter(|v| !v.is_null()).or_else(|| card.get("sketch").filter(|v| !v.is_null()));
-        let Some(s) = comp.filter(|v| crate::staleness::js_truthy(v)).map(js_str) else { continue };
+        let comp = card
+            .get("comp")
+            .filter(|v| !v.is_null())
+            .or_else(|| card.get("sketch").filter(|v| !v.is_null()));
+        let Some(s) = comp.filter(|v| crate::staleness::js_truthy(v)).map(js_str) else {
+            continue;
+        };
         if s.starts_with("http://") || s.starts_with("https://") || out.contains(&s) {
             continue;
         }
@@ -212,13 +246,23 @@ fn declared_comps(payload: &Value) -> Vec<String> {
 /// page draws as a skeleton; URLs are left out, a sketch is always written
 /// into the project.
 fn declared_html(payload: &Value) -> Vec<String> {
-    let mut cards: Vec<&Value> = payload.get("options").and_then(Value::as_array).map(|o| o.iter().collect()).unwrap_or_default();
+    let mut cards: Vec<&Value> = payload
+        .get("options")
+        .and_then(Value::as_array)
+        .map(|o| o.iter().collect())
+        .unwrap_or_default();
     if let Some(c) = payload.get("canonCard").filter(|c| c.is_object()) {
         cards.push(c);
     }
     let mut out: Vec<String> = Vec::new();
     for card in cards {
-        let Some(s) = card.get("html").filter(|v| crate::staleness::js_truthy(v)).map(js_str) else { continue };
+        let Some(s) = card
+            .get("html")
+            .filter(|v| crate::staleness::js_truthy(v))
+            .map(js_str)
+        else {
+            continue;
+        };
         if s.starts_with("http://") || s.starts_with("https://") || out.contains(&s) {
             continue;
         }
@@ -230,19 +274,34 @@ fn declared_html(payload: &Value) -> Vec<String> {
 /// Whether a card declares a decision comp: a truthy `comp`, or the legacy
 /// `sketch` (a URL counts).
 fn card_has_comp(card: &Value) -> bool {
-    let comp = card.get("comp").filter(|v| !v.is_null()).or_else(|| card.get("sketch").filter(|v| !v.is_null()));
+    let comp = card
+        .get("comp")
+        .filter(|v| !v.is_null())
+        .or_else(|| card.get("sketch").filter(|v| !v.is_null()));
     comp.map(crate::staleness::js_truthy).unwrap_or(false)
 }
 
 /// The options that owe a comp and declare none, declined challengers
 /// excepted, by id (`options[<n>]` for a card with no id), in card order.
 fn options_missing_comps(payload: &Value) -> Vec<String> {
-    let options = payload.get("options").and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[]);
+    let options = payload
+        .get("options")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
     options
         .iter()
         .enumerate()
-        .filter(|(_, o)| o.get("verdict").and_then(Value::as_str) != Some("declined") && !card_has_comp(o))
-        .map(|(i, o)| o.get("id").and_then(Value::as_str).filter(|s| !s.is_empty()).map(str::to_string).unwrap_or_else(|| format!("options[{}]", i)))
+        .filter(|(_, o)| {
+            o.get("verdict").and_then(Value::as_str) != Some("declined") && !card_has_comp(o)
+        })
+        .map(|(i, o)| {
+            o.get("id")
+                .and_then(Value::as_str)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("options[{}]", i))
+        })
         .collect()
 }
 
@@ -253,7 +312,11 @@ fn options_missing_comps(payload: &Value) -> Vec<String> {
 fn comp_led_full_hand(payload: &Value) -> bool {
     let comp_led = payload.pointer("/buildPath/value").and_then(Value::as_str) == Some("comp");
     let toggle = payload.pointer("/buildPath/toggle") == Some(&Value::Bool(true));
-    let options = payload.get("options").and_then(Value::as_array).map(Vec::len).unwrap_or(0);
+    let options = payload
+        .get("options")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
     comp_led && toggle && options >= 2
 }
 
@@ -261,7 +324,11 @@ fn comp_led_full_hand(payload: &Value) -> bool {
 /// `canonCard`: direction rounds only; surface rounds and the comp round
 /// never carry it.
 fn has_canon_exit(payload: &Value) -> bool {
-    payload.get("canonCard").is_some_and(Value::is_object) || payload.get("canon").map(crate::staleness::js_truthy).unwrap_or(false)
+    payload.get("canonCard").is_some_and(Value::is_object)
+        || payload
+            .get("canon")
+            .map(crate::staleness::js_truthy)
+            .unwrap_or(false)
 }
 
 /// The cards a comp-led direction round leaves without a decision comp, by
@@ -276,7 +343,11 @@ fn missing_direction_comps(payload: &Value) -> Vec<String> {
         return Vec::new();
     }
     let mut missing = options_missing_comps(payload);
-    if payload.get("canonCard").filter(|c| c.is_object()).is_some_and(|c| !card_has_comp(c)) {
+    if payload
+        .get("canonCard")
+        .filter(|c| c.is_object())
+        .is_some_and(|c| !card_has_comp(c))
+    {
         missing.push("canonCard".into());
     }
     missing
@@ -322,7 +393,12 @@ fn missing_comps(roll: Option<&str>, payload: &Value) -> Option<(CompRound, Vec<
 /// The refusal `--start` and `--update` print for a comp-led direction or
 /// surface round that declares no comp on some card. `rerun` names the
 /// command to repeat.
-fn missing_comps_message(round: CompRound, missing: &[String], rerun: &str, outcome: &str) -> String {
+fn missing_comps_message(
+    round: CompRound,
+    missing: &[String],
+    rerun: &str,
+    outcome: &str,
+) -> String {
     let (owed, canon_note) = match round {
         CompRound::Direction => (
             "this direction round is comp-led with image generation (buildPath value \"comp\", toggle true), so every card declares a decision comp, canon included, declined challengers excepted",
@@ -354,39 +430,91 @@ fn card_identity_problems(roll: Option<&str>, payload: &Value) -> (Vec<String>, 
     if !payload.get("buildPath").is_some_and(|b| !b.is_null()) {
         return (vec![], vec![]);
     }
-    let record = roll.and_then(|t| serde_json::from_str::<Value>(t).ok()).filter(|r| r.get("at").and_then(Value::as_f64).is_some_and(|at| now_ms() - at < ROLL_WINDOW_MS));
-    let dealt: Option<Vec<String>> = record.map(|r| r.get("worlds").and_then(Value::as_array).map(|a| a.iter().filter_map(|w| w.get("id").and_then(Value::as_str)).map(str::to_string).collect()).unwrap_or_default());
-    let options = payload.get("options").and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[]);
+    let record = roll
+        .and_then(|t| serde_json::from_str::<Value>(t).ok())
+        .filter(|r| {
+            r.get("at")
+                .and_then(Value::as_f64)
+                .is_some_and(|at| now_ms() - at < ROLL_WINDOW_MS)
+        });
+    let dealt: Option<Vec<String>> = record.map(|r| {
+        r.get("worlds")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|w| w.get("id").and_then(Value::as_str))
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default()
+    });
+    let options = payload
+        .get("options")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
     let mut problems = Vec::new();
     let mut seen: Vec<&str> = Vec::new();
     for (i, o) in options.iter().enumerate() {
-        let name = o.get("id").and_then(Value::as_str).filter(|s| !s.is_empty()).map(str::to_string).unwrap_or_else(|| format!("options[{}]", i));
+        let name = o
+            .get("id")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("options[{}]", i));
         match o.get("kind").and_then(Value::as_str) {
             None => problems.push(format!("{} declares no kind", name)),
-            Some(k) if !crate::telemetry::CARD_KINDS.contains(&k) => problems.push(format!("{} declares kind \"{}\"", name, k)),
+            Some(k) if !crate::telemetry::CARD_KINDS.contains(&k) => {
+                problems.push(format!("{} declares kind \"{}\"", name, k))
+            }
             Some(k) => {
                 if (k == "assigned" || k == "pick") && seen.contains(&k) {
                     problems.push(format!("{} is a second {} card", name, k));
                 }
                 seen.push(k);
                 if k == "challenger" {
-                    match o.get("catalogId").and_then(Value::as_str).filter(|s| !s.is_empty()) {
-                        None => problems.push(format!("{} is a challenger with no catalogId", name)),
-                        Some(id) if dealt.as_ref().is_some_and(|d| !d.iter().any(|x| x == id)) => problems.push(format!("{} names catalogId \"{}\", which this roll did not deal", name, id)),
+                    match o
+                        .get("catalogId")
+                        .and_then(Value::as_str)
+                        .filter(|s| !s.is_empty())
+                    {
+                        None => {
+                            problems.push(format!("{} is a challenger with no catalogId", name))
+                        }
+                        Some(id) if dealt.as_ref().is_some_and(|d| !d.iter().any(|x| x == id)) => {
+                            problems.push(format!(
+                                "{} names catalogId \"{}\", which this roll did not deal",
+                                name, id
+                            ))
+                        }
                         Some(_) => {}
                     }
                 }
             }
         }
     }
-    if let Some(k) = payload.get("canonCard").and_then(|c| c.get("kind")).and_then(Value::as_str).filter(|k| *k != "canon") {
+    if let Some(k) = payload
+        .get("canonCard")
+        .and_then(|c| c.get("kind"))
+        .and_then(Value::as_str)
+        .filter(|k| *k != "canon")
+    {
         problems.push(format!("canonCard declares kind \"{}\"", k));
     }
     (problems, dealt.unwrap_or_default())
 }
 
-fn card_identity_message(problems: &[String], dealt: &[String], rerun: &str, outcome: &str) -> String {
-    let dealt_note = if dealt.is_empty() { String::new() } else { format!(" (dealt this roll: {})", dealt.join(", ")) };
+fn card_identity_message(
+    problems: &[String],
+    dealt: &[String],
+    rerun: &str,
+    outcome: &str,
+) -> String {
+    let dealt_note = if dealt.is_empty() {
+        String::new()
+    } else {
+        format!(" (dealt this roll: {})", dealt.join(", "))
+    };
     format!(
         "serve-question: every card on a direction or surface page declares its identity, and these do not: {}. Set \"kind\" on every option: \"assigned\" on the assigned direction (a surface round's dealt lead), \"pick\" on the IMPECCABLE’S PICK card, \"challenger\" on each dealt challenger, \"grounded\" on any other direction of your own (a safer round's lineup), or \"dealt\" on a surface round's other dealt structures; and on every challenger set \"catalogId\" to the SOURCE ID concept-seed printed for it{}, never the card's own id. Fix the payload and {}; {}.\n",
         problems.join("; "),
@@ -405,7 +533,6 @@ fn card_identity_message(problems: &[String], dealt: &[String], rerun: &str, out
 pub fn ignore_questions_dir(qdir: &str) {
     impeccable_common::git::ensure_dir_ignored(qdir, &["*"]);
 }
-
 
 /// How long a roll stays bound to the next decision page. A roll is
 /// presented within minutes; an older record belongs to work long gone.
@@ -433,20 +560,37 @@ fn roll_local_file(qdir: &str) -> String {
 /// The project-relative paths git tracks among `paths`, when `cwd` is in a
 /// git work tree; empty otherwise or on any failure. One `git ls-files`.
 pub fn git_tracked(cwd: &str, paths: &[&str]) -> Vec<String> {
-    let in_repo = std::path::Path::new(cwd).ancestors().any(|d| d.join(".git").exists());
+    let in_repo = std::path::Path::new(cwd)
+        .ancestors()
+        .any(|d| d.join(".git").exists());
     if !in_repo {
         return vec![];
     }
-    let out = std::process::Command::new("git").arg("-C").arg(cwd).args(["ls-files", "-z", "--"]).args(paths).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).output();
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(cwd)
+        .args(["ls-files", "-z", "--"])
+        .args(paths)
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output();
     match out {
-        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).split('\0').filter(|p| !p.is_empty()).map(str::to_string).collect(),
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout)
+            .split('\0')
+            .filter(|p| !p.is_empty())
+            .map(str::to_string)
+            .collect(),
         _ => vec![],
     }
 }
 
 /// The runtime paths whose tracked files hold a seed key, a dealt hand, or
 /// a choice: a `.gitignore` covers new files only.
-const RUNTIME_PATHS: [&str; 3] = [".impeccable/questions", ".impeccable/mocks/worlds", ".impeccable/build/state.json"];
+const RUNTIME_PATHS: [&str; 3] = [
+    ".impeccable/questions",
+    ".impeccable/mocks/worlds",
+    ".impeccable/build/state.json",
+];
 
 /// A one-time notice when git already tracks runtime files: printed once
 /// per distinct tracked set (a marker in the ignored questions directory
@@ -457,7 +601,11 @@ pub fn tracked_runtime_notice(cwd: &str) -> Option<String> {
         return None;
     }
     use sha2::{Digest, Sha256};
-    let digest: String = Sha256::digest(tracked.join("\n").as_bytes()).iter().take(8).map(|b| format!("{:02x}", b)).collect();
+    let digest: String = Sha256::digest(tracked.join("\n").as_bytes())
+        .iter()
+        .take(8)
+        .map(|b| format!("{:02x}", b))
+        .collect();
     let qdir = jsp::join(&[cwd, ".impeccable", "questions"]);
     let marker = jsp::join(&[&qdir, ".tracked-notice"]);
     if safe_read(&marker).is_some_and(|m| m.trim() == digest) {
@@ -466,7 +614,15 @@ pub fn tracked_runtime_notice(cwd: &str) -> Option<String> {
     let _ = std::fs::create_dir_all(&qdir);
     ignore_questions_dir(&qdir);
     let _ = std::fs::write(&marker, format!("{}\n", digest));
-    let roots: Vec<&str> = RUNTIME_PATHS.iter().copied().filter(|r| tracked.iter().any(|t| t == r || t.starts_with(&format!("{}/", r)))).collect();
+    let roots: Vec<&str> = RUNTIME_PATHS
+        .iter()
+        .copied()
+        .filter(|r| {
+            tracked
+                .iter()
+                .any(|t| t == r || t.starts_with(&format!("{}/", r)))
+        })
+        .collect();
     let shown: Vec<&str> = tracked.iter().take(5).map(String::as_str).collect();
     Some(format!(
         "TRACKED RUNTIME FILES: git already tracks {} file(s) under .impeccable/ that hold local runtime state (seed keys, dealt hands, choices): {}{}. A .gitignore does not untrack files already committed, so the next commit can still publish them. Tell the user once, and suggest they run `git rm -r --cached {}` and commit; it keeps the files on disk. Until then the engine writes the roll record to .impeccable/questions/roll.local.json instead.\n",
@@ -493,7 +649,14 @@ pub struct ApiRoll<'a> {
 /// page carries into its hand (`roll_seed`) so the picker can send the
 /// choice ping itself. The questions directory ignores itself before the
 /// record is written.
-pub fn record_roll(cwd: &str, scope: &str, reference: Option<&str>, reroll: usize, worlds: &[Value], api: Option<&ApiRoll>) {
+pub fn record_roll(
+    cwd: &str,
+    scope: &str,
+    reference: Option<&str>,
+    reroll: usize,
+    worlds: &[Value],
+    api: Option<&ApiRoll>,
+) {
     let qdir = jsp::join(&[cwd, ".impeccable", "questions"]);
     // No reference (no salt on this machine): the record names no seed, and
     // the page sends no ping, since it could not name the key.
@@ -506,7 +669,10 @@ pub fn record_roll(cwd: &str, scope: &str, reference: Option<&str>, reroll: usiz
     }
     if let Some(a) = api {
         record["source"] = json!("api");
-        if let Some(p) = a.pool_revision.filter(|p| crate::telemetry::valid_pool_revision(p)) {
+        if let Some(p) = a
+            .pool_revision
+            .filter(|p| crate::telemetry::valid_pool_revision(p))
+        {
             record["poolRevision"] = json!(p);
         }
         if let Some(h) = a.hand_id.filter(|h| crate::telemetry::valid_hand_id(h)) {
@@ -524,7 +690,11 @@ pub fn record_roll(cwd: &str, scope: &str, reference: Option<&str>, reroll: usiz
     }
     ignore_questions_dir(&qdir);
     let tracked = !git_tracked(cwd, &[".impeccable/questions/roll.json"]).is_empty();
-    let (target, other) = if tracked { (roll_local_file(&qdir), None) } else { (roll_file(&qdir), Some(roll_local_file(&qdir))) };
+    let (target, other) = if tracked {
+        (roll_local_file(&qdir), None)
+    } else {
+        (roll_file(&qdir), Some(roll_local_file(&qdir)))
+    };
     if write_atomic(&target, &json_compact(&record)).is_ok() {
         if let Some(o) = other {
             let _ = std::fs::remove_file(o);
@@ -536,7 +706,9 @@ pub fn record_roll(cwd: &str, scope: &str, reference: Option<&str>, reroll: usiz
 /// when the record carries none, so every freshness check reads one field.
 fn read_roll_at(path: &str) -> Option<String> {
     let text = safe_read(path)?;
-    let Ok(Value::Object(mut m)) = serde_json::from_str::<Value>(&text) else { return Some(text) };
+    let Ok(Value::Object(mut m)) = serde_json::from_str::<Value>(&text) else {
+        return Some(text);
+    };
     if m.get("at").is_none() {
         if let Some(mt) = mtime_ms(path) {
             m.insert("at".into(), Value::from(mt as u64));
@@ -560,7 +732,9 @@ fn seed_with_key(seed: Option<Value>, env: &Env, cwd: &str) -> Option<Value> {
     let mut seed = seed?;
     if seed.get("key").and_then(Value::as_str).is_none() {
         let reference = seed.get("seed").and_then(Value::as_str)?.to_string();
-        let key = crate::telemetry::Ledger::new(env, cwd).resolve(&reference).ok()?;
+        let key = crate::telemetry::Ledger::new(env, cwd)
+            .resolve(&reference)
+            .ok()?;
         seed["key"] = Value::String(key);
     }
     Some(seed)
@@ -572,7 +746,10 @@ fn surface_roll_pending(roll: Option<&str>) -> bool {
     let Some(record) = roll.and_then(|t| serde_json::from_str::<Value>(t).ok()) else {
         return false;
     };
-    let fresh = record.get("at").and_then(Value::as_f64).is_some_and(|at| now_ms() - at < ROLL_WINDOW_MS);
+    let fresh = record
+        .get("at")
+        .and_then(Value::as_f64)
+        .is_some_and(|at| now_ms() - at < ROLL_WINDOW_MS);
     fresh && record.get("scope").and_then(Value::as_str) == Some("surface")
 }
 
@@ -582,9 +759,24 @@ fn surface_roll_pending(roll: Option<&str>) -> bool {
 /// and both URLs are http(s) single tokens of sane length: nothing else can
 /// ride an engine-printed line or name a path.
 fn world_card(w: &Value) -> Option<Value> {
-    let text = |k: &str, max: usize| w.get(k).and_then(Value::as_str).filter(|s| !s.is_empty() && s.len() <= max);
-    let id = text("id", 120).filter(|s| !s.starts_with('.') && s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-')))?;
-    let url = |k: &str| text(k, 500).filter(|s| crate::generate_image::is_url(s) && !s.chars().any(|c| c.is_whitespace() || c.is_control() || c == '|' || c == '`'));
+    let text = |k: &str, max: usize| {
+        w.get(k)
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty() && s.len() <= max)
+    };
+    let id = text("id", 120).filter(|s| {
+        !s.starts_with('.')
+            && s.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+    })?;
+    let url = |k: &str| {
+        text(k, 500).filter(|s| {
+            crate::generate_image::is_url(s)
+                && !s
+                    .chars()
+                    .any(|c| c.is_whitespace() || c.is_control() || c == '|' || c == '`')
+        })
+    };
     Some(json!({ "id": id, "board": url("board")?, "hero": url("hero")? }))
 }
 
@@ -602,7 +794,10 @@ const WORLD_CARD_EXTS: [&str; 4] = ["webp", "png", "jpg", "jpeg"];
 /// The workspace-relative path of a world's card image when one is already
 /// kept: `<WORLD_CARDS_DIR>/<id>-<board|hero>.<ext>`.
 fn kept_world_card(cwd: &str, id: &str, kind: &str) -> Option<String> {
-    WORLD_CARD_EXTS.iter().map(|ext| format!("{}/{}-{}.{}", WORLD_CARDS_DIR, id, kind, ext)).find(|rel| exists(&jsp::resolve(cwd, &[rel.as_str()])))
+    WORLD_CARD_EXTS
+        .iter()
+        .map(|ext| format!("{}/{}-{}.{}", WORLD_CARDS_DIR, id, kind, ext))
+        .find(|rel| exists(&jsp::resolve(cwd, &[rel.as_str()])))
 }
 
 /// Whether the engine may request a card URL on its own. The URLs come from
@@ -619,18 +814,31 @@ fn card_fetch_allowed(env: &Env, url: &str) -> bool {
     if url.starts_with(&format!("{}/", base.trim_end_matches('/'))) {
         return true;
     }
-    let Some(rest) = url.strip_prefix("https://") else { return false };
+    let Some(rest) = url.strip_prefix("https://") else {
+        return false;
+    };
     let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
     if authority.contains('@') || authority.starts_with('[') {
         return false;
     }
-    let host = authority.rsplit_once(':').map(|(h, _)| h).unwrap_or(authority).trim_end_matches('.').to_ascii_lowercase();
-    let private_name = host == "localhost" || [".localhost", ".local", ".internal", ".lan", ".home.arpa"].iter().any(|s| host.ends_with(s));
+    let host = authority
+        .rsplit_once(':')
+        .map(|(h, _)| h)
+        .unwrap_or(authority)
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
+    let private_name = host == "localhost"
+        || [".localhost", ".local", ".internal", ".lan", ".home.arpa"]
+            .iter()
+            .any(|s| host.ends_with(s));
     // A numeric host is an address however it is spelled (`127.1`,
     // `0177.0.0.1`, `0x7f.1` all resolve to loopback), so the last label
     // must be a name: letters only, or punycode.
     let tld = host.rsplit('.').next().unwrap_or("");
-    let named = !tld.is_empty() && (tld.bytes().all(|b| b.is_ascii_alphabetic()) || (tld.starts_with("xn--") && tld.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')));
+    let named = !tld.is_empty()
+        && (tld.bytes().all(|b| b.is_ascii_alphabetic())
+            || (tld.starts_with("xn--")
+                && tld.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')));
     host.contains('.') && named && host.parse::<std::net::IpAddr>().is_err() && !private_name
 }
 
@@ -643,10 +851,18 @@ fn card_fetch_allowed(env: &Env, url: &str) -> bool {
 /// image's own type, so a later `--ref` of the path sends the right one.
 /// `IMPECCABLE_IMAGE_GEN_FAKE` makes no request.
 fn fetch_world_cards(env: &Env, cwd: &str, worlds: &[Value]) -> Vec<(String, String, String)> {
-    let s = |w: &Value, k: &str| w.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+    let s = |w: &Value, k: &str| {
+        w.get(k)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
     let offline = env_set(env, "IMPECCABLE_IMAGE_GEN_FAKE");
     // (id, kind, url) per image, board then hero per world.
-    let images: Vec<(String, &str, String)> = worlds.iter().flat_map(|w| ["board", "hero"].map(|kind| (s(w, "id"), kind, s(w, kind)))).collect();
+    let images: Vec<(String, &str, String)> = worlds
+        .iter()
+        .flat_map(|w| ["board", "hero"].map(|kind| (s(w, "id"), kind, s(w, kind))))
+        .collect();
     let fetch = |id: &str, kind: &str, url: &str| -> Option<String> {
         if let Some(kept) = kept_world_card(cwd, id, kind) {
             return Some(kept);
@@ -667,18 +883,30 @@ fn fetch_world_cards(env: &Env, cwd: &str, worlds: &[Value]) -> Vec<(String, Str
         // The kept cards name the dealt hand in their file names: runtime
         // reference copies, so the directory ignores itself like questions/.
         impeccable_common::git::ensure_dir_ignored(&jsp::resolve(cwd, &[WORLD_CARDS_DIR]), &["*"]);
-        let written = std::fs::create_dir_all(jsp::resolve(cwd, &[WORLD_CARDS_DIR])).and_then(|_| std::fs::write(&temp, &bytes)).and_then(|_| std::fs::rename(&temp, &abs));
+        let written = std::fs::create_dir_all(jsp::resolve(cwd, &[WORLD_CARDS_DIR]))
+            .and_then(|_| std::fs::write(&temp, &bytes))
+            .and_then(|_| std::fs::rename(&temp, &abs));
         if written.is_err() {
             let _ = std::fs::remove_file(&temp);
         }
         written.is_ok().then_some(rel)
     };
     let have: Vec<Option<String>> = std::thread::scope(|scope| {
-        let handles: Vec<_> = images.iter().map(|(id, kind, url)| scope.spawn(|| fetch(id, kind, url))).collect();
-        handles.into_iter().map(|h| h.join().unwrap_or(None)).collect()
+        let handles: Vec<_> = images
+            .iter()
+            .map(|(id, kind, url)| scope.spawn(|| fetch(id, kind, url)))
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| h.join().unwrap_or(None))
+            .collect()
     });
     let named = |i: usize| have[i].clone().unwrap_or_else(|| images[i].2.clone());
-    worlds.iter().enumerate().map(|(i, w)| (s(w, "id"), named(i * 2), named(i * 2 + 1))).collect()
+    worlds
+        .iter()
+        .enumerate()
+        .map(|(i, w)| (s(w, "id"), named(i * 2), named(i * 2 + 1)))
+        .collect()
 }
 
 /// The catalog worlds a decision page's hand was dealt: the roll record's
@@ -694,16 +922,26 @@ fn dealt_worlds(roll: Option<&str>, payload: &Value) -> Vec<Value> {
     let Some(record) = roll.and_then(|t| serde_json::from_str::<Value>(t).ok()) else {
         return vec![];
     };
-    let fresh = record.get("at").and_then(Value::as_f64).is_some_and(|at| now_ms() - at < ROLL_WINDOW_MS);
+    let fresh = record
+        .get("at")
+        .and_then(Value::as_f64)
+        .is_some_and(|at| now_ms() - at < ROLL_WINDOW_MS);
     if !fresh || record.get("scope").and_then(Value::as_str) != Some("direction") {
         return vec![];
     }
-    record.get("worlds").and_then(Value::as_array).map(|a| a.iter().filter_map(world_card).collect()).unwrap_or_default()
+    record
+        .get("worlds")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(world_card).collect())
+        .unwrap_or_default()
 }
 
 /// The worlds recorded in a hand (`dealt_worlds` at the time it was dealt).
 fn hand_worlds(hand: Option<&Map<String, Value>>) -> Vec<Value> {
-    hand.and_then(|h| h.get("worlds")).and_then(Value::as_array).map(|a| a.iter().filter_map(world_card).collect()).unwrap_or_default()
+    hand.and_then(|h| h.get("worlds"))
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(world_card).collect())
+        .unwrap_or_default()
 }
 
 /// The telemetry context a decision page takes from an API-dealt roll: the
@@ -716,17 +954,34 @@ fn roll_seed(roll: Option<&str>, payload: &Value) -> Option<Value> {
         return None;
     }
     let record = roll.and_then(|t| serde_json::from_str::<Value>(t).ok())?;
-    let fresh = record.get("at").and_then(Value::as_f64).is_some_and(|at| now_ms() - at < ROLL_WINDOW_MS);
+    let fresh = record
+        .get("at")
+        .and_then(Value::as_f64)
+        .is_some_and(|at| now_ms() - at < ROLL_WINDOW_MS);
     if !fresh || record.get("source").and_then(Value::as_str) != Some("api") {
         return None;
     }
     let mut seed = Map::new();
-    for k in ["key", "seed", "scope", "reroll", "mode", "register", "poolRevision", "handId", "source"] {
+    for k in [
+        "key",
+        "seed",
+        "scope",
+        "reroll",
+        "mode",
+        "register",
+        "poolRevision",
+        "handId",
+        "source",
+    ] {
         if let Some(v) = record.get(k).filter(|v| !v.is_null()) {
             seed.insert(k.into(), v.clone());
         }
     }
-    let dealt: Vec<Value> = record.get("worlds").and_then(Value::as_array).map(|a| a.iter().filter_map(world_card).collect()).unwrap_or_default();
+    let dealt: Vec<Value> = record
+        .get("worlds")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(world_card).collect())
+        .unwrap_or_default();
     seed.insert("dealt".into(), Value::Array(dealt));
     Some(Value::Object(seed))
 }
@@ -770,7 +1025,12 @@ fn hand_digest(payload: &Value) -> String {
 fn file_fingerprint(abs: &str) -> Option<String> {
     use sha2::{Digest, Sha256};
     let bytes = std::fs::read(abs).ok()?;
-    Some(Sha256::digest(&bytes).iter().map(|b| format!("{:02x}", b)).collect())
+    Some(
+        Sha256::digest(&bytes)
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect(),
+    )
 }
 
 /// `<key>.generated/`: one marker per slot `impeccable generate-image` wrote
@@ -789,7 +1049,12 @@ fn generated_dir(qdir: &str, key: &str) -> String {
 /// two ids that differ only in case never share a path on a case-insensitive
 /// file system (Windows, default macOS).
 fn marker_tag(id: &str) -> String {
-    if !id.is_empty() && id.len() <= 64 && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_') {
+    if !id.is_empty()
+        && id.len() <= 64
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+    {
         id.to_string()
     } else {
         hand_digest(&Value::String(id.to_string()))
@@ -798,7 +1063,11 @@ fn marker_tag(id: &str) -> String {
 
 /// The marker file name for `slot` in the hand tagged `tag`.
 fn marker_name(slot: &str, tag: &str) -> String {
-    format!("{}-{}.json", hand_digest(&Value::String(slot.to_string())), tag)
+    format!(
+        "{}-{}.json",
+        hand_digest(&Value::String(slot.to_string())),
+        tag
+    )
 }
 
 /// The hand tag a marker file name carries: `Some(tag)` for
@@ -815,13 +1084,20 @@ fn marker_name_tag(name: &str) -> Option<&str> {
 fn legacy_marker_owner(path: &std::path::Path) -> Option<String> {
     safe_read(&path.to_string_lossy())
         .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-        .and_then(|m| m.get("hand").or_else(|| m.get("digest")).and_then(Value::as_str).map(str::to_string))
+        .and_then(|m| {
+            m.get("hand")
+                .or_else(|| m.get("digest"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
 }
 
 /// The recorded hand, with the slots generated during it merged in as
 /// `generated` (markers from another digest are ignored).
 fn read_hand(qdir: &str, key: &str) -> Option<Map<String, Value>> {
-    let mut hand = safe_read(&hand_file(qdir, key)).and_then(|t| serde_json::from_str::<Value>(&t).ok()).and_then(|v| v.as_object().cloned())?;
+    let mut hand = safe_read(&hand_file(qdir, key))
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        .and_then(|v| v.as_object().cloned())?;
     let id = hand_marker_id(&hand);
     let tag = marker_tag(&id);
     let mut generated: Vec<String> = Vec::new();
@@ -831,10 +1107,19 @@ fn read_hand(qdir: &str, key: &str) -> Option<Map<String, Value>> {
             if !name.ends_with(".json") {
                 continue;
             }
-            let Some(m) = safe_read(&e.path().to_string_lossy()).and_then(|t| serde_json::from_str::<Value>(&t).ok()) else { continue };
+            let Some(m) = safe_read(&e.path().to_string_lossy())
+                .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+            else {
+                continue;
+            };
             let ours = match marker_name_tag(&name) {
                 Some(t) => t == tag,
-                None => m.get("hand").or_else(|| m.get("digest")).and_then(Value::as_str) == Some(id.as_str()),
+                None => {
+                    m.get("hand")
+                        .or_else(|| m.get("digest"))
+                        .and_then(Value::as_str)
+                        == Some(id.as_str())
+                }
             };
             if ours {
                 if let Some(slot) = m.get("slot").and_then(Value::as_str) {
@@ -855,16 +1140,19 @@ fn read_hand(qdir: &str, key: &str) -> Option<Map<String, Value>> {
 fn write_atomic(target: &str, text: &str) -> std::io::Result<()> {
     let temp = format!("{}.tmp-{}", target, std::process::id());
     std::fs::write(&temp, text)?;
-    std::fs::rename(&temp, target).map_err(|e| {
+    std::fs::rename(&temp, target).inspect_err(|_e| {
         let _ = std::fs::remove_file(&temp);
-        e
     })
 }
 
 fn same_path(a: &str, b: &str) -> bool {
     let norm = |p: &str| {
         let p = p.replace('\\', "/");
-        if cfg!(windows) { p.to_lowercase() } else { p }
+        if cfg!(windows) {
+            p.to_lowercase()
+        } else {
+            p
+        }
     };
     norm(a) == norm(b)
 }
@@ -877,15 +1165,24 @@ fn same_path(a: &str, b: &str) -> bool {
 pub fn record_generated(cwd: &str, out: &str) -> Result<Vec<String>, String> {
     let qdir = jsp::join(&[cwd, ".impeccable", "questions"]);
     let out_abs = jsp::resolve(cwd, &[out]);
-    let Ok(entries) = std::fs::read_dir(&qdir) else { return Ok(vec![]) };
+    let Ok(entries) = std::fs::read_dir(&qdir) else {
+        return Ok(vec![]);
+    };
     let mut keys: Vec<String> = entries
         .flatten()
-        .filter_map(|e| e.file_name().to_string_lossy().strip_suffix(".hand.json").map(str::to_string))
+        .filter_map(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .strip_suffix(".hand.json")
+                .map(str::to_string)
+        })
         .collect();
     keys.sort();
     let mut marked = Vec::new();
     for key in keys {
-        let Some(hand) = read_hand(&qdir, &key) else { continue };
+        let Some(hand) = read_hand(&qdir, &key) else {
+            continue;
+        };
         let id = hand_marker_id(&hand);
         for slot in round_comps(Some(&hand), None) {
             if !same_path(&jsp::resolve(cwd, &[slot.as_str()]), &out_abs) {
@@ -895,7 +1192,9 @@ pub fn record_generated(cwd: &str, out: &str) -> Result<Vec<String>, String> {
             ignore_questions_dir(&qdir);
             let marker = jsp::join(&[&dir, &marker_name(&slot, &marker_tag(&id))]);
             std::fs::create_dir_all(&dir)
-                .and_then(|_| write_atomic(&marker, &json_compact(&json!({ "slot": slot, "hand": id }))))
+                .and_then(|_| {
+                    write_atomic(&marker, &json_compact(&json!({ "slot": slot, "hand": id })))
+                })
                 .map_err(|e| format!("{}: {}", marker, e))?;
             marked.push(key.clone());
         }
@@ -914,7 +1213,12 @@ fn new_hand(cwd: &str, payload: &Value) -> Map<String, Value> {
 /// the hand, because the roll record is gone once the page has taken it and
 /// the NEXT line is printed after that, and again by a later `--wait` flip.
 /// `seed` (`roll_seed`) rides in it the same way, for the picker's ping.
-fn new_hand_dealt(cwd: &str, payload: &Value, worlds: &[Value], seed: Option<Value>) -> Map<String, Value> {
+fn new_hand_dealt(
+    cwd: &str,
+    payload: &Value,
+    worlds: &[Value],
+    seed: Option<Value>,
+) -> Map<String, Value> {
     let comps = declared_comps(payload);
     let mut pre = Map::new();
     // Sketches share the comps' staleness rule: a re-roll that reuses a card
@@ -927,8 +1231,18 @@ fn new_hand_dealt(cwd: &str, payload: &Value, worlds: &[Value], seed: Option<Val
     let mut m = Map::new();
     // A per-hand id: an --update re-roll can repeat a payload, so the digest
     // alone cannot tell one hand's generated markers from the next one's.
-    let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-    m.insert("id".into(), Value::String(hand_digest(&json!([hand_digest(payload), nonce.to_string(), std::process::id()]))));
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    m.insert(
+        "id".into(),
+        Value::String(hand_digest(&json!([
+            hand_digest(payload),
+            nonce.to_string(),
+            std::process::id()
+        ]))),
+    );
     m.insert("digest".into(), Value::String(hand_digest(payload)));
     m.insert("comps".into(), json!(comps));
     let sketches = declared_html(payload);
@@ -958,7 +1272,8 @@ fn new_hand_dealt(cwd: &str, payload: &Value, worlds: &[Value], seed: Option<Val
 fn write_hand(qdir: &str, key: &str, hand: &Map<String, Value>) -> Result<(), String> {
     ignore_questions_dir(qdir);
     let target = hand_file(qdir, key);
-    write_atomic(&target, &json_compact(&Value::Object(hand.clone()))).map_err(|e| format!("{}: {}", target, e))?;
+    write_atomic(&target, &json_compact(&Value::Object(hand.clone())))
+        .map_err(|e| format!("{}: {}", target, e))?;
     let id = hand_marker_id(hand);
     let tag = marker_tag(&id);
     if let Ok(entries) = std::fs::read_dir(generated_dir(qdir, key)) {
@@ -979,16 +1294,29 @@ fn write_hand(qdir: &str, key: &str, hand: &Map<String, Value>) -> Result<(), St
 /// What a generated marker records as its hand: the hand's id, or its digest
 /// for a hand file written before ids existed.
 fn hand_marker_id(hand: &Map<String, Value>) -> String {
-    hand.get("id").or_else(|| hand.get("digest")).and_then(Value::as_str).unwrap_or("").to_string()
+    hand.get("id")
+        .or_else(|| hand.get("digest"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string()
 }
 
 /// The hand a `--start` serves: the recorded one when the key's hand file
 /// carries this payload's digest (a restart keeps its fingerprints), else a
 /// new one, written before the server spawns. `worlds` (`dealt_worlds`) go
 /// into a new hand only: a restart keeps the worlds its hand was dealt.
-fn start_hand(qdir: &str, key: &str, cwd: &str, payload: &Value, worlds: &[Value], seed: Option<Value>) -> Result<Map<String, Value>, String> {
+fn start_hand(
+    qdir: &str,
+    key: &str,
+    cwd: &str,
+    payload: &Value,
+    worlds: &[Value],
+    seed: Option<Value>,
+) -> Result<Map<String, Value>, String> {
     let digest = hand_digest(payload);
-    if let Some(h) = read_hand(qdir, key).filter(|h| h.get("digest").and_then(Value::as_str) == Some(digest.as_str())) {
+    if let Some(h) = read_hand(qdir, key)
+        .filter(|h| h.get("digest").and_then(Value::as_str) == Some(digest.as_str()))
+    {
         return Ok(h);
     }
     let h = new_hand_dealt(cwd, payload, worlds, seed);
@@ -998,9 +1326,20 @@ fn start_hand(qdir: &str, key: &str, cwd: &str, payload: &Value, worlds: &[Value
 
 /// The comps a `--wait` judges: the hand's, else the state's (a round served
 /// before hands were recorded).
-fn round_comps(hand: Option<&Map<String, Value>>, state: Option<&Map<String, Value>>) -> Vec<String> {
+fn round_comps(
+    hand: Option<&Map<String, Value>>,
+    state: Option<&Map<String, Value>>,
+) -> Vec<String> {
     match hand {
-        Some(h) => h.get("comps").and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default(),
+        Some(h) => h
+            .get("comps")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default(),
         None => state.map(state_comps).unwrap_or_default(),
     }
 }
@@ -1016,17 +1355,35 @@ fn comp_is_this_hands(cwd: &str, comp: &str, hand: Option<&Map<String, Value>>) 
         return false;
     }
     let Some(hand) = hand else { return true };
-    let served = hand.get("comps").and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect::<Vec<_>>()).unwrap_or_default();
+    let served = hand
+        .get("comps")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
     if is_comp_round_comp(comp) || is_comp_rounds_option_one(cwd, comp, &served) {
         return true;
     }
-    let generated = hand.get("generated").and_then(Value::as_array).map(|g| g.iter().any(|v| v.as_str() == Some(comp))).unwrap_or(false);
+    let generated = hand
+        .get("generated")
+        .and_then(Value::as_array)
+        .map(|g| g.iter().any(|v| v.as_str() == Some(comp)))
+        .unwrap_or(false);
     if generated {
         return true;
     }
-    match hand.get("pre").and_then(|p| p.get(comp)).and_then(Value::as_str) {
+    match hand
+        .get("pre")
+        .and_then(|p| p.get(comp))
+        .and_then(Value::as_str)
+    {
         None => true,
-        Some(before) => file_fingerprint(&abs).map(|now| now != before).unwrap_or(false),
+        Some(before) => file_fingerprint(&abs)
+            .map(|now| now != before)
+            .unwrap_or(false),
     }
 }
 
@@ -1040,7 +1397,11 @@ fn sketch_is_this_hands(cwd: &str, path: &str, hand: Option<&Map<String, Value>>
         return false;
     }
     let Some(h) = hand else { return true };
-    let written = std::fs::metadata(&abs).and_then(|m| m.modified()).ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_millis() as f64);
+    let written = std::fs::metadata(&abs)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as f64);
     let began = h.get("startedAt").and_then(Value::as_f64);
     if let (Some(w), Some(b)) = (written, began) {
         if w > b {
@@ -1054,13 +1415,30 @@ fn sketch_is_this_hands(cwd: &str, path: &str, hand: Option<&Map<String, Value>>
 /// page keeps waiting on them.
 fn stale_sketches(cwd: &str, hand: Option<&Map<String, Value>>) -> Vec<String> {
     let Some(h) = hand else { return vec![] };
-    let declared: Vec<String> = h.get("sketches").and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default();
-    declared.into_iter().filter(|p| exists(&jsp::resolve(cwd, &[p.as_str()])) && !sketch_is_this_hands(cwd, p, hand)).collect()
+    let declared: Vec<String> = h
+        .get("sketches")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    declared
+        .into_iter()
+        .filter(|p| {
+            exists(&jsp::resolve(cwd, &[p.as_str()])) && !sketch_is_this_hands(cwd, p, hand)
+        })
+        .collect()
 }
 
 /// Declared comps whose file is still the one an earlier round left.
 fn stale_comps(cwd: &str, comps: &[String], hand: Option<&Map<String, Value>>) -> Vec<String> {
-    comps.iter().filter(|c| exists(&jsp::resolve(cwd, &[c.as_str()])) && !comp_is_this_hands(cwd, c, hand)).cloned().collect()
+    comps
+        .iter()
+        .filter(|c| exists(&jsp::resolve(cwd, &[c.as_str()])) && !comp_is_this_hands(cwd, c, hand))
+        .cloned()
+        .collect()
 }
 
 fn any_comp_pending(cwd: &str, comps: &[String], hand: Option<&Map<String, Value>>) -> bool {
@@ -1078,7 +1456,9 @@ fn comps_expected(payload: &Value, cwd: &str, hand: Option<&Map<String, Value>>)
 }
 
 fn visualize_ref(env: &Env, cwd: &str) -> String {
-    crate::provider::detect(env, cwd).reference_path("visualize").unwrap_or_else(|| "reference/visualize.md".to_string())
+    crate::provider::detect(env, cwd)
+        .reference_path("visualize")
+        .unwrap_or_else(|| "reference/visualize.md".to_string())
 }
 
 /// The directive that puts visualize.md in front of the agent at the moment
@@ -1104,8 +1484,13 @@ fn world_cards_clause(env: &Env, cwd: &str, cards: &[(String, String, String)]) 
     if cards.is_empty() {
         return String::new();
     }
-    let list: Vec<String> = cards.iter().map(|(id, board, hero)| format!("{} board {} hero {}", id, board, hero)).collect();
-    let unfetched = cards.iter().any(|(_, board, hero)| crate::generate_image::is_url(board) || crate::generate_image::is_url(hero));
+    let list: Vec<String> = cards
+        .iter()
+        .map(|(id, board, hero)| format!("{} board {} hero {}", id, board, hero))
+        .collect();
+    let unfetched = cards.iter().any(|(_, board, hero)| {
+        crate::generate_image::is_url(board) || crate::generate_image::is_url(hero)
+    });
     format!(
         " The catalog worlds dealt in this roll have card images, listed at the end of this line: when a card's direction builds on one of these worlds, attach that world's board and hero as reference images to that card's comp (the harness image tool's input images, or `{} --ref <board> --ref <hero>`{}), as style inspiration only, never to copy layout or content; a card for a direction you invented yourself has no card images and gets none. WORLD CARDS: {}",
         crate::provider::detect(env, cwd).verb_cmd("generate-image"),
@@ -1115,10 +1500,17 @@ fn world_cards_clause(env: &Env, cwd: &str, cards: &[(String, String, String)]) 
 }
 
 /// This hand's landed comps without a prompt sidecar (`a.png` -> `a.png.json`).
-fn comps_missing_sidecar(cwd: &str, comps: &[String], hand: Option<&Map<String, Value>>) -> Vec<String> {
+fn comps_missing_sidecar(
+    cwd: &str,
+    comps: &[String],
+    hand: Option<&Map<String, Value>>,
+) -> Vec<String> {
     comps
         .iter()
-        .filter(|c| comp_is_this_hands(cwd, c, hand) && !exists(&format!("{}.json", jsp::resolve(cwd, &[c.as_str()]))))
+        .filter(|c| {
+            comp_is_this_hands(cwd, c, hand)
+                && !exists(&format!("{}.json", jsp::resolve(cwd, &[c.as_str()])))
+        })
         .cloned()
         .collect()
 }
@@ -1145,7 +1537,12 @@ fn sidecar_missing_line(env: &Env, cwd: &str, missing: &[String]) -> String {
 /// renders the agent owes visualize.md's post-render checks. Comp-round comps
 /// sit outside this: the decision round is where the checks go unrun.
 fn landed_decision_comps(cwd: &str, comps: &[String], hand: Option<&Map<String, Value>>) -> bool {
-    comps.iter().any(|c| !is_comp_round_comp(c) && !is_comp_rounds_option_one(cwd, c, comps) && comp_is_this_hands(cwd, c, hand) && exists(&format!("{}.json", jsp::resolve(cwd, &[c.as_str()]))))
+    comps.iter().any(|c| {
+        !is_comp_round_comp(c)
+            && !is_comp_rounds_option_one(cwd, c, comps)
+            && comp_is_this_hands(cwd, c, hand)
+            && exists(&format!("{}.json", jsp::resolve(cwd, &[c.as_str()])))
+    })
 }
 
 /// The `--wait` render-check directive: once per hand, the first poll that
@@ -1171,7 +1568,15 @@ fn render_check_due(qdir: &str, key: &str, hand: Option<&Map<String, Value>>) ->
 
 /// The comps recorded for the live round in `<key>.state.json`.
 fn state_comps(state: &Map<String, Value>) -> Vec<String> {
-    state.get("comps").and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default()
+    state
+        .get("comps")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn js_str(v: &Value) -> String {
@@ -1214,7 +1619,8 @@ fn sleep_ms(ms: u64) {
 fn read_json_file(p: &str) -> Result<Value, String> {
     let text = std::fs::read(p).map_err(|e| crate::util::node_read_error(p, &e))?;
     let text = String::from_utf8_lossy(&text).into_owned();
-    serde_json::from_str::<Value>(&text).map_err(|e| format!("SyntaxError: {}", js_json_error(&text, &e)))
+    serde_json::from_str::<Value>(&text)
+        .map_err(|e| format!("SyntaxError: {}", js_json_error(&text, &e)))
 }
 
 fn js_json_error(text: &str, e: &serde_json::Error) -> String {
@@ -1231,11 +1637,17 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
         io.out("serve-question: disabled in this session (no browser); use the structured question tool instead.\n");
         return 2;
     }
-    let wants_browser = !a.has("no-open") && !a.has("wait") && !a.has("stop") && !a.has("schema") && !a.has("update");
+    let wants_browser = !a.has("no-open")
+        && !a.has("wait")
+        && !a.has("stop")
+        && !a.has("schema")
+        && !a.has("update");
     if wants_browser && !env_set(&env, "IMPECCABLE_QUESTION_FORCE") {
         let headless = env_set(&env, "CI")
             || (env_set(&env, "SSH_CONNECTION") && !env_set(&env, "DISPLAY"))
-            || (cfg!(target_os = "linux") && !env_set(&env, "DISPLAY") && !env_set(&env, "WAYLAND_DISPLAY"));
+            || (cfg!(target_os = "linux")
+                && !env_set(&env, "DISPLAY")
+                && !env_set(&env, "WAYLAND_DISPLAY"));
         if headless {
             io.out("serve-question: no browser detected in this environment (CI/headless/remote); use the structured question tool instead. Set IMPECCABLE_QUESTION_FORCE=1 to serve anyway.\n");
             return 2;
@@ -1243,9 +1655,17 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
     }
     let payload_path = a.arg("payload");
     let timeout_arg = js_number_arg(&a, "timeout", "900");
-    let timeout_sec = if timeout_arg.is_finite() && timeout_arg >= 0.0 { timeout_arg } else { 900.0 };
+    let timeout_sec = if timeout_arg.is_finite() && timeout_arg >= 0.0 {
+        timeout_arg
+    } else {
+        900.0
+    };
     let idle_arg = js_number_arg(&a, "idle-grace", "600");
-    let idle_grace_ms = (if idle_arg.is_finite() && idle_arg > 0.0 { idle_arg } else { 600.0 }) * 1000.0;
+    let idle_grace_ms = (if idle_arg.is_finite() && idle_arg > 0.0 {
+        idle_arg
+    } else {
+        600.0
+    }) * 1000.0;
     let port_arg = js_number_arg(&a, "port", "0");
     let qdir = jsp::join(&[&cwd, ".impeccable", "questions"]);
 
@@ -1286,8 +1706,13 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
             }
             if let Some(state) = read_state(&qdir, &key) {
                 let mid_delivery = {
-                    let by_file = mtime_ms(&next_file(&qdir, &key)).map(|m| now_ms() - m < NEXT_CLAIM_GRACE_MS).unwrap_or(false);
-                    by_file || num_field(&state, "claimedAt").map(|c| c != 0.0 && now_ms() - c < NEXT_CLAIM_GRACE_MS).unwrap_or(false)
+                    let by_file = mtime_ms(&next_file(&qdir, &key))
+                        .map(|m| now_ms() - m < NEXT_CLAIM_GRACE_MS)
+                        .unwrap_or(false);
+                    by_file
+                        || num_field(&state, "claimedAt")
+                            .map(|c| c != 0.0 && now_ms() - c < NEXT_CLAIM_GRACE_MS)
+                            .unwrap_or(false)
                 };
                 if let Some(lb) = num_field(&state, "lastBeat") {
                     if !mid_delivery && lb != 0.0 && now_ms() - lb > 15000.0 {
@@ -1307,10 +1732,19 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
         let stale_sketch = stale_sketches(&cwd, hand.as_ref());
         let (missing, stale, landed, served) = {
             let comps = round_comps(hand.as_ref(), read_state(&qdir, &key).as_ref());
-            (comps_missing_sidecar(&cwd, &comps, hand.as_ref()), stale_comps(&cwd, &comps, hand.as_ref()), landed_decision_comps(&cwd, &comps, hand.as_ref()), comps)
+            (
+                comps_missing_sidecar(&cwd, &comps, hand.as_ref()),
+                stale_comps(&cwd, &comps, hand.as_ref()),
+                landed_decision_comps(&cwd, &comps, hand.as_ref()),
+                comps,
+            )
         };
         if !answered() {
-            io.out(&format!("WAITING: no answer yet after {}s; run --wait --key {} again\n", crate::util::js_number_to_string(poll_sec), key));
+            io.out(&format!(
+                "WAITING: no answer yet after {}s; run --wait --key {} again\n",
+                crate::util::js_number_to_string(poll_sec),
+                key
+            ));
             if !missing.is_empty() {
                 io.out(&sidecar_missing_line(&env, &cwd, &missing));
             }
@@ -1335,7 +1769,8 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
         }
         let mut keeps_open = false;
         if let Ok(p) = serde_json::from_str::<Value>(&collected) {
-            keeps_open = p.get("optionId").and_then(|v| v.as_str()) == Some("reroll") || p.get("followup") == Some(&Value::Bool(true));
+            keeps_open = p.get("optionId").and_then(|v| v.as_str()) == Some("reroll")
+                || p.get("followup") == Some(&Value::Bool(true));
         }
         let _ = std::fs::remove_file(answer_file(&qdir, &key));
         if !keeps_open {
@@ -1379,7 +1814,11 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
                 return 1;
             }
         };
-        let ok = next_round.get("options").and_then(|o| o.as_array()).map(|o| !o.is_empty()).unwrap_or(false);
+        let ok = next_round
+            .get("options")
+            .and_then(|o| o.as_array())
+            .map(|o| !o.is_empty())
+            .unwrap_or(false);
         if !ok {
             io.err("serve-question: --update payload needs an options array; nothing was delivered. Fix the payload and rerun --update on the same key.\n");
             return 1;
@@ -1387,11 +1826,21 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
         let roll = read_roll(&qdir);
         let (problems, dealt) = card_identity_problems(roll.as_deref(), &next_round);
         if !problems.is_empty() {
-            io.err(&card_identity_message(&problems, &dealt, "rerun --update on the same key", "nothing was delivered"));
+            io.err(&card_identity_message(
+                &problems,
+                &dealt,
+                "rerun --update on the same key",
+                "nothing was delivered",
+            ));
             return 1;
         }
         if let Some((round, missing)) = missing_comps(roll.as_deref(), &next_round) {
-            io.err(&missing_comps_message(round, &missing, "rerun --update on the same key", "nothing was delivered"));
+            io.err(&missing_comps_message(
+                round,
+                &missing,
+                "rerun --update on the same key",
+                "nothing was delivered",
+            ));
             return 1;
         }
         if !is_alive(&qdir, &key) {
@@ -1401,7 +1850,12 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
         // A delivered round is always a new hand. Recorded before delivery:
         // on failure the page keeps the previous round, whose hand file is
         // untouched, so nothing is served without its provenance.
-        let hand = new_hand_dealt(&cwd, &next_round, &dealt_worlds(roll.as_deref(), &next_round), seed_with_key(roll_seed(roll.as_deref(), &next_round), &env, &cwd));
+        let hand = new_hand_dealt(
+            &cwd,
+            &next_round,
+            &dealt_worlds(roll.as_deref(), &next_round),
+            seed_with_key(roll_seed(roll.as_deref(), &next_round), &env, &cwd),
+        );
         if let Err(e) = write_hand(&qdir, &key, &hand) {
             io.err(&format!("serve-question: could not record the hand ({}); nothing was delivered. Make .impeccable/questions/ writable and rerun --update on the same key.\n", e));
             return 1;
@@ -1432,17 +1886,34 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
         let roll = read_roll(&qdir);
         let (problems, dealt) = card_identity_problems(roll.as_deref(), &start_payload);
         if !problems.is_empty() {
-            io.err(&card_identity_message(&problems, &dealt, "rerun --start", "the page was not served"));
+            io.err(&card_identity_message(
+                &problems,
+                &dealt,
+                "rerun --start",
+                "the page was not served",
+            ));
             return 1;
         }
         if let Some((round, missing)) = missing_comps(roll.as_deref(), &start_payload) {
-            io.err(&missing_comps_message(round, &missing, "rerun --start", "the page was not served"));
+            io.err(&missing_comps_message(
+                round,
+                &missing,
+                "rerun --start",
+                "the page was not served",
+            ));
             return 1;
         }
         let _ = std::fs::create_dir_all(&qdir);
         ignore_questions_dir(&qdir);
         let key = a.arg("key").unwrap_or_else(random_key);
-        let hand = match start_hand(&qdir, &key, &cwd, &start_payload, &dealt_worlds(roll.as_deref(), &start_payload), seed_with_key(roll_seed(roll.as_deref(), &start_payload), &env, &cwd)) {
+        let hand = match start_hand(
+            &qdir,
+            &key,
+            &cwd,
+            &start_payload,
+            &dealt_worlds(roll.as_deref(), &start_payload),
+            seed_with_key(roll_seed(roll.as_deref(), &start_payload), &env, &cwd),
+        ) {
             Ok(h) => h,
             Err(e) => {
                 io.err(&format!("serve-question: could not record the hand ({}); the page was not served. Make .impeccable/questions/ writable and rerun --start.\n", e));
@@ -1455,8 +1926,13 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
         // since a dead server's pid may have been reused.
         let _ = std::fs::remove_file(state_file(&qdir, &key));
         let log_file = jsp::join(&[&qdir, &format!("{}.log", key)]);
-        let log = std::fs::OpenOptions::new().append(true).create(true).open(&log_file);
-        let exe = std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| "impeccable".to_string());
+        let log = std::fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&log_file);
+        let exe = std::env::current_exe()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| "impeccable".to_string());
         let mut child_args: Vec<String> = vec![
             "serve-question".into(),
             "--payload".into(),
@@ -1476,7 +1952,9 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
         }
         let spawned = {
             let mut cmd = std::process::Command::new(&exe);
-            cmd.args(&child_args).current_dir(&cwd).stdin(std::process::Stdio::null());
+            cmd.args(&child_args)
+                .current_dir(&cwd)
+                .stdin(std::process::Stdio::null());
             match log {
                 Ok(f) => {
                     let f2 = f.try_clone().ok();
@@ -1486,7 +1964,8 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
                     }
                 }
                 Err(_) => {
-                    cmd.stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+                    cmd.stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null());
                 }
             }
             // JS: spawn(..., { detached: true }) + child.unref()
@@ -1502,7 +1981,14 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
                     lines[n.saturating_sub(4)..].join("\n  ")
                 })
                 .unwrap_or_default();
-            io.err(&format!("serve-question: server failed to start{}\n", if tail.is_empty() { String::new() } else { format!("\n  {}", tail) }));
+            io.err(&format!(
+                "serve-question: server failed to start{}\n",
+                if tail.is_empty() {
+                    String::new()
+                } else {
+                    format!("\n  {}", tail)
+                }
+            ));
             let rel = jsp::relative(&cwd, &cwd, &log_file);
             io.err(&format!("serve-question: log at {}. A sandboxed exec that cannot listen on localhost causes exactly this; rerun this command once through the harness's network-enabled or unsandboxed command tool before falling back.\n", if rel.is_empty() { log_file.clone() } else { rel }));
             return 1;
@@ -1516,7 +2002,11 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
         if comps_expected(&start_payload, &cwd, Some(&hand)) {
             io.out(&visualize_next_line(&env, &cwd, Some(&hand)));
         }
-        io.out(&format!("Then collect the answer with: {} --wait --key {}\n", crate::provider::detect(&env, &cwd).verb_cmd("serve-question"), key));
+        io.out(&format!(
+            "Then collect the answer with: {} --wait --key {}\n",
+            crate::provider::detect(&env, &cwd).verb_cmd("serve-question"),
+            key
+        ));
         return 0;
     }
 
@@ -1525,14 +2015,26 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
         Some(pp) => match std::fs::read(jsp::resolve(&cwd, &[pp])) {
             Ok(b) => String::from_utf8_lossy(&b).into_owned(),
             Err(e) => {
-                io.err(&format!("Error: {}\n", crate::util::node_read_error(pp, &e)));
+                io.err(&format!(
+                    "Error: {}\n",
+                    crate::util::node_read_error(pp, &e)
+                ));
                 return 1;
             }
         },
         None => io.stdin().to_string(),
     };
-    let detached_key = if a.has("detached-serve") { a.arg("key") } else { None };
-    let state = Arc::new(Mutex::new(ServerState::new(cwd.clone(), qdir.clone(), detached_key.clone(), idle_grace_ms)));
+    let detached_key = if a.has("detached-serve") {
+        a.arg("key")
+    } else {
+        None
+    };
+    let state = Arc::new(Mutex::new(ServerState::new(
+        cwd.clone(),
+        qdir.clone(),
+        detached_key.clone(),
+        idle_grace_ms,
+    )));
     {
         let mut st = state.lock().unwrap();
         if let Err(msg) = st.load_round(&raw) {
@@ -1540,7 +2042,11 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
             return 1;
         }
     }
-    let port = if port_arg.is_finite() && port_arg >= 0.0 { port_arg as u16 } else { 0 };
+    let port = if port_arg.is_finite() && port_arg >= 0.0 {
+        port_arg as u16
+    } else {
+        0
+    };
     let server = match SerialServer::bind(("127.0.0.1", port), MAX_REQUEST_BODY) {
         Ok(s) => s,
         Err(e) => {
@@ -1559,7 +2065,10 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
         if !comps.is_empty() {
             st["comps"] = json!(comps);
         }
-        let _ = impeccable_common::fsx::write_atomic(state_file(&qdir, &key), json_compact(&st).as_bytes());
+        let _ = impeccable_common::fsx::write_atomic(
+            state_file(&qdir, &key),
+            json_compact(&st).as_bytes(),
+        );
     } else {
         io.out(&format!("QUESTION URL: {}\n", url));
         io.out("Waiting for the user to choose in the browser (Ctrl-C aborts)...\n");
@@ -1586,7 +2095,9 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
                     delivered_at = mtime_ms(&nf).unwrap_or(0.0);
                 }
                 if now_ms() - delivered_at.max(st.last_claim_at) > NEXT_CLAIM_GRACE_MS {
-                    println!("serve-question: the page stopped beating and never came back; exiting");
+                    println!(
+                        "serve-question: the page stopped beating and never came back; exiting"
+                    );
                     std::process::exit(2);
                 }
             }
@@ -1627,17 +2138,29 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
                             } else {
                                 s.insert("comps".into(), json!(comps));
                             }
-                            let _ = impeccable_common::fsx::write_atomic(state_file(&st.qdir, &k), json_compact(&Value::Object(s)).as_bytes());
+                            let _ = impeccable_common::fsx::write_atomic(
+                                state_file(&st.qdir, &k),
+                                json_compact(&Value::Object(s)).as_bytes(),
+                            );
                         }
                     }
                 }
             }
             let html = st.page(st.awaiting_next);
-            request.respond(&Response::new(200).header("content-type", "text/html; charset=utf-8").text(&html));
+            request.respond(
+                &Response::new(200)
+                    .header("content-type", "text/html; charset=utf-8")
+                    .text(&html),
+            );
             continue;
         }
         if method == "POST" && path == "/heartbeat" {
-            if let Some(code) = reject_detached_post(st.detached_key.as_deref(), origin.as_deref(), &query, actual_port) {
+            if let Some(code) = reject_detached_post(
+                st.detached_key.as_deref(),
+                origin.as_deref(),
+                &query,
+                actual_port,
+            ) {
                 request.respond(&Response::new(code));
                 continue;
             }
@@ -1649,7 +2172,10 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
                     st.last_beat_write = Some(now);
                     if let Some(mut s) = read_state(&st.qdir, &k) {
                         s.insert("lastBeat".into(), Value::from(now as i64));
-                        let _ = impeccable_common::fsx::write_atomic(state_file(&st.qdir, &k), json_compact(&Value::Object(s)).as_bytes());
+                        let _ = impeccable_common::fsx::write_atomic(
+                            state_file(&st.qdir, &k),
+                            json_compact(&Value::Object(s)).as_bytes(),
+                        );
                     }
                 }
             }
@@ -1657,11 +2183,18 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
         }
         if method == "GET" && path == "/next-status" {
             let ready = st.next_file().map(|p| exists(&p)).unwrap_or(false);
-            request.respond(&Response::new(200).header("content-type", "application/json").text(&format!("{{\"ready\":{}}}", ready)));
+            request.respond(
+                &Response::new(200)
+                    .header("content-type", "application/json")
+                    .text(&format!("{{\"ready\":{}}}", ready)),
+            );
             continue;
         }
         if method == "GET" && path.starts_with("/img/") {
-            let idx_str: String = path[5..].chars().take_while(|c| c.is_ascii_digit()).collect();
+            let idx_str: String = path[5..]
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
             let rest = &path[5 + idx_str.len()..];
             // JS: the match is now ^\/img\/(\d+)$ over the pathname alone.
             if !idx_str.is_empty() && rest.is_empty() {
@@ -1680,7 +2213,8 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
                             "image/jpeg"
                         };
                         let bytes = std::fs::read(&abs).unwrap_or_default();
-                        request.respond(&Response::new(200).header("content-type", ty).bytes(bytes));
+                        request
+                            .respond(&Response::new(200).header("content-type", ty).bytes(bytes));
                     }
                     _ => {
                         request.respond(&Response::new(404));
@@ -1691,8 +2225,15 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
         }
         if method == "GET" && path.starts_with("/sketch/") {
             let idx: Option<usize> = path[8..].parse().ok();
-            let hand = st.detached_key.as_deref().and_then(|k| read_hand(&st.qdir, k));
-            let landed = idx.and_then(|i| st.local_sketches.get(i).cloned()).filter(|(rel, abs)| !is_dir(abs) && sketch_is_this_hands(&st.cwd, rel, hand.as_ref()));
+            let hand = st
+                .detached_key
+                .as_deref()
+                .and_then(|k| read_hand(&st.qdir, k));
+            let landed =
+                idx.and_then(|i| st.local_sketches.get(i).cloned())
+                    .filter(|(rel, abs)| {
+                        !is_dir(abs) && sketch_is_this_hands(&st.cwd, rel, hand.as_ref())
+                    });
             match landed.and_then(|(_, abs)| safe_read(&abs)) {
                 Some(text) => {
                     // A sketch is agent-written HTML served on the page's own
@@ -1707,7 +2248,13 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
                         if raw { "sandbox" } else { "sandbox allow-scripts" }
                     );
                     let mut resp = Response::new(200).text(&body);
-                    for (k, v) in [("content-type", "text/html; charset=utf-8"), ("cache-control", "no-store"), ("x-content-type-options", "nosniff"), ("referrer-policy", "no-referrer"), ("content-security-policy", csp.as_str())] {
+                    for (k, v) in [
+                        ("content-type", "text/html; charset=utf-8"),
+                        ("cache-control", "no-store"),
+                        ("x-content-type-options", "nosniff"),
+                        ("referrer-policy", "no-referrer"),
+                        ("content-security-policy", csp.as_str()),
+                    ] {
                         resp = resp.header(k, v);
                     }
                     request.respond(&resp);
@@ -1721,7 +2268,12 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
         if method == "POST" && (path == "/build-path" || path == "/answer") {
             // JS: both handlers start with rejectDetachedPost (the /answer gate
             // from #555, the /build-path gate from the follow-up commit).
-            if let Some(code) = reject_detached_post(st.detached_key.as_deref(), origin.as_deref(), &query, actual_port) {
+            if let Some(code) = reject_detached_post(
+                st.detached_key.as_deref(),
+                origin.as_deref(),
+                &query,
+                actual_port,
+            ) {
                 request.respond(&Response::new(code));
                 continue;
             }
@@ -1730,10 +2282,19 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
                 continue;
             }
             // Read as UTF-8 or not at all, as `read_to_string` did.
-            let body = String::from_utf8(std::mem::take(&mut request.request.body)).unwrap_or_default();
-            let ok_resp = || Response::new(200).header("content-type", "application/json").text("{\"ok\":true}");
+            let body =
+                String::from_utf8(std::mem::take(&mut request.request.body)).unwrap_or_default();
+            let ok_resp = || {
+                Response::new(200)
+                    .header("content-type", "application/json")
+                    .text("{\"ok\":true}")
+            };
             if path == "/build-path" {
-                let value = serde_json::from_str::<Value>(&body).ok().and_then(|v| v.get("value").and_then(|x| x.as_str()).map(|s| s.to_string()));
+                let value = serde_json::from_str::<Value>(&body).ok().and_then(|v| {
+                    v.get("value")
+                        .and_then(|x| x.as_str())
+                        .map(|s| s.to_string())
+                });
                 if let Some(value) = value.filter(|v| v == "comp" || v == "code") {
                     let was_comp = st.live_build_path.as_deref() == Some("comp");
                     st.live_build_path = Some(value.clone());
@@ -1743,7 +2304,10 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
                         if value == "comp" && !was_comp {
                             let _ = std::fs::create_dir_all(&st.qdir);
                             ignore_questions_dir(&st.qdir);
-                            let _ = std::fs::write(flip_file(&st.qdir, &k), "{\"buildPath\":\"comp\"}\n");
+                            let _ = std::fs::write(
+                                flip_file(&st.qdir, &k),
+                                "{\"buildPath\":\"comp\"}\n",
+                            );
                         }
                     }
                 }
@@ -1756,14 +2320,37 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
             }
             request.respond(&ok_resp());
             // /answer
-            let parsed = serde_json::from_str::<Value>(&body).ok().and_then(|v| v.as_object().cloned()).unwrap_or_default();
+            let parsed = serde_json::from_str::<Value>(&body)
+                .ok()
+                .and_then(|v| v.as_object().cloned())
+                .unwrap_or_default();
             let option_id = parsed.get("optionId").cloned().unwrap_or(Value::Null);
-            let chosen = st.options.iter().find(|o| o.get("id") == Some(&option_id) && !option_id.is_null()).cloned();
+            let chosen = st
+                .options
+                .iter()
+                .find(|o| o.get("id") == Some(&option_id) && !option_id.is_null())
+                .cloned();
             let is_reroll = option_id.as_str() == Some("reroll");
-            let followup_open = st.detached_key.is_some() && st.payload.get("followup") == Some(&Value::Bool(true)) && !is_reroll;
+            let followup_open = st.detached_key.is_some()
+                && st.payload.get("followup") == Some(&Value::Bool(true))
+                && !is_reroll;
             let mut ans = Map::new();
-            ans.insert("optionId".into(), if option_id.is_null() { Value::Null } else { option_id.clone() });
-            ans.insert("steer".into(), parsed.get("steer").cloned().filter(|v| !v.is_null()).unwrap_or(Value::String(String::new())));
+            ans.insert(
+                "optionId".into(),
+                if option_id.is_null() {
+                    Value::Null
+                } else {
+                    option_id.clone()
+                },
+            );
+            ans.insert(
+                "steer".into(),
+                parsed
+                    .get("steer")
+                    .cloned()
+                    .filter(|v| !v.is_null())
+                    .unwrap_or(Value::String(String::new())),
+            );
             if is_reroll {
                 if let Some(r) = parsed.get("register").and_then(|v| v.as_str()) {
                     if r == "safer" || r == "bolder" {
@@ -1778,19 +2365,39 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
                 let hero = c.get("hero").filter(|v| crate::staleness::js_truthy(v));
                 let board = c.get("board").filter(|v| crate::staleness::js_truthy(v));
                 if hero.is_some() || board.is_some() {
-                    ans.insert("hero".into(), c.get("hero").cloned().filter(|v| !v.is_null()).unwrap_or(Value::Null));
-                    ans.insert("board".into(), c.get("board").cloned().filter(|v| !v.is_null()).unwrap_or(Value::Null));
+                    ans.insert(
+                        "hero".into(),
+                        c.get("hero")
+                            .cloned()
+                            .filter(|v| !v.is_null())
+                            .unwrap_or(Value::Null),
+                    );
+                    ans.insert(
+                        "board".into(),
+                        c.get("board")
+                            .cloned()
+                            .filter(|v| !v.is_null())
+                            .unwrap_or(Value::Null),
+                    );
                 }
                 // The sketch rides the answer only when it is what the user
                 // chose from: this hand's file, on a card the comp face did not
                 // replace after a flip.
                 if let Some(h) = c.get("html").filter(|v| crate::staleness::js_truthy(v)) {
-                    let hand = st.detached_key.as_deref().and_then(|k| read_hand(&st.qdir, k));
-                    if st.live_build_path.as_deref() != Some("comp") && sketch_is_this_hands(&st.cwd, &js_str(h), hand.as_ref()) {
+                    let hand = st
+                        .detached_key
+                        .as_deref()
+                        .and_then(|k| read_hand(&st.qdir, k));
+                    if st.live_build_path.as_deref() != Some("comp")
+                        && sketch_is_this_hands(&st.cwd, &js_str(h), hand.as_ref())
+                    {
                         ans.insert("html".into(), h.clone());
                     }
                 }
-                let comp = c.get("comp").filter(|v| !v.is_null()).or_else(|| c.get("sketch").filter(|v| !v.is_null()));
+                let comp = c
+                    .get("comp")
+                    .filter(|v| !v.is_null())
+                    .or_else(|| c.get("sketch").filter(|v| !v.is_null()));
                 if let Some(cv) = comp.filter(|v| crate::staleness::js_truthy(v)) {
                     ans.insert("comp".into(), cv.clone());
                 }
@@ -1798,7 +2405,13 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
             if let Some(lbp) = st.live_build_path.clone() {
                 if !is_reroll {
                     ans.insert("buildPath".into(), Value::String(lbp.clone()));
-                    ans.insert("buildPathFlipped".into(), Value::Bool(Some(lbp.as_str()) != st.build_path_default.as_ref().map(|b| b.0.as_str())));
+                    ans.insert(
+                        "buildPathFlipped".into(),
+                        Value::Bool(
+                            Some(lbp.as_str())
+                                != st.build_path_default.as_ref().map(|b| b.0.as_str()),
+                        ),
+                    );
                 }
             }
             let answer = json_compact(&Value::Object(ans.clone()));
@@ -1814,11 +2427,22 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
                 st.detached_key
                     .as_deref()
                     .and_then(|k| read_hand(&st.qdir, k))
-                    .filter(|h| h.get("digest").and_then(Value::as_str) == Some(hand_digest(&st.payload).as_str()))
+                    .filter(|h| {
+                        h.get("digest").and_then(Value::as_str)
+                            == Some(hand_digest(&st.payload).as_str())
+                    })
                     .and_then(|h| h.get("seed").cloned())
-                    .and_then(|seed| crate::telemetry::picker_choice(&seed, &st.payload, option_id.as_str().unwrap_or(""), ans.get("register").and_then(Value::as_str)))
+                    .and_then(|seed| {
+                        crate::telemetry::picker_choice(
+                            &seed,
+                            &st.payload,
+                            option_id.as_str().unwrap_or(""),
+                            ans.get("register").and_then(Value::as_str),
+                        )
+                    })
                     .and_then(|mut p| {
-                        let round = crate::telemetry::Ledger::new(&env, &st.cwd).claim(p.key.as_deref().unwrap_or(""), p.reroll.unwrap_or(0))?;
+                        let round = crate::telemetry::Ledger::new(&env, &st.cwd)
+                            .claim(p.key.as_deref().unwrap_or(""), p.reroll.unwrap_or(0))?;
                         p.ping_id = round.ping_id;
                         Some(p)
                     })
@@ -1843,8 +2467,16 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
                 let (env, cwd) = (env.clone(), st.cwd.clone());
                 std::thread::spawn(move || {
                     let ledger = crate::telemetry::Ledger::new(&env, &cwd);
-                    let (key, reroll) = (ping.key.clone().unwrap_or_default(), ping.reroll.unwrap_or(0));
-                    if crate::telemetry::send_choice(&env, &cwd, &ping, crate::telemetry::api_timeout(&env)) {
+                    let (key, reroll) = (
+                        ping.key.clone().unwrap_or_default(),
+                        ping.reroll.unwrap_or(0),
+                    );
+                    if crate::telemetry::send_choice(
+                        &env,
+                        &cwd,
+                        &ping,
+                        crate::telemetry::api_timeout(&env),
+                    ) {
                         ledger.confirm(&key, reroll, "picker", ping.ping_id.as_deref());
                     } else {
                         ledger.release(&key, reroll, ping.ping_id.as_deref());
@@ -1881,7 +2513,9 @@ fn allowed_host(host: Option<&str>, port: u16) -> bool {
 
 /// JS: serve-question.mjs#allowedOrigin
 fn allowed_origin(origin: &str, port: u16) -> bool {
-    if origin == format!("http://127.0.0.1:{}", port) || origin == format!("http://localhost:{}", port) {
+    if origin == format!("http://127.0.0.1:{}", port)
+        || origin == format!("http://localhost:{}", port)
+    {
         return true;
     }
     port == 80 && (origin == "http://127.0.0.1" || origin == "http://localhost")
@@ -1889,7 +2523,12 @@ fn allowed_origin(origin: &str, port: u16) -> bool {
 
 /// JS: serve-question.mjs#rejectDetachedPost. Returns the status to answer
 /// with (401/403) when the POST must be rejected, None when it may proceed.
-fn reject_detached_post(detached_key: Option<&str>, origin: Option<&str>, query: &str, port: u16) -> Option<u16> {
+fn reject_detached_post(
+    detached_key: Option<&str>,
+    origin: Option<&str>,
+    query: &str,
+    port: u16,
+) -> Option<u16> {
     if let Some(key) = detached_key {
         if query_param(query, "key").as_deref() != Some(key) {
             return Some(401);
@@ -1935,7 +2574,9 @@ fn form_decode(s: &str) -> String {
                 && bytes[i + 1].is_ascii_hexdigit()
                 && bytes[i + 2].is_ascii_hexdigit() =>
             {
-                let h = std::str::from_utf8(&bytes[i + 1..i + 3]).ok().and_then(|x| u8::from_str_radix(x, 16).ok());
+                let h = std::str::from_utf8(&bytes[i + 1..i + 3])
+                    .ok()
+                    .and_then(|x| u8::from_str_radix(x, 16).ok());
                 if let Some(v) = h {
                     out.push(v);
                     i += 3;
@@ -1959,8 +2600,17 @@ fn form_decode(s: &str) -> String {
 fn parse_request_url(raw: &str) -> Option<(String, String)> {
     // Same input cleaning the URL parser applies.
     let trimmed = raw.trim_matches(|c: char| (c as u32) <= 0x20);
-    let cleaned: String = trimmed.chars().filter(|c| !matches!(c, '\t' | '\n' | '\r')).collect();
-    let starts_slashy = |s: &str, n: usize| s.chars().take(n).filter(|c| *c == '/' || *c == '\\').count() == n;
+    let cleaned: String = trimmed
+        .chars()
+        .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
+        .collect();
+    let starts_slashy = |s: &str, n: usize| {
+        s.chars()
+            .take(n)
+            .filter(|c| *c == '/' || *c == '\\')
+            .count()
+            == n
+    };
     let abs = if starts_slashy(&cleaned, 2) {
         // Protocol-relative reference: the authority is taken from the target.
         format!("http:{}", cleaned)
@@ -1984,7 +2634,10 @@ fn touch_now(p: &str) {
 
 fn random_key() -> String {
     // Math.random().toString(16).slice(2, 10)
-    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let t = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
     let mut x = (t as u64) ^ ((std::process::id() as u64) << 32) ^ 0x9E3779B97F4A7C15;
     x ^= x >> 33;
     x = x.wrapping_mul(0xff51afd7ed558ccd);
@@ -1996,8 +2649,15 @@ pub fn open_system_browser(url: &str, env: &Env) -> bool {
     let (cmd, args): (String, Vec<String>) = if cfg!(target_os = "macos") {
         ("open".into(), vec![url.to_string()])
     } else if cfg!(windows) {
-        let comspec = env.get("ComSpec").or_else(|| env.get("COMSPEC")).cloned().unwrap_or_else(|| "cmd.exe".into());
-        (comspec, vec!["/c".into(), "start".into(), String::new(), url.to_string()])
+        let comspec = env
+            .get("ComSpec")
+            .or_else(|| env.get("COMSPEC"))
+            .cloned()
+            .unwrap_or_else(|| "cmd.exe".into());
+        (
+            comspec,
+            vec!["/c".into(), "start".into(), String::new(), url.to_string()],
+        )
     } else {
         ("xdg-open".into(), vec![url.to_string()])
     };
@@ -2006,7 +2666,10 @@ pub fn open_system_browser(url: &str, env: &Env) -> bool {
     // exactly as the JS spawned it; the URL is a localhost one this process
     // built, so cmd metacharacters are not a concern there.
     let mut c = std::process::Command::new(cmd);
-    c.args(args).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    c.args(args)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
     impeccable_common::proc::detach(&mut c);
     c.spawn().is_ok()
 }
@@ -2043,12 +2706,16 @@ const SKETCH_SKELETON: &str = "<script>(()=>{const run=()=>{const w=document.cre
 /// desktop first viewport, when absent or unreadable.
 fn sketch_frame(o: &Value) -> (u32, u32) {
     let pair = match o.get("htmlFrame") {
-        Some(Value::String(t)) => t.split_once(['x', 'X', '×']).and_then(|(w, h)| Some((w.trim().parse::<f64>().ok()?, h.trim().parse::<f64>().ok()?))),
+        Some(Value::String(t)) => t.split_once(['x', 'X', '×']).and_then(|(w, h)| {
+            Some((w.trim().parse::<f64>().ok()?, h.trim().parse::<f64>().ok()?))
+        }),
         Some(Value::Array(a)) if a.len() == 2 => a[0].as_f64().zip(a[1].as_f64()),
         _ => None,
     };
     match pair {
-        Some((w, h)) if (200.0..=4000.0).contains(&w) && (200.0..=4000.0).contains(&h) => (w.round() as u32, h.round() as u32),
+        Some((w, h)) if (200.0..=4000.0).contains(&w) && (200.0..=4000.0).contains(&h) => {
+            (w.round() as u32, h.round() as u32)
+        }
         _ => (1440, 900),
     }
 }
@@ -2070,7 +2737,10 @@ fn esc(v: &Value) -> String {
 }
 
 fn esc_s(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 fn get<'a>(o: &'a Value, k: &str) -> Option<&'a Value> {
@@ -2080,11 +2750,18 @@ fn truthy(o: &Value, k: &str) -> bool {
     o.get(k).map(crate::staleness::js_truthy).unwrap_or(false)
 }
 fn str_of(o: &Value, k: &str) -> Option<String> {
-    get(o, k).filter(|v| crate::staleness::js_truthy(v)).map(js_str)
+    get(o, k)
+        .filter(|v| crate::staleness::js_truthy(v))
+        .map(js_str)
 }
 
 impl ServerState {
-    fn new(cwd: String, qdir: String, detached_key: Option<String>, idle_grace_ms: f64) -> ServerState {
+    fn new(
+        cwd: String,
+        qdir: String,
+        detached_key: Option<String>,
+        idle_grace_ms: f64,
+    ) -> ServerState {
         ServerState {
             cwd,
             qdir,
@@ -2111,7 +2788,11 @@ impl ServerState {
     /// JS: loadRound(json)
     fn load_round(&mut self, json: &str) -> Result<(), String> {
         let parsed: Value = serde_json::from_str(json).map_err(|e| format!("{}", e))?;
-        let ok = parsed.get("options").and_then(|o| o.as_array()).map(|o| !o.is_empty()).unwrap_or(false);
+        let ok = parsed
+            .get("options")
+            .and_then(|o| o.as_array())
+            .map(|o| !o.is_empty())
+            .unwrap_or(false);
         if !ok {
             return Err("payload needs an options array".into());
         }
@@ -2120,7 +2801,9 @@ impl ServerState {
         let cwd = self.cwd.clone();
         let is_url = |s: &str| s.starts_with("http://") || s.starts_with("https://");
         fn image_src(cwd: &str, local_images: &mut Vec<String>, value: Option<&Value>) -> Value {
-            let Some(v) = value.filter(|v| crate::staleness::js_truthy(v)) else { return Value::Null };
+            let Some(v) = value.filter(|v| crate::staleness::js_truthy(v)) else {
+                return Value::Null;
+            };
             let s = js_str(v);
             if s.starts_with("http://") || s.starts_with("https://") {
                 return Value::String(s);
@@ -2134,12 +2817,17 @@ impl ServerState {
         }
         let mut decorated: Vec<Value> = Vec::new();
         let opts = parsed.get("options").unwrap().as_array().unwrap().clone();
-        let canon_card = parsed.get("canonCard").filter(|c| c.is_object() || c.is_array());
+        let canon_card = parsed
+            .get("canonCard")
+            .filter(|c| c.is_object() || c.is_array());
         let mut decorate = |option: &Value| -> Value {
             let mut m = option.as_object().cloned().unwrap_or_default();
             let hero = image_src(&cwd, &mut local_images, option.get("hero"));
             let board = image_src(&cwd, &mut local_images, option.get("board"));
-            let comp_val = option.get("comp").filter(|v| !v.is_null()).or_else(|| option.get("sketch").filter(|v| !v.is_null()));
+            let comp_val = option
+                .get("comp")
+                .filter(|v| !v.is_null())
+                .or_else(|| option.get("sketch").filter(|v| !v.is_null()));
             let comp = match comp_val.filter(|v| crate::staleness::js_truthy(v)) {
                 None => Value::Null,
                 Some(v) => {
@@ -2152,7 +2840,11 @@ impl ServerState {
                     }
                 }
             };
-            let html = match option.get("html").filter(|v| crate::staleness::js_truthy(v)).map(js_str) {
+            let html = match option
+                .get("html")
+                .filter(|v| crate::staleness::js_truthy(v))
+                .map(js_str)
+            {
                 Some(s) if !is_url(&s) => {
                     local_sketches.push((s.clone(), jsp::resolve(&cwd, &[&s])));
                     Value::String(format!("/sketch/{}", local_sketches.len() - 1))
@@ -2176,8 +2868,15 @@ impl ServerState {
             }
             v
         });
-        let declined: Vec<Value> = decorated.iter().filter(|o| o.get("verdict").and_then(|v| v.as_str()) == Some("declined")).cloned().collect();
-        let mut options: Vec<Value> = decorated.into_iter().filter(|o| o.get("verdict").and_then(|v| v.as_str()) != Some("declined")).collect();
+        let declined: Vec<Value> = decorated
+            .iter()
+            .filter(|o| o.get("verdict").and_then(|v| v.as_str()) == Some("declined"))
+            .cloned()
+            .collect();
+        let mut options: Vec<Value> = decorated
+            .into_iter()
+            .filter(|o| o.get("verdict").and_then(|v| v.as_str()) != Some("declined"))
+            .collect();
         if let Some(c) = canon_decorated {
             options.push(c);
         }
@@ -2186,14 +2885,17 @@ impl ServerState {
         self.options = options;
         self.local_images = local_images;
         self.local_sketches = local_sketches;
-        self.build_path_default = parsed.get("buildPath").filter(|b| crate::staleness::js_truthy(b)).and_then(|b| {
-            let v = b.get("value").and_then(|x| x.as_str())?;
-            if v == "comp" || v == "code" {
-                Some((v.to_string(), b.get("toggle") == Some(&Value::Bool(true))))
-            } else {
-                None
-            }
-        });
+        self.build_path_default = parsed
+            .get("buildPath")
+            .filter(|b| crate::staleness::js_truthy(b))
+            .and_then(|b| {
+                let v = b.get("value").and_then(|x| x.as_str())?;
+                if v == "comp" || v == "code" {
+                    Some((v.to_string(), b.get("toggle") == Some(&Value::Bool(true))))
+                } else {
+                    None
+                }
+            });
         self.live_build_path = self.build_path_default.as_ref().map(|b| b.0.clone());
         self.awaiting_next = false;
         Ok(())
@@ -2201,12 +2903,27 @@ impl ServerState {
 
     /// JS: page(waiting)
     fn page(&self, waiting: bool) -> String {
-        let wait_budget_ms = if waiting { (self.awaiting_next_since + self.idle_grace_ms - now_ms()).max(0.0) } else { self.idle_grace_ms };
-        let flip_chip = |label: &str| format!("<button type=\"button\" class=\"chip flip\" aria-label=\"Flip the card\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4a8 8 0 1 1-8 8\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\"/><path d=\"M4 5.5V12h6.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg><span>{}</span></button>", label);
+        let wait_budget_ms = if waiting {
+            (self.awaiting_next_since + self.idle_grace_ms - now_ms()).max(0.0)
+        } else {
+            self.idle_grace_ms
+        };
+        let flip_chip = |label: &str| {
+            format!("<button type=\"button\" class=\"chip flip\" aria-label=\"Flip the card\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4a8 8 0 1 1-8 8\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\"/><path d=\"M4 5.5V12h6.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg><span>{}</span></button>", label)
+        };
         let expand_chip = "<button type=\"button\" class=\"chip expand\" aria-label=\"Expand the image\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 9V4h5M20 15v5h-5M20 9V4h-5M4 15v5h5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg></button>";
         let fact = |label: &str, value: Option<&Value>, cls: &str| -> String {
             match value.filter(|v| crate::staleness::js_truthy(v)) {
-                Some(v) => format!("<p class=\"fact{}\"><span class=\"fact-label\">{}</span>{}</p>", if cls.is_empty() { String::new() } else { format!(" {}", cls) }, label, esc(v)),
+                Some(v) => format!(
+                    "<p class=\"fact{}\"><span class=\"fact-label\">{}</span>{}</p>",
+                    if cls.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" {}", cls)
+                    },
+                    label,
+                    esc(v)
+                ),
                 None => String::new(),
             }
         };
@@ -2214,14 +2931,44 @@ impl ServerState {
         let build_path = self.build_path_default.clone();
         let code_led = build_path.as_ref().map(|b| b.0 == "code").unwrap_or(false);
         let has = |o: &Value, k: &str| truthy(o, k);
-        let identity_round = !(self.options.first().map(|o| has(o, "compSrc") || has(o, "heroSrc") || has(o, "boardSrc")).unwrap_or(false));
-        let face_comp = |o: &Value| -> Option<String> { if demoted(o) || code_led { None } else { str_of(o, "compSrc") } };
+        let identity_round = !(self
+            .options
+            .first()
+            .map(|o| has(o, "compSrc") || has(o, "heroSrc") || has(o, "boardSrc"))
+            .unwrap_or(false));
+        let face_comp = |o: &Value| -> Option<String> {
+            if demoted(o) || code_led {
+                None
+            } else {
+                str_of(o, "compSrc")
+            }
+        };
         // An HTML sketch is the face wherever no comp is: a code-led round, or
         // a round without image generation. A comp, when one is the face, wins.
-        let face_html = |o: &Value| -> Option<String> { if demoted(o) || face_comp(o).is_some() { None } else { str_of(o, "htmlSrc") } };
-        let thumb_only = |o: &Value| face_comp(o).is_none() && face_html(o).is_none() && (has(o, "heroSrc") || has(o, "boardSrc")) && (demoted(o) || identity_round);
-        let has_media = |o: &Value| face_comp(o).is_some() || face_html(o).is_some() || ((has(o, "heroSrc") || has(o, "boardSrc")) && !thumb_only(o));
-        let has_back = |o: &Value| has_media(o) && (has(o, "viewport") || has(o, "case") || (has(o, "boardSrc") && has(o, "heroSrc")));
+        let face_html = |o: &Value| -> Option<String> {
+            if demoted(o) || face_comp(o).is_some() {
+                None
+            } else {
+                str_of(o, "htmlSrc")
+            }
+        };
+        let thumb_only = |o: &Value| {
+            face_comp(o).is_none()
+                && face_html(o).is_none()
+                && (has(o, "heroSrc") || has(o, "boardSrc"))
+                && (demoted(o) || identity_round)
+        };
+        let has_media = |o: &Value| {
+            face_comp(o).is_some()
+                || face_html(o).is_some()
+                || ((has(o, "heroSrc") || has(o, "boardSrc")) && !thumb_only(o))
+        };
+        let has_back = |o: &Value| {
+            has_media(o)
+                && (has(o, "viewport")
+                    || has(o, "case")
+                    || (has(o, "boardSrc") && has(o, "heroSrc")))
+        };
         let options = &self.options;
         let anatomy = |o: &Value| -> String {
             let mut rows: Vec<String> = Vec::new();
@@ -2229,17 +2976,48 @@ impl ServerState {
                 rows.push(format!("<p class=\"thesis\">{}</p>", esc(t)));
             }
             let mut id_bits: Vec<String> = Vec::new();
-            if let Some(p) = o.get("palette").and_then(|p| p.as_array()).filter(|p| !p.is_empty()) {
-                let sw: String = p.iter().take(6).map(|c| format!("<i style=\"background:{}\" title=\"{}\"></i>", esc(c), esc(c))).collect();
+            if let Some(p) = o
+                .get("palette")
+                .and_then(|p| p.as_array())
+                .filter(|p| !p.is_empty())
+            {
+                let sw: String = p
+                    .iter()
+                    .take(6)
+                    .map(|c| {
+                        format!(
+                            "<i style=\"background:{}\" title=\"{}\"></i>",
+                            esc(c),
+                            esc(c)
+                        )
+                    })
+                    .collect();
                 id_bits.push(format!("<span class=\"swatches\">{}</span>", sw));
             }
-            if let Some(m) = o.get("materials").and_then(|p| p.as_array()).filter(|p| !p.is_empty()) {
-                id_bits.push(m.iter().take(4).map(|x| format!("<span class=\"tag\">{}</span>", esc(x))).collect::<Vec<_>>().join(""));
+            if let Some(m) = o
+                .get("materials")
+                .and_then(|p| p.as_array())
+                .filter(|p| !p.is_empty())
+            {
+                id_bits.push(
+                    m.iter()
+                        .take(4)
+                        .map(|x| format!("<span class=\"tag\">{}</span>", esc(x)))
+                        .collect::<Vec<_>>()
+                        .join(""),
+                );
             }
             if !id_bits.is_empty() {
-                rows.push(format!("<div class=\"identity\">{}</div>", id_bits.join("")));
+                rows.push(format!(
+                    "<div class=\"identity\">{}</div>",
+                    id_bits.join("")
+                ));
             }
-            if let Some(raised) = o.get("raised").and_then(|r| r.as_array()).filter(|r| !r.is_empty()) {
+            if let Some(raised) = o
+                .get("raised")
+                .and_then(|r| r.as_array())
+                .filter(|r| !r.is_empty())
+            {
                 let name_of = |id: Option<&Value>| -> String {
                     let found = id.and_then(|i| options.iter().find(|x| x.get("id") == Some(i)));
                     match found.and_then(|f| str_of(f, "label")) {
@@ -2254,8 +3032,14 @@ impl ServerState {
                     .iter()
                     .take(6)
                     .map(|r| {
-                        let text = get(r, "raise").filter(|v| crate::staleness::js_truthy(v)).or_else(|| get(r, "kept").filter(|v| crate::staleness::js_truthy(v)));
-                        format!("<p class=\"raise\"><span class=\"fact-label\">From {}</span>{}</p>", esc_s(&name_of(r.get("from"))), text.map(esc).unwrap_or_default())
+                        let text = get(r, "raise")
+                            .filter(|v| crate::staleness::js_truthy(v))
+                            .or_else(|| get(r, "kept").filter(|v| crate::staleness::js_truthy(v)));
+                        format!(
+                            "<p class=\"raise\"><span class=\"fact-label\">From {}</span>{}</p>",
+                            esc_s(&name_of(r.get("from"))),
+                            text.map(esc).unwrap_or_default()
+                        )
                     })
                     .collect();
                 let raises_head = |count: usize| -> String {
@@ -2271,11 +3055,17 @@ impl ServerState {
                         raise_lines.join("")
                     ));
                 } else {
-                    rows.push(format!("<div class=\"raises\">{}{}</div>", raises_head(1), raise_lines[0]));
+                    rows.push(format!(
+                        "<div class=\"raises\">{}{}</div>",
+                        raises_head(1),
+                        raise_lines[0]
+                    ));
                 }
             }
             if thumb_only(o) {
-                let src = str_of(o, "heroSrc").or_else(|| str_of(o, "boardSrc")).unwrap_or_default();
+                let src = str_of(o, "heroSrc")
+                    .or_else(|| str_of(o, "boardSrc"))
+                    .unwrap_or_default();
                 rows.push(format!("<figure class=\"inspo\" title=\"Inspiration: the world this direction draws from. Your page will not look like this image.\"><img src=\"{}\" alt=\"\"><figcaption>inspired by</figcaption></figure>", esc_s(&src)));
             }
             if has_media(o) {
@@ -2287,9 +3077,15 @@ impl ServerState {
                 rows.push(fact("Risk", o.get("risk"), ""));
             }
             if !has(o, "thesis") && has(o, "body") {
-                rows.push(format!("<p class=\"detail\">{}</p>", esc(o.get("body").unwrap())));
+                rows.push(format!(
+                    "<p class=\"detail\">{}</p>",
+                    esc(o.get("body").unwrap())
+                ));
             } else if has(o, "body") && has(o, "thesis") && !has_back(o) {
-                rows.push(format!("<p class=\"detail more\">{}</p>", esc(o.get("body").unwrap())));
+                rows.push(format!(
+                    "<p class=\"detail more\">{}</p>",
+                    esc(o.get("body").unwrap())
+                ));
             }
             rows.join("\n            ")
         };
@@ -2299,9 +3095,21 @@ impl ServerState {
                 fact("The case", o.get("case"), ""),
                 fact("Kept", o.get("kept"), ""),
                 fact("Risk", o.get("risk"), ""),
-                if has(o, "body") && has(o, "thesis") { format!("<p class=\"detail more\">{}</p>", esc(o.get("body").unwrap())) } else { String::new() },
+                if has(o, "body") && has(o, "thesis") {
+                    format!(
+                        "<p class=\"detail more\">{}</p>",
+                        esc(o.get("body").unwrap())
+                    )
+                } else {
+                    String::new()
+                },
             ];
-            parts.iter().filter(|p| !p.is_empty()).cloned().collect::<Vec<_>>().join("\n            ")
+            parts
+                .iter()
+                .filter(|p| !p.is_empty())
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("\n            ")
         };
         let media = |o: &Value| -> String {
             let inspiration_src = str_of(o, "heroSrc").or_else(|| str_of(o, "boardSrc"));
@@ -2309,7 +3117,11 @@ impl ServerState {
                 Some(src) => format!("<figure class=\"pip\" title=\"Inspiration: the world this direction draws from. Your page will not look like this image.\">\n              <img src=\"{}\" alt=\"\">\n              <figcaption>inspiration</figcaption>\n            </figure>", esc_s(src)),
                 None => String::new(),
             };
-            let details = if has_back(o) { flip_chip("Details") } else { String::new() };
+            let details = if has_back(o) {
+                flip_chip("Details")
+            } else {
+                String::new()
+            };
             if thumb_only(o) {
                 return String::new();
             }
@@ -2326,7 +3138,11 @@ impl ServerState {
             }
             if let Some(src) = face_html(o) {
                 let (fw, fh) = sketch_frame(o);
-                let portrait = if f64::from(fh) > f64::from(fw) * 1.05 { " portrait" } else { "" };
+                let portrait = if f64::from(fh) > f64::from(fw) * 1.05 {
+                    " portrait"
+                } else {
+                    ""
+                };
                 return format!(
                     "<div class=\"media html html-pending{}\" data-html=\"{}\" data-frame-w=\"{}\" style=\"aspect-ratio: {} / {}\">\n            <div class=\"shimmer\"><span class=\"comp-note\">sketching&hellip;</span></div>\n            <div class=\"sketch-frame\"><iframe sandbox=\"allow-scripts\" tabindex=\"-1\" aria-hidden=\"true\" title=\"Sketch\" style=\"width:{}px;height:{}px\"></iframe></div>\n            {}\n            <p class=\"media-label\">sketch</p>\n            <div class=\"chips\">{}{}</div>\n          </div>",
                     portrait,
@@ -2367,8 +3183,16 @@ impl ServerState {
             }
         };
         let wire = |o: &Value| -> String {
-            let Some(frame) = get(o, "wireframe").filter(|v| crate::staleness::js_truthy(v)) else { return String::new() };
-            let Some(regions) = frame.get("regions").and_then(|r| r.as_array()).filter(|r| !r.is_empty()) else { return String::new() };
+            let Some(frame) = get(o, "wireframe").filter(|v| crate::staleness::js_truthy(v)) else {
+                return String::new();
+            };
+            let Some(regions) = frame
+                .get("regions")
+                .and_then(|r| r.as_array())
+                .filter(|r| !r.is_empty())
+            else {
+                return String::new();
+            };
             if !media(o).is_empty() || demoted(o) {
                 return String::new();
             }
@@ -2376,7 +3200,12 @@ impl ServerState {
             let cols = if cols_n > 0.0 { cols_n } else { 12.0 };
             let rows_n = num_of(frame.get("rows"));
             let rows = if rows_n > 0.0 { rows_n } else { 10.0 };
-            let pct = |n: f64, total: f64| -> String { format!("{}%", crate::util::to_fixed(((n / total) * 100.0).min(100.0).max(0.0), 2)) };
+            let pct = |n: f64, total: f64| -> String {
+                format!(
+                    "{}%",
+                    crate::util::to_fixed(((n / total) * 100.0).min(100.0).max(0.0), 2)
+                )
+            };
             let cells: String = regions
                 .iter()
                 .take(12)
@@ -2398,7 +3227,15 @@ impl ServerState {
                 .collect();
             format!("<div class=\"media wire\" role=\"img\" aria-label=\"Layout schematic\">\n            <div class=\"wire-field\">{}</div>\n            <p class=\"media-label\">layout</p>\n          </div>", cells)
         };
-        let choose_label = |o: &Value| if truthy(o, "isCanon") { "Play it straight" } else if demoted(o) { "Adopt anyway" } else { "Build this" };
+        let choose_label = |o: &Value| {
+            if truthy(o, "isCanon") {
+                "Play it straight"
+            } else if demoted(o) {
+                "Adopt anyway"
+            } else {
+                "Build this"
+            }
+        };
         let cards: Vec<String> = options
             .iter()
             .enumerate()
@@ -2478,18 +3315,38 @@ impl ServerState {
             Some(q) => format!("<p class=\"question\">{}</p>", esc(q)),
             None => String::new(),
         };
-        let steer = if truthy(payload, "steer") { "<input id=\"steer\" placeholder=\"Optional steer: what should be different or kept?\">" } else { "" };
+        let steer = if truthy(payload, "steer") {
+            "<input id=\"steer\" placeholder=\"Optional steer: what should be different or kept?\">"
+        } else {
+            ""
+        };
         let reroll_footer = if truthy(payload, "reroll") {
             let die = "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"/><circle cx=\"8.4\" cy=\"8.4\" r=\"1.5\" fill=\"currentColor\"/><circle cx=\"15.6\" cy=\"8.4\" r=\"1.5\" fill=\"currentColor\"/><circle cx=\"8.4\" cy=\"15.6\" r=\"1.5\" fill=\"currentColor\"/><circle cx=\"15.6\" cy=\"15.6\" r=\"1.5\" fill=\"currentColor\"/><circle cx=\"12\" cy=\"12\" r=\"1.5\" fill=\"currentColor\"/></svg>";
             let registers: Vec<&str> = payload
                 .get("reroll")
                 .and_then(|r| r.get("registers"))
                 .and_then(|r| r.as_array())
-                .map(|a| a.iter().filter_map(|v| v.as_str()).filter(|s| *s == "safer" || *s == "bolder").collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str())
+                        .filter(|s| *s == "safer" || *s == "bolder")
+                        .collect()
+                })
                 .unwrap_or_default();
-            let safer = if registers.contains(&"safer") { "<button class=\"reroll-btn\" id=\"reroll-safer\" title=\"Deal the familiar register: conventional grounded directions plus the category standard against named competitors\"><span>&larr; Safer hand</span></button>" } else { "" };
-            let bolder = if registers.contains(&"bolder") { "<button class=\"reroll-btn\" id=\"reroll-bolder\" title=\"Deal foreign forms only, at full commitment\"><span>Bolder hand &rarr;</span></button>" } else { "" };
-            format!("{}<button class=\"reroll-btn\" id=\"reroll\">{}<span>Re-roll</span></button>{}", safer, die, bolder)
+            let safer = if registers.contains(&"safer") {
+                "<button class=\"reroll-btn\" id=\"reroll-safer\" title=\"Deal the familiar register: conventional grounded directions plus the category standard against named competitors\"><span>&larr; Safer hand</span></button>"
+            } else {
+                ""
+            };
+            let bolder = if registers.contains(&"bolder") {
+                "<button class=\"reroll-btn\" id=\"reroll-bolder\" title=\"Deal foreign forms only, at full commitment\"><span>Bolder hand &rarr;</span></button>"
+            } else {
+                ""
+            };
+            format!(
+                "{}<button class=\"reroll-btn\" id=\"reroll\">{}<span>Re-roll</span></button>{}",
+                safer, die, bolder
+            )
         } else {
             String::new()
         };
@@ -2498,11 +3355,28 @@ impl ServerState {
         } else {
             ""
         };
-        let followup = if payload.get("followup") == Some(&Value::Bool(true)) && self.detached_key.is_some() { "true" } else { "false" };
-        let beat = if waiting && wait_budget_ms <= 0.0 { "" } else { "beat();" };
-        let await_next = if waiting { format!("awaitNextRound(false, {});", crate::util::js_number_to_string(wait_budget_ms)) } else { String::new() };
+        let followup =
+            if payload.get("followup") == Some(&Value::Bool(true)) && self.detached_key.is_some() {
+                "true"
+            } else {
+                "false"
+            };
+        let beat = if waiting && wait_budget_ms <= 0.0 {
+            ""
+        } else {
+            "beat();"
+        };
+        let await_next = if waiting {
+            format!(
+                "awaitNextRound(false, {});",
+                crate::util::js_number_to_string(wait_budget_ms)
+            )
+        } else {
+            String::new()
+        };
         // JS: const KEY = ${JSON.stringify(detachedKey || '')};
-        let key_json = serde_json::to_string(self.detached_key.as_deref().unwrap_or("")).unwrap_or_else(|_| "\"\"".into());
+        let key_json = serde_json::to_string(self.detached_key.as_deref().unwrap_or(""))
+            .unwrap_or_else(|_| "\"\"".into());
         let subs: [(&str, String); 15] = [
             ("@@1@@", title_default("impeccable · decision")),
             ("@@2@@", expand_chip.to_string()),
@@ -2516,7 +3390,10 @@ impl ServerState {
             ("@@10@@", canon.to_string()),
             ("@@11@@", followup.to_string()),
             ("@@12@@", beat.to_string()),
-            ("@@13@@", crate::util::js_number_to_string(self.idle_grace_ms)),
+            (
+                "@@13@@",
+                crate::util::js_number_to_string(self.idle_grace_ms),
+            ),
             ("@@14@@", await_next),
             ("@@15@@", key_json),
         ];
@@ -2563,17 +3440,26 @@ mod tests {
         assert!(PAGE.contains(".face.back { opacity: 0; }"));
         assert!(PAGE.contains(".card[data-face=\"back\"] .face.back { opacity: 1; }"));
         assert!(PAGE.contains(".card[data-face=\"back\"] .face.front { opacity: 0; }"));
-        assert!(!PAGE.contains(".face.front, .face.back { transition"), "no timed swap: a reversed flip shortens the turn");
-        assert!(!PAGE.contains(".card.flipped .face.back { opacity"), "the flipped class is the target, not the shown face");
+        assert!(
+            !PAGE.contains(".face.front, .face.back { transition"),
+            "no timed swap: a reversed flip shortens the turn"
+        );
+        assert!(
+            !PAGE.contains(".card.flipped .face.back { opacity"),
+            "the flipped class is the target, not the shown face"
+        );
         // The swap reads the real rotation each frame of the turn.
         assert!(PAGE.contains("new DOMMatrixReadOnly(t).m11 < 0 ? 'back' : 'front'"));
         assert!(PAGE.contains("card.classList.toggle('flipped');\n    syncFace(card);"));
         assert!(PAGE.contains("card.classList.remove('flipped'); syncFace(card);"));
-        assert!(PAGE.contains("@media (prefers-reduced-motion: reduce) { .card-inner { transition: none; } }"));
+        assert!(PAGE.contains(
+            "@media (prefers-reduced-motion: reduce) { .card-inner { transition: none; } }"
+        ));
     }
 
     fn temp_project(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("impeccable-sq-{}-{}", name, std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("impeccable-sq-{}-{}", name, std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join(".impeccable/questions")).unwrap();
         std::fs::create_dir_all(dir.join(".impeccable/mocks/decision")).unwrap();
@@ -2586,7 +3472,10 @@ mod tests {
     #[test]
     fn start_waits_for_a_state_file_that_records_the_url() {
         let dir = temp_project("state-not-ready");
-        let qdir = dir.join(".impeccable/questions").to_string_lossy().into_owned();
+        let qdir = dir
+            .join(".impeccable/questions")
+            .to_string_lossy()
+            .into_owned();
         let state = state_file(&qdir, "k1");
         std::fs::write(&state, "").unwrap();
         assert_eq!(wait_for_daemon_url(&qdir, "k1", now_ms() + 250.0), None);
@@ -2596,10 +3485,17 @@ mod tests {
             let state = state.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_millis(300));
-                impeccable_common::fsx::write_atomic(&state, json_compact(&json!({ "pid": 1, "url": "http://127.0.0.1:9/" })).as_bytes()).unwrap();
+                impeccable_common::fsx::write_atomic(
+                    &state,
+                    json_compact(&json!({ "pid": 1, "url": "http://127.0.0.1:9/" })).as_bytes(),
+                )
+                .unwrap();
             })
         };
-        assert_eq!(wait_for_daemon_url(&qdir, "k1", now_ms() + 5000.0).as_deref(), Some("http://127.0.0.1:9/"));
+        assert_eq!(
+            wait_for_daemon_url(&qdir, "k1", now_ms() + 5000.0).as_deref(),
+            Some("http://127.0.0.1:9/")
+        );
         writer.join().unwrap();
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -2627,7 +3523,11 @@ mod tests {
         });
         assert_eq!(
             declared_comps(&payload),
-            vec![".impeccable/mocks/decision/a.png", ".impeccable/mocks/decision/b.png", ".impeccable/mocks/decision/canon.png"]
+            vec![
+                ".impeccable/mocks/decision/a.png",
+                ".impeccable/mocks/decision/b.png",
+                ".impeccable/mocks/decision/canon.png"
+            ]
         );
     }
 
@@ -2636,7 +3536,11 @@ mod tests {
     }
 
     fn write_state(dir: &std::path::Path, state: &Value) {
-        std::fs::write(dir.join(".impeccable/questions/k1.state.json"), state.to_string()).unwrap();
+        std::fs::write(
+            dir.join(".impeccable/questions/k1.state.json"),
+            state.to_string(),
+        )
+        .unwrap();
     }
 
     #[test]
@@ -2679,7 +3583,13 @@ mod tests {
             ],
             "canonCard": { "html": ".impeccable/mocks/decision/canon.html" }
         });
-        assert_eq!(declared_html(&payload), vec![".impeccable/mocks/decision/a.html".to_string(), ".impeccable/mocks/decision/canon.html".to_string()]);
+        assert_eq!(
+            declared_html(&payload),
+            vec![
+                ".impeccable/mocks/decision/a.html".to_string(),
+                ".impeccable/mocks/decision/canon.html".to_string()
+            ]
+        );
         // A sketch is no comp: it never makes a round owe one.
         assert!(declared_comps(&payload).is_empty());
     }
@@ -2714,8 +3624,14 @@ mod tests {
     fn a_sketch_frame_reads_a_device_screen_and_defaults_to_desktop() {
         assert_eq!(sketch_frame(&json!({})), (1440, 900));
         assert_eq!(sketch_frame(&json!({ "htmlFrame": "390x844" })), (390, 844));
-        assert_eq!(sketch_frame(&json!({ "htmlFrame": "390 × 844" })), (390, 844));
-        assert_eq!(sketch_frame(&json!({ "htmlFrame": [834, 1194] })), (834, 1194));
+        assert_eq!(
+            sketch_frame(&json!({ "htmlFrame": "390 × 844" })),
+            (390, 844)
+        );
+        assert_eq!(
+            sketch_frame(&json!({ "htmlFrame": [834, 1194] })),
+            (834, 1194)
+        );
         assert_eq!(sketch_frame(&json!({ "htmlFrame": "tiny" })), (1440, 900));
         assert_eq!(sketch_frame(&json!({ "htmlFrame": "10x10" })), (1440, 900));
     }
@@ -2740,7 +3656,10 @@ mod tests {
         // Same second, same bytes: the file an earlier round left is stale,
         // whatever its timestamp says.
         assert!(!comp_is_this_hands(&cwd, slot, Some(&hand)));
-        assert_eq!(stale_comps(&cwd, &[slot.to_string()], Some(&hand)), vec![slot.to_string()]);
+        assert_eq!(
+            stale_comps(&cwd, &[slot.to_string()], Some(&hand)),
+            vec![slot.to_string()]
+        );
         assert!(comps_expected(&payload, &cwd, Some(&hand)));
         write_file(&dir.join(slot), b"old");
         assert!(!comp_is_this_hands(&cwd, slot, Some(&hand)));
@@ -2797,14 +3716,23 @@ mod tests {
         let slot = ".impeccable/mocks/decision/a.png";
         // The first hand's comp landed at the slot the re-roll reuses.
         write_file(&dir.join(slot), b"first hand");
-        write_state(&dir, &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" }));
+        write_state(
+            &dir,
+            &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" }),
+        );
         let reroll = json!({ "title": "Round 2", "options": [{ "id": "a", "comp": slot }] });
         std::fs::write(dir.join("reroll.json"), reroll.to_string()).unwrap();
-        let (code, out) = run_captured(&dir, &["--update", "--key", "k1", "--payload", "reroll.json"]);
+        let (code, out) = run_captured(
+            &dir,
+            &["--update", "--key", "k1", "--payload", "reroll.json"],
+        );
         assert_eq!(code, 0);
         assert!(out.contains("NEXT read "), "{out}");
         let hand = read_hand(&qdir, "k1").unwrap();
-        assert_eq!(hand.get("digest").and_then(Value::as_str), Some(hand_digest(&reroll).as_str()));
+        assert_eq!(
+            hand.get("digest").and_then(Value::as_str),
+            Some(hand_digest(&reroll).as_str())
+        );
         assert_eq!(round_comps(Some(&hand), None), vec![slot.to_string()]);
 
         // The server dies before the new comp lands; a restart of the re-roll
@@ -2822,18 +3750,36 @@ mod tests {
         let qdir = jsp::join(&[&cwd, ".impeccable", "questions"]);
         let slot = ".impeccable/mocks/decision/a.png";
         write_file(&dir.join(slot), b"first hand");
-        write_state(&dir, &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/", "comps": [slot] }));
-        std::fs::write(dir.join("reroll.json"), json!({ "options": [{ "id": "a", "comp": slot }] }).to_string()).unwrap();
+        write_state(
+            &dir,
+            &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/", "comps": [slot] }),
+        );
+        std::fs::write(
+            dir.join("reroll.json"),
+            json!({ "options": [{ "id": "a", "comp": slot }] }).to_string(),
+        )
+        .unwrap();
         // The server read its state just before --update ran ...
         let stale_read = read_state(&qdir, "k1").unwrap();
-        let (_, out) = run_captured(&dir, &["--update", "--key", "k1", "--payload", "reroll.json"]);
+        let (_, out) = run_captured(
+            &dir,
+            &["--update", "--key", "k1", "--payload", "reroll.json"],
+        );
         assert!(out.contains("NEXT read "), "{out}");
         // ... and writes it back afterwards, as a heartbeat or claim does.
         let mut s = stale_read.clone();
         s.insert("lastBeat".into(), Value::from(now_ms() as i64));
-        std::fs::write(state_file(&qdir, "k1"), json_compact(&Value::Object(s.clone()))).unwrap();
+        std::fs::write(
+            state_file(&qdir, "k1"),
+            json_compact(&Value::Object(s.clone())),
+        )
+        .unwrap();
         s.insert("claimedAt".into(), Value::from(now_ms() as i64));
-        std::fs::write(state_file(&qdir, "k1"), json_compact(&Value::Object(s.clone()))).unwrap();
+        std::fs::write(
+            state_file(&qdir, "k1"),
+            json_compact(&Value::Object(s.clone())),
+        )
+        .unwrap();
         // The hand survives: the first hand's file is still named stale.
         assert!(read_hand(&qdir, "k1").is_some());
         let (_, out) = run_captured(&dir, &["--wait", "--key", "k1", "--poll", "0"]);
@@ -2851,16 +3797,36 @@ mod tests {
         let gen = |out: &str| {
             let env = Env::from([("IMPECCABLE_IMAGE_GEN_FAKE".into(), "1".into())]);
             let (mut io, cap) = Io::captured("", dir.clone(), env);
-            let args: Vec<String> = ["--prompt", "Same prompt, same bytes.", "--out", out, "--size", "64x40"].iter().map(|s| s.to_string()).collect();
+            let args: Vec<String> = [
+                "--prompt",
+                "Same prompt, same bytes.",
+                "--out",
+                out,
+                "--size",
+                "64x40",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
             let code = crate::generate_image::run(&args, &mut io);
             assert_eq!(code, 0, "{}", String::from_utf8_lossy(&cap.stderr.borrow()));
         };
         // The previous hand generated into the slot.
         gen(slot);
         let before = std::fs::read(dir.join(slot)).unwrap();
-        write_state(&dir, &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" }));
-        std::fs::write(dir.join("reroll.json"), json!({ "options": [{ "id": "a", "comp": slot }] }).to_string()).unwrap();
-        let (_, out) = run_captured(&dir, &["--update", "--key", "k1", "--payload", "reroll.json"]);
+        write_state(
+            &dir,
+            &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" }),
+        );
+        std::fs::write(
+            dir.join("reroll.json"),
+            json!({ "options": [{ "id": "a", "comp": slot }] }).to_string(),
+        )
+        .unwrap();
+        let (_, out) = run_captured(
+            &dir,
+            &["--update", "--key", "k1", "--payload", "reroll.json"],
+        );
         assert!(out.contains("NEXT read "), "{out}");
         let (_, out) = run_captured(&dir, &["--wait", "--key", "k1", "--poll", "0"]);
         assert!(out.contains("COMP STALE: "), "{out}");
@@ -2873,9 +3839,20 @@ mod tests {
         let (_, out) = run_captured(&dir, &["--wait", "--key", "k1", "--poll", "0"]);
         assert!(!out.contains("COMP STALE"), "{out}");
         // Rewriting the prompt sidecar alone never counts: only generation or new bytes do.
-        std::fs::write(dir.join("again.json"), json!({ "title": "3", "options": [{ "id": "a", "comp": slot }] }).to_string()).unwrap();
-        run_captured(&dir, &["--update", "--key", "k1", "--payload", "again.json"]);
-        std::fs::write(dir.join(format!("{}.json", slot)), r#"{"prompt":"rewritten"}"#).unwrap();
+        std::fs::write(
+            dir.join("again.json"),
+            json!({ "title": "3", "options": [{ "id": "a", "comp": slot }] }).to_string(),
+        )
+        .unwrap();
+        run_captured(
+            &dir,
+            &["--update", "--key", "k1", "--payload", "again.json"],
+        );
+        std::fs::write(
+            dir.join(format!("{}.json", slot)),
+            r#"{"prompt":"rewritten"}"#,
+        )
+        .unwrap();
         let hand = read_hand(&qdir, "k1").unwrap();
         assert!(hand.get("generated").is_none());
         assert!(!comp_is_this_hands(&cwd, slot, Some(&hand)));
@@ -2889,7 +3866,12 @@ mod tests {
         // A directory where the hand file belongs: the rename cannot land, on
         // every platform.
         std::fs::create_dir_all(hand_file(&qdir, "k1")).unwrap();
-        std::fs::write(dir.join("p.json"), json!({ "options": [{ "id": "a", "comp": ".impeccable/mocks/decision/a.png" }] }).to_string()).unwrap();
+        std::fs::write(
+            dir.join("p.json"),
+            json!({ "options": [{ "id": "a", "comp": ".impeccable/mocks/decision/a.png" }] })
+                .to_string(),
+        )
+        .unwrap();
         let err_of = |args: &[&str]| {
             let env = Env::from([("IMPECCABLE_SKILL_DIR".into(), "/skill".into())]);
             let (mut io, cap) = Io::captured("", dir.clone(), env);
@@ -2899,13 +3881,21 @@ mod tests {
             let err = String::from_utf8(cap.stderr.borrow().clone()).unwrap();
             (code, out, err)
         };
-        let (code, out, err) = err_of(&["--start", "--no-open", "--key", "k1", "--payload", "p.json"]);
+        let (code, out, err) =
+            err_of(&["--start", "--no-open", "--key", "k1", "--payload", "p.json"]);
         assert_eq!(code, 1);
         assert!(out.is_empty(), "{out}");
-        assert!(err.starts_with("serve-question: could not record the hand (") && err.contains("the page was not served"), "{err}");
+        assert!(
+            err.starts_with("serve-question: could not record the hand (")
+                && err.contains("the page was not served"),
+            "{err}"
+        );
         assert!(!std::path::Path::new(&state_file(&qdir, "k1")).exists());
 
-        write_state(&dir, &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" }));
+        write_state(
+            &dir,
+            &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" }),
+        );
         let (code, out, err) = err_of(&["--update", "--key", "k1", "--payload", "p.json"]);
         assert_eq!(code, 1);
         assert!(out.is_empty(), "{out}");
@@ -2917,7 +3907,13 @@ mod tests {
     /// A comp-led direction round: the assigned card, the pick, a competitive
     /// and a declined challenger, and the canon card.
     fn direction_round(comps: bool) -> Value {
-        let comp = |id: &str| if comps { json!(format!(".impeccable/mocks/decision/{id}.png")) } else { Value::Null };
+        let comp = |id: &str| {
+            if comps {
+                json!(format!(".impeccable/mocks/decision/{id}.png"))
+            } else {
+                Value::Null
+            }
+        };
         let mut p = json!({
             "title": "Choose the visual world",
             "options": [
@@ -2932,7 +3928,10 @@ mod tests {
             "canonCard": { "kind": "canon", "label": "The category standard", "thesis": "Five." }
         });
         if comps {
-            for (i, id) in ["assigned", "model-pick", "challenger-a"].iter().enumerate() {
+            for (i, id) in ["assigned", "model-pick", "challenger-a"]
+                .iter()
+                .enumerate()
+            {
                 p["options"][i]["comp"] = comp(id);
             }
             p["canonCard"]["comp"] = comp("canon");
@@ -2943,18 +3942,30 @@ mod tests {
     #[test]
     fn missing_direction_comps_names_every_eligible_card_without_one() {
         let bare = direction_round(false);
-        assert_eq!(missing_direction_comps(&bare), vec!["assigned", "model-pick", "challenger-a", "canonCard"]);
+        assert_eq!(
+            missing_direction_comps(&bare),
+            vec!["assigned", "model-pick", "challenger-a", "canonCard"]
+        );
         // Declared everywhere it is owed: nothing missing; the declined
         // challenger never owes one.
         assert!(missing_direction_comps(&direction_round(true)).is_empty());
         // One card short is enough, and the legacy sketch key counts.
         let mut partial = direction_round(true);
-        partial["options"][1].as_object_mut().unwrap().remove("comp");
+        partial["options"][1]
+            .as_object_mut()
+            .unwrap()
+            .remove("comp");
         partial["options"][2]["sketch"] = partial["options"][2]["comp"].take();
-        partial["options"][2].as_object_mut().unwrap().remove("comp");
+        partial["options"][2]
+            .as_object_mut()
+            .unwrap()
+            .remove("comp");
         assert_eq!(missing_direction_comps(&partial), vec!["model-pick"]);
         let mut no_canon_comp = direction_round(true);
-        no_canon_comp["canonCard"].as_object_mut().unwrap().remove("comp");
+        no_canon_comp["canonCard"]
+            .as_object_mut()
+            .unwrap()
+            .remove("comp");
         assert_eq!(missing_direction_comps(&no_canon_comp), vec!["canonCard"]);
         // A card with no id is named by its index.
         let mut no_id = direction_round(true);
@@ -2964,7 +3975,10 @@ mod tests {
         // canon: true without a canonCard is a footer action, not a card.
         let mut footer = bare.clone();
         footer.as_object_mut().unwrap().remove("canonCard");
-        assert_eq!(missing_direction_comps(&footer), vec!["assigned", "model-pick", "challenger-a"]);
+        assert_eq!(
+            missing_direction_comps(&footer),
+            vec!["assigned", "model-pick", "challenger-a"]
+        );
     }
 
     #[test]
@@ -2978,13 +3992,30 @@ mod tests {
         assert!(with(&|p| p["buildPath"]["value"] = json!("code")).is_empty());
         // No toggle, or no buildPath at all: no image generation this round.
         assert!(with(&|p| p["buildPath"]["toggle"] = json!(false)).is_empty());
-        assert!(with(&|p| { p["buildPath"].as_object_mut().unwrap().remove("toggle"); }).is_empty());
-        assert!(with(&|p| { p.as_object_mut().unwrap().remove("buildPath"); }).is_empty());
+        assert!(with(&|p| {
+            p["buildPath"].as_object_mut().unwrap().remove("toggle");
+        })
+        .is_empty());
+        assert!(with(&|p| {
+            p.as_object_mut().unwrap().remove("buildPath");
+        })
+        .is_empty());
         // A surface round (no canon exit) and the comp round carry no canon.
-        assert!(with(&|p| { p.as_object_mut().unwrap().remove("canon"); p.as_object_mut().unwrap().remove("canonCard"); }).is_empty());
-        assert!(with(&|p| { p["canon"] = json!(false); p.as_object_mut().unwrap().remove("canonCard"); }).is_empty());
+        assert!(with(&|p| {
+            p.as_object_mut().unwrap().remove("canon");
+            p.as_object_mut().unwrap().remove("canonCard");
+        })
+        .is_empty());
+        assert!(with(&|p| {
+            p["canon"] = json!(false);
+            p.as_object_mut().unwrap().remove("canonCard");
+        })
+        .is_empty());
         // A degraded roll's single text-only card.
-        assert!(with(&|p| { p["options"] = json!([{ "id": "assigned", "thesis": "One." }]); }).is_empty());
+        assert!(with(&|p| {
+            p["options"] = json!([{ "id": "assigned", "thesis": "One." }]);
+        })
+        .is_empty());
     }
 
     #[test]
@@ -3001,22 +4032,37 @@ mod tests {
             let err = String::from_utf8(cap.stderr.borrow().clone()).unwrap();
             (code, out, err)
         };
-        let (code, out, err) = run_err(&["--start", "--no-open", "--key", "k1", "--payload", "p.json"]);
+        let (code, out, err) =
+            run_err(&["--start", "--no-open", "--key", "k1", "--payload", "p.json"]);
         assert_eq!(code, 1, "{err}");
         assert!(out.is_empty(), "{out}");
         assert!(err.contains("the page was not served"), "{err}");
-        assert!(err.contains("Missing a \"comp\": assigned, model-pick, challenger-a, canonCard."), "{err}");
-        assert!(err.contains(".impeccable/mocks/decision/<card id>.png") && err.contains("then rerun --start;"), "{err}");
+        assert!(
+            err.contains("Missing a \"comp\": assigned, model-pick, challenger-a, canonCard."),
+            "{err}"
+        );
+        assert!(
+            err.contains(".impeccable/mocks/decision/<card id>.png")
+                && err.contains("then rerun --start;"),
+            "{err}"
+        );
         // Refused before anything was recorded or spawned.
         assert!(!std::path::Path::new(&hand_file(&qdir, "k1")).exists());
         assert!(!std::path::Path::new(&state_file(&qdir, "k1")).exists());
 
         // --update refuses the same round with the page left on its hand.
-        write_state(&dir, &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" }));
+        write_state(
+            &dir,
+            &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" }),
+        );
         let (code, out, err) = run_err(&["--update", "--key", "k1", "--payload", "p.json"]);
         assert_eq!(code, 1, "{err}");
         assert!(out.is_empty(), "{out}");
-        assert!(err.contains("nothing was delivered") && err.contains("then rerun --update on the same key;"), "{err}");
+        assert!(
+            err.contains("nothing was delivered")
+                && err.contains("then rerun --update on the same key;"),
+            "{err}"
+        );
         assert!(!std::path::Path::new(&next_file(&qdir, "k1")).exists());
         assert!(!std::path::Path::new(&hand_file(&qdir, "k1")).exists());
 
@@ -3024,7 +4070,10 @@ mod tests {
         std::fs::write(dir.join("p.json"), direction_round(true).to_string()).unwrap();
         let (code, out, err) = run_err(&["--update", "--key", "k1", "--payload", "p.json"]);
         assert_eq!(code, 0, "{err}");
-        assert!(out.contains("next round delivered") && out.contains("NEXT read "), "{out}");
+        assert!(
+            out.contains("next round delivered") && out.contains("NEXT read "),
+            "{out}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -3050,12 +4099,19 @@ mod tests {
     }
 
     fn write_roll(dir: &std::path::Path, scope: &str, at: f64) {
-        std::fs::write(dir.join(".impeccable/questions/roll.json"), json!({ "scope": scope, "key": "k", "reroll": 0, "at": at as u64 }).to_string()).unwrap();
+        std::fs::write(
+            dir.join(".impeccable/questions/roll.json"),
+            json!({ "scope": scope, "key": "k", "reroll": 0, "at": at as u64 }).to_string(),
+        )
+        .unwrap();
     }
 
     #[test]
     fn missing_surface_comps_names_dealt_cards_and_leaves_other_rounds_alone() {
-        assert_eq!(missing_surface_comps(&surface_round(false)), vec!["ledger", "rail", "field"]);
+        assert_eq!(
+            missing_surface_comps(&surface_round(false)),
+            vec!["ledger", "rail", "field"]
+        );
         assert!(missing_surface_comps(&surface_round(true)).is_empty());
         let with = |f: &dyn Fn(&mut Value)| {
             let mut p = surface_round(false);
@@ -3075,10 +4131,16 @@ mod tests {
         // Code-led, no toggle, no buildPath: nothing owed.
         assert!(with(&|p| p["buildPath"]["value"] = json!("code")).is_empty());
         assert!(with(&|p| p["buildPath"]["toggle"] = json!(false)).is_empty());
-        assert!(with(&|p| { p.as_object_mut().unwrap().remove("buildPath"); }).is_empty());
+        assert!(with(&|p| {
+            p.as_object_mut().unwrap().remove("buildPath");
+        })
+        .is_empty());
         // A single card owes nothing; a payload with the canon exit is a
         // direction round, which the direction gate owns.
-        assert!(with(&|p| { p["options"] = json!([{ "id": "ledger", "thesis": "One." }]); }).is_empty());
+        assert!(with(&|p| {
+            p["options"] = json!([{ "id": "ledger", "thesis": "One." }]);
+        })
+        .is_empty());
         assert!(with(&|p| p["canon"] = json!(true)).is_empty());
     }
 
@@ -3093,7 +4155,13 @@ mod tests {
         assert_eq!(gate(&bare), None);
         // A fresh surface roll binds the next decision page.
         write_roll(&dir, "surface", now_ms());
-        assert_eq!(gate(&bare), Some((CompRound::Surface, vec!["ledger".into(), "rail".into(), "field".into()])));
+        assert_eq!(
+            gate(&bare),
+            Some((
+                CompRound::Surface,
+                vec!["ledger".into(), "rail".into(), "field".into()]
+            ))
+        );
         assert_eq!(gate(&surface_round(true)), None);
         // A later direction roll replaces it; a stale one has expired.
         write_roll(&dir, "direction", now_ms());
@@ -3105,10 +4173,17 @@ mod tests {
         assert_eq!(gate(&bare), None);
         // A direction round is still the direction gate's, roll or not.
         write_roll(&dir, "surface", now_ms());
-        assert_eq!(gate(&direction_round(false)).map(|(r, _)| r), Some(CompRound::Direction));
+        assert_eq!(
+            gate(&direction_round(false)).map(|(r, _)| r),
+            Some(CompRound::Direction)
+        );
         // Only a decision page (a payload with buildPath) takes the roll.
         let read = read_roll(&qdir);
-        take_roll(&qdir, read.as_deref(), &json!({ "options": [{ "id": "a" }, { "id": "b" }] }));
+        take_roll(
+            &qdir,
+            read.as_deref(),
+            &json!({ "options": [{ "id": "a" }, { "id": "b" }] }),
+        );
         assert!(pending());
         // A newer roll recorded after this page read the record (another
         // session's) is not this page's to take.
@@ -3130,7 +4205,14 @@ mod tests {
         let qdir = jsp::join(&[&dir.to_string_lossy(), ".impeccable", "questions"]);
         let roll = dir.join(".impeccable/questions/roll.json");
         // Recorded the way concept-seed records a roll.
-        record_roll(&dir.to_string_lossy(), "surface", Some("seed-1"), 0, &[], None);
+        record_roll(
+            &dir.to_string_lossy(),
+            "surface",
+            Some("seed-1"),
+            0,
+            &[],
+            None,
+        );
         assert!(surface_roll_pending(read_roll(&qdir).as_deref()));
         std::fs::write(dir.join("p.json"), surface_round(false).to_string()).unwrap();
         let run_err = |args: &[&str]| {
@@ -3142,24 +4224,42 @@ mod tests {
             let err = String::from_utf8(cap.stderr.borrow().clone()).unwrap();
             (code, out, err)
         };
-        let (code, out, err) = run_err(&["--start", "--no-open", "--key", "k1", "--payload", "p.json"]);
+        let (code, out, err) =
+            run_err(&["--start", "--no-open", "--key", "k1", "--payload", "p.json"]);
         assert_eq!(code, 1, "{err}");
         assert!(out.is_empty(), "{out}");
         assert!(err.starts_with("serve-question: this surface round (concept-seed's latest roll here was --scope surface) is comp-led with image generation"), "{err}");
-        assert!(err.contains("so every dealt card declares a decision comp; the page was not served."), "{err}");
-        assert!(err.contains("Missing a \"comp\": ledger, rail, field."), "{err}");
-        assert!(err.contains("\".impeccable/mocks/decision/<card id>.png\", then rerun --start;") && !err.contains("canonCard"), "{err}");
+        assert!(
+            err.contains("so every dealt card declares a decision comp; the page was not served."),
+            "{err}"
+        );
+        assert!(
+            err.contains("Missing a \"comp\": ledger, rail, field."),
+            "{err}"
+        );
+        assert!(
+            err.contains("\".impeccable/mocks/decision/<card id>.png\", then rerun --start;")
+                && !err.contains("canonCard"),
+            "{err}"
+        );
         // Refused before anything was recorded or spawned; the roll stays bound.
         assert!(!std::path::Path::new(&hand_file(&qdir, "k1")).exists());
         assert!(!std::path::Path::new(&state_file(&qdir, "k1")).exists());
         assert!(roll.exists());
 
         // A surface re-roll delivered by --update is gated the same way.
-        write_state(&dir, &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" }));
+        write_state(
+            &dir,
+            &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" }),
+        );
         let (code, out, err) = run_err(&["--update", "--key", "k1", "--payload", "p.json"]);
         assert_eq!(code, 1, "{err}");
         assert!(out.is_empty(), "{out}");
-        assert!(err.contains("nothing was delivered") && err.contains("then rerun --update on the same key;"), "{err}");
+        assert!(
+            err.contains("nothing was delivered")
+                && err.contains("then rerun --update on the same key;"),
+            "{err}"
+        );
         assert!(!std::path::Path::new(&next_file(&qdir, "k1")).exists());
         assert!(roll.exists());
 
@@ -3168,7 +4268,10 @@ mod tests {
         std::fs::write(dir.join("p.json"), surface_round(true).to_string()).unwrap();
         let (code, out, err) = run_err(&["--update", "--key", "k1", "--payload", "p.json"]);
         assert_eq!(code, 0, "{err}");
-        assert!(out.contains("next round delivered") && out.contains("NEXT read "), "{out}");
+        assert!(
+            out.contains("next round delivered") && out.contains("NEXT read "),
+            "{out}"
+        );
         assert!(!roll.exists());
         std::fs::write(dir.join("p.json"), surface_round(false).to_string()).unwrap();
         let (code, _, err) = run_err(&["--update", "--key", "k1", "--payload", "p.json"]);
@@ -3181,12 +4284,16 @@ mod tests {
         let dir = temp_project("markers");
         let cwd = dir.to_string_lossy().into_owned();
         let qdir = jsp::join(&[&cwd, ".impeccable", "questions"]);
-        let payload = json!({ "options": [{ "id": "a", "comp": ".impeccable/mocks/decision/a.png" }] });
+        let payload =
+            json!({ "options": [{ "id": "a", "comp": ".impeccable/mocks/decision/a.png" }] });
         let live = new_hand(&cwd, &payload);
         write_hand(&qdir, "k1", &live).unwrap();
         std::fs::create_dir_all(dir.join(".impeccable/mocks/decision")).unwrap();
         std::fs::write(dir.join(".impeccable/mocks/decision/a.png"), b"png").unwrap();
-        assert_eq!(record_generated(&cwd, ".impeccable/mocks/decision/a.png").unwrap(), vec!["k1".to_string()]);
+        assert_eq!(
+            record_generated(&cwd, ".impeccable/mocks/decision/a.png").unwrap(),
+            vec!["k1".to_string()]
+        );
 
         // A failed write of the next hand keeps the live hand's marker.
         let hand_path = hand_file(&qdir, "k1");
@@ -3195,7 +4302,10 @@ mod tests {
         assert!(write_hand(&qdir, "k1", &new_hand(&cwd, &payload)).is_err());
         std::fs::remove_dir_all(&hand_path).unwrap();
         write_atomic(&hand_path, &json_compact(&Value::Object(live.clone()))).unwrap();
-        assert_eq!(read_hand(&qdir, "k1").unwrap().get("generated"), Some(&json!([".impeccable/mocks/decision/a.png"])));
+        assert_eq!(
+            read_hand(&qdir, "k1").unwrap().get("generated"),
+            Some(&json!([".impeccable/mocks/decision/a.png"]))
+        );
 
         // A new hand with the same payload does not inherit the old marker.
         write_hand(&qdir, "k1", &new_hand(&cwd, &payload)).unwrap();
@@ -3203,7 +4313,10 @@ mod tests {
 
         // --stop takes the marker folder with the hand file.
         record_generated(&cwd, ".impeccable/mocks/decision/a.png").unwrap();
-        write_state(&dir, &json!({ "pid": 0, "port": 1, "url": "http://127.0.0.1:1/" }));
+        write_state(
+            &dir,
+            &json!({ "pid": 0, "port": 1, "url": "http://127.0.0.1:1/" }),
+        );
         let _ = run_captured(&dir, &["--stop", "--key", "k1"]);
         assert!(!std::path::Path::new(&hand_file(&qdir, "k1")).exists());
         assert!(!std::path::Path::new(&generated_dir(&qdir, "k1")).exists());
@@ -3214,11 +4327,20 @@ mod tests {
     fn marker_names_carry_the_hand_tag() {
         let slot = ".impeccable/mocks/decision/a.png";
         let name = marker_name(slot, "abc123");
-        assert_eq!(name, format!("{}-abc123.json", hand_digest(&Value::String(slot.into()))));
+        assert_eq!(
+            name,
+            format!("{}-abc123.json", hand_digest(&Value::String(slot.into())))
+        );
         assert_eq!(marker_name_tag(&name), Some("abc123"));
         assert_eq!(marker_name_tag(&format!("{}.tmp-42", name)), Some("abc123"));
         // A legacy name carries no tag; neither does a stray file.
-        assert_eq!(marker_name_tag(&format!("{}.json", hand_digest(&Value::String(slot.into())))), None);
+        assert_eq!(
+            marker_name_tag(&format!(
+                "{}.json",
+                hand_digest(&Value::String(slot.into()))
+            )),
+            None
+        );
         assert_eq!(marker_name_tag("notes.txt"), None);
         assert_eq!(marker_name_tag("zzzzzzzzzzzzzzzz-abc.json"), None);
         // An id that could not sit in a file name safely is hashed.
@@ -3254,7 +4376,10 @@ mod tests {
         let old = new_hand(&cwd, &payload);
         write_hand(&qdir, "k1", &old).unwrap();
         record_generated(&cwd, slot).unwrap();
-        let old_marker = jsp::join(&[&generated_dir(&qdir, "k1"), &marker_name(slot, &marker_tag(&hand_marker_id(&old)))]);
+        let old_marker = jsp::join(&[
+            &generated_dir(&qdir, "k1"),
+            &marker_name(slot, &marker_tag(&hand_marker_id(&old))),
+        ]);
         assert!(std::path::Path::new(&old_marker).exists());
 
         // --update: the new hand file lands, then (before its prune runs) a
@@ -3263,9 +4388,18 @@ mod tests {
         new.insert("id".into(), json!("feedfacecafebeef"));
         let target = hand_file(&qdir, "k1");
         write_atomic(&target, &json_compact(&Value::Object(new.clone()))).unwrap();
-        assert_eq!(record_generated(&cwd, slot).unwrap(), vec!["k1".to_string()]);
-        let new_marker = jsp::join(&[&generated_dir(&qdir, "k1"), &marker_name(slot, "feedfacecafebeef")]);
-        assert!(!same_path(&old_marker, &new_marker), "one hand's marker must never share a path with another's");
+        assert_eq!(
+            record_generated(&cwd, slot).unwrap(),
+            vec!["k1".to_string()]
+        );
+        let new_marker = jsp::join(&[
+            &generated_dir(&qdir, "k1"),
+            &marker_name(slot, "feedfacecafebeef"),
+        ]);
+        assert!(
+            !same_path(&old_marker, &new_marker),
+            "one hand's marker must never share a path with another's"
+        );
         // The old hand's marker is still there when the prune starts.
         assert!(std::path::Path::new(&old_marker).exists());
 
@@ -3274,7 +4408,10 @@ mod tests {
         write_hand(&qdir, "k1", &new).unwrap();
         assert!(!std::path::Path::new(&old_marker).exists());
         assert!(std::path::Path::new(&new_marker).exists());
-        assert_eq!(read_hand(&qdir, "k1").unwrap().get("generated"), Some(&json!([slot])));
+        assert_eq!(
+            read_hand(&qdir, "k1").unwrap().get("generated"),
+            Some(&json!([slot]))
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -3283,17 +4420,39 @@ mod tests {
         let dir = temp_project("marker-legacy");
         let cwd = dir.to_string_lossy().into_owned();
         let qdir = jsp::join(&[&cwd, ".impeccable", "questions"]);
-        let (a, b) = (".impeccable/mocks/decision/a.png", ".impeccable/mocks/decision/b.png");
-        let mut hand = new_hand(&cwd, &json!({ "options": [{ "id": "a", "comp": a }, { "id": "b", "comp": b }] }));
+        let (a, b) = (
+            ".impeccable/mocks/decision/a.png",
+            ".impeccable/mocks/decision/b.png",
+        );
+        let mut hand = new_hand(
+            &cwd,
+            &json!({ "options": [{ "id": "a", "comp": a }, { "id": "b", "comp": b }] }),
+        );
         hand.insert("id".into(), json!("0011223344556677"));
         write_hand(&qdir, "k1", &hand).unwrap();
         let gdir = generated_dir(&qdir, "k1");
         std::fs::create_dir_all(&gdir).unwrap();
-        let legacy = |slot: &str| jsp::join(&[&gdir, &format!("{}.json", hand_digest(&Value::String(slot.into())))]);
-        std::fs::write(legacy(a), json!({ "slot": a, "hand": "0011223344556677" }).to_string()).unwrap();
-        std::fs::write(legacy(b), json!({ "slot": b, "hand": "ffffffffffffffff" }).to_string()).unwrap();
+        let legacy = |slot: &str| {
+            jsp::join(&[
+                &gdir,
+                &format!("{}.json", hand_digest(&Value::String(slot.into()))),
+            ])
+        };
+        std::fs::write(
+            legacy(a),
+            json!({ "slot": a, "hand": "0011223344556677" }).to_string(),
+        )
+        .unwrap();
+        std::fs::write(
+            legacy(b),
+            json!({ "slot": b, "hand": "ffffffffffffffff" }).to_string(),
+        )
+        .unwrap();
         // The legacy marker whose content names this hand counts; the other does not.
-        assert_eq!(read_hand(&qdir, "k1").unwrap().get("generated"), Some(&json!([a])));
+        assert_eq!(
+            read_hand(&qdir, "k1").unwrap().get("generated"),
+            Some(&json!([a]))
+        );
         // Rewriting the same hand keeps its legacy marker and prunes the other's.
         write_hand(&qdir, "k1", &hand).unwrap();
         assert!(std::path::Path::new(&legacy(a)).exists());
@@ -3301,11 +4460,22 @@ mod tests {
         // A legacy hand file (no id) matches legacy markers on its digest.
         let mut old = hand.clone();
         old.remove("id");
-        let digest = old.get("digest").and_then(Value::as_str).unwrap().to_string();
+        let digest = old
+            .get("digest")
+            .and_then(Value::as_str)
+            .unwrap()
+            .to_string();
         write_hand(&qdir, "k1", &old).unwrap();
         assert!(!std::path::Path::new(&legacy(a)).exists());
-        std::fs::write(legacy(b), json!({ "slot": b, "digest": digest }).to_string()).unwrap();
-        assert_eq!(read_hand(&qdir, "k1").unwrap().get("generated"), Some(&json!([b])));
+        std::fs::write(
+            legacy(b),
+            json!({ "slot": b, "digest": digest }).to_string(),
+        )
+        .unwrap();
+        assert_eq!(
+            read_hand(&qdir, "k1").unwrap().get("generated"),
+            Some(&json!([b]))
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -3328,24 +4498,50 @@ mod tests {
 
     #[test]
     fn comp_round_pick_is_the_approved_comp_not_option_one() {
-        let out = answer_lines(r#"{"optionId":"b","steer":"","comp":".impeccable/mocks/comp-b-open-book.png"}"#);
-        assert!(out.contains("APPROVED COMP: the user picked this composition in the comp round"), "{out}");
+        let out = answer_lines(
+            r#"{"optionId":"b","steer":"","comp":".impeccable/mocks/comp-b-open-book.png"}"#,
+        );
+        assert!(
+            out.contains("APPROVED COMP: the user picked this composition in the comp round"),
+            "{out}"
+        );
         assert!(out.contains("\"approved\": true"), "{out}");
-        assert!(!out.contains("CHOSEN COMP") && !out.contains("option one") && !out.contains("two variations"), "{out}");
+        assert!(
+            !out.contains("CHOSEN COMP")
+                && !out.contains("option one")
+                && !out.contains("two variations"),
+            "{out}"
+        );
 
-        let out = answer_lines(r#"{"optionId":"a","steer":"","comp":".impeccable/mocks/decision/a.png"}"#);
-        assert!(out.contains("CHOSEN COMP: the decision comp at that path is compositional option one."), "{out}");
+        let out = answer_lines(
+            r#"{"optionId":"a","steer":"","comp":".impeccable/mocks/decision/a.png"}"#,
+        );
+        assert!(
+            out.contains(
+                "CHOSEN COMP: the decision comp at that path is compositional option one."
+            ),
+            "{out}"
+        );
         assert!(out.contains("--decision-comp <that path>"), "{out}");
         assert!(!out.contains("APPROVED COMP"), "{out}");
     }
 
     #[test]
     fn comp_round_pick_of_the_recorded_decision_comp_is_the_approval() {
-        let dir = std::env::temp_dir().join(format!("impeccable-sq-decision-{}-{}", std::process::id(), now_ms() as u64));
+        let dir = std::env::temp_dir().join(format!(
+            "impeccable-sq-decision-{}-{}",
+            std::process::id(),
+            now_ms() as u64
+        ));
         std::fs::create_dir_all(dir.join(".impeccable/build")).unwrap();
         let slot = ".impeccable/mocks/decision/a.png";
-        let round: Vec<String> = vec![slot.into(), ".impeccable/mocks/comp-2.png".into(), ".impeccable/mocks/comp-3.png".into()];
-        let decision_page: Vec<String> = vec![slot.into(), ".impeccable/mocks/decision/b.png".into()];
+        let round: Vec<String> = vec![
+            slot.into(),
+            ".impeccable/mocks/comp-2.png".into(),
+            ".impeccable/mocks/comp-3.png".into(),
+        ];
+        let decision_page: Vec<String> =
+            vec![slot.into(), ".impeccable/mocks/decision/b.png".into()];
         let answer = |raw: &str, served: &[String]| {
             let (mut io, cap) = Io::captured("", dir.clone(), Env::new());
             print_answer(&mut io, raw, served);
@@ -3354,13 +4550,22 @@ mod tests {
         };
         let state = |phase: &str| json!({ "phase": phase, "decisionComp": slot }).to_string();
         std::fs::write(dir.join(".impeccable/build/state.json"), state("comps")).unwrap();
-        let out = answer(r#"{"optionId":"one","comp":"./.impeccable/mocks/decision/a.png"}"#, &round);
-        assert!(out.contains("APPROVED COMP") && !out.contains("CHOSEN COMP"), "{out}");
+        let out = answer(
+            r#"{"optionId":"one","comp":"./.impeccable/mocks/decision/a.png"}"#,
+            &round,
+        );
+        assert!(
+            out.contains("APPROVED COMP") && !out.contains("CHOSEN COMP"),
+            "{out}"
+        );
         // Served again in the comp round, option one is this hand's comp, never stale.
         std::fs::create_dir_all(dir.join(".impeccable/mocks/decision")).unwrap();
         std::fs::write(dir.join(slot), b"png").unwrap();
         let cwd = dir.to_string_lossy().to_string();
-        let options: Vec<Value> = round.iter().map(|c| json!({ "id": c, "comp": c })).collect();
+        let options: Vec<Value> = round
+            .iter()
+            .map(|c| json!({ "id": c, "comp": c }))
+            .collect();
         let hand = new_hand(&cwd, &json!({ "options": options }));
         assert!(comp_is_this_hands(&cwd, slot, Some(&hand)));
         assert!(stale_comps(&cwd, &[slot.to_string()], Some(&hand)).is_empty());
@@ -3368,25 +4573,53 @@ mod tests {
         std::fs::write(dir.join(format!("{slot}.json")), b"{}").unwrap();
         assert!(!landed_decision_comps(&cwd, &round, Some(&hand)));
         // A new direction round reusing that slot is not the comp round: the old image is stale there.
-        let options: Vec<Value> = decision_page.iter().map(|c| json!({ "id": c, "comp": c })).collect();
+        let options: Vec<Value> = decision_page
+            .iter()
+            .map(|c| json!({ "id": c, "comp": c }))
+            .collect();
         let hand = new_hand(&cwd, &json!({ "options": options }));
         assert!(!comp_is_this_hands(&cwd, slot, Some(&hand)));
-        assert_eq!(stale_comps(&cwd, &[slot.to_string()], Some(&hand)), vec![slot.to_string()]);
-        let out = answer(r#"{"optionId":"one","comp":".impeccable/mocks/decision/a.png"}"#, &decision_page);
-        assert!(out.contains("CHOSEN COMP") && !out.contains("APPROVED COMP"), "{out}");
+        assert_eq!(
+            stale_comps(&cwd, &[slot.to_string()], Some(&hand)),
+            vec![slot.to_string()]
+        );
+        let out = answer(
+            r#"{"optionId":"one","comp":".impeccable/mocks/decision/a.png"}"#,
+            &decision_page,
+        );
+        assert!(
+            out.contains("CHOSEN COMP") && !out.contains("APPROVED COMP"),
+            "{out}"
+        );
         // Another decision comp, or the same one once the round closed, stays a decision pick.
-        let out = answer(r#"{"optionId":"b","comp":".impeccable/mocks/decision/b.png"}"#, &round);
-        assert!(out.contains("CHOSEN COMP") && !out.contains("APPROVED COMP"), "{out}");
+        let out = answer(
+            r#"{"optionId":"b","comp":".impeccable/mocks/decision/b.png"}"#,
+            &round,
+        );
+        assert!(
+            out.contains("CHOSEN COMP") && !out.contains("APPROVED COMP"),
+            "{out}"
+        );
         std::fs::write(dir.join(".impeccable/build/state.json"), state("spec")).unwrap();
-        let out = answer(r#"{"optionId":"one","comp":".impeccable/mocks/decision/a.png"}"#, &round);
-        assert!(out.contains("CHOSEN COMP") && !out.contains("APPROVED COMP"), "{out}");
+        let out = answer(
+            r#"{"optionId":"one","comp":".impeccable/mocks/decision/a.png"}"#,
+            &round,
+        );
+        assert!(
+            out.contains("CHOSEN COMP") && !out.contains("APPROVED COMP"),
+            "{out}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-
     /// A roll record as concept-seed writes it for a roll that dealt worlds.
     fn write_dealt_roll(dir: &std::path::Path, scope: &str, at: f64, worlds: &Value) {
-        std::fs::write(dir.join(".impeccable/questions/roll.json"), json!({ "scope": scope, "key": "k", "reroll": 0, "at": at as u64, "worlds": worlds }).to_string()).unwrap();
+        std::fs::write(
+            dir.join(".impeccable/questions/roll.json"),
+            json!({ "scope": scope, "key": "k", "reroll": 0, "at": at as u64, "worlds": worlds })
+                .to_string(),
+        )
+        .unwrap();
     }
 
     fn two_worlds(base: &str) -> Value {
@@ -3399,46 +4632,74 @@ mod tests {
     const NEXT_TODAY: &str = "NEXT read /skill/reference/visualize.md now, before writing any decision comp prompt; it and the MODE RULES block concept-seed printed for this surface govern every card's image. Then generate each declared comp into its slot, lead first, and record the exact prompt in its sidecar, the image's full file name plus .json (a.png gets a.png.json).\n";
 
     fn run_env(dir: &std::path::Path, extra: &[(&str, &str)], args: &[&str]) -> (i32, String) {
-        let mut env = Env::from([("IMPECCABLE_SKILL_DIR".into(), "/skill".into()), ("IMPECCABLE_SELF".into(), "impeccable".into())]);
+        let mut env = Env::from([
+            ("IMPECCABLE_SKILL_DIR".into(), "/skill".into()),
+            ("IMPECCABLE_SELF".into(), "impeccable".into()),
+        ]);
         for (k, v) in extra {
             env.insert(k.to_string(), v.to_string());
         }
         let (mut io, cap) = Io::captured("", dir.to_path_buf(), env);
         let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
         let code = run(&argv, &mut io);
-        let out = String::from_utf8(cap.stdout.borrow().clone()).unwrap().replace('\\', "/");
+        let out = String::from_utf8(cap.stdout.borrow().clone())
+            .unwrap()
+            .replace('\\', "/");
         (code, out)
     }
 
     /// The NEXT visualize line of `out`, the skill path without the drive
     /// letter Windows resolves `/skill` under.
     fn next_line(out: &str) -> String {
-        let Some(line) = out.lines().find(|l| l.starts_with("NEXT read ")) else { return String::new() };
+        let Some(line) = out.lines().find(|l| l.starts_with("NEXT read ")) else {
+            return String::new();
+        };
         let rest = &line["NEXT read ".len()..];
-        let rest = if rest.as_bytes().get(1) == Some(&b':') { &rest[2..] } else { rest };
+        let rest = if rest.as_bytes().get(1) == Some(&b':') {
+            &rest[2..]
+        } else {
+            rest
+        };
         format!("NEXT read {rest}\n")
     }
 
     /// Answers card image requests until `stop` is set; returns the paths asked for.
-    fn card_server(server: tiny_http::Server, stop: std::sync::Arc<std::sync::atomic::AtomicBool>) -> std::thread::JoinHandle<Vec<String>> {
+    fn card_server(
+        server: tiny_http::Server,
+        stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    ) -> std::thread::JoinHandle<Vec<String>> {
         std::thread::spawn(move || {
             let mut seen = Vec::new();
             while !stop.load(std::sync::atomic::Ordering::SeqCst) {
-                let Ok(Some(request)) = server.recv_timeout(std::time::Duration::from_millis(50)) else { continue };
+                let Ok(Some(request)) = server.recv_timeout(std::time::Duration::from_millis(50))
+                else {
+                    continue;
+                };
                 let path = request.url().to_string();
                 seen.push(path.clone());
                 if path.contains("missing") {
-                    let _ = request.respond(tiny_http::Response::from_string("gone").with_status_code(404));
+                    let _ = request
+                        .respond(tiny_http::Response::from_string("gone").with_status_code(404));
                 } else if path.contains("wall") {
                     // A 200 sign-in page behind an image URL and Content-Type.
-                    let _ = request.respond(tiny_http::Response::from_string("<html>sign in</html>").with_header(tiny_http::Header::from_bytes("content-type", "image/webp").unwrap()));
+                    let _ = request.respond(
+                        tiny_http::Response::from_string("<html>sign in</html>").with_header(
+                            tiny_http::Header::from_bytes("content-type", "image/webp").unwrap(),
+                        ),
+                    );
                 } else if path.contains("teletext.png") {
                     // A PNG served as webp: the bytes decide.
                     let body = [&b"\x89PNG\r\n\x1a\n"[..], path.as_bytes()].concat();
-                    let _ = request.respond(tiny_http::Response::from_data(body).with_header(tiny_http::Header::from_bytes("content-type", "image/webp").unwrap()));
+                    let _ = request.respond(tiny_http::Response::from_data(body).with_header(
+                        tiny_http::Header::from_bytes("content-type", "image/webp").unwrap(),
+                    ));
                 } else {
                     let body = format!("RIFF\x10\0\0\0WEBPVP8 {path}");
-                    let _ = request.respond(tiny_http::Response::from_data(body.into_bytes()).with_header(tiny_http::Header::from_bytes("content-type", "image/webp").unwrap()));
+                    let _ = request.respond(
+                        tiny_http::Response::from_data(body.into_bytes()).with_header(
+                            tiny_http::Header::from_bytes("content-type", "image/webp").unwrap(),
+                        ),
+                    );
                 }
             }
             seen
@@ -3449,16 +4710,48 @@ mod tests {
     fn dealt_worlds_come_from_a_fresh_direction_roll_a_decision_page_takes() {
         let page = direction_round(true);
         let worlds = two_worlds("https://cards.test");
-        let roll = |scope: &str, at: f64, worlds: &Value| json!({ "scope": scope, "key": "k", "reroll": 0, "at": at as u64, "worlds": worlds }).to_string();
-        assert_eq!(Value::Array(dealt_worlds(Some(&roll("direction", now_ms(), &worlds)), &page)), worlds);
+        let roll = |scope: &str, at: f64, worlds: &Value| {
+            json!({ "scope": scope, "key": "k", "reroll": 0, "at": at as u64, "worlds": worlds })
+                .to_string()
+        };
+        assert_eq!(
+            Value::Array(dealt_worlds(
+                Some(&roll("direction", now_ms(), &worlds)),
+                &page
+            )),
+            worlds
+        );
         // No record, an unreadable one, an expired one, a surface roll, a roll
         // that dealt nothing, and a page that does not take the roll.
         assert!(dealt_worlds(None, &page).is_empty());
         assert!(dealt_worlds(Some("{not json"), &page).is_empty());
-        assert!(dealt_worlds(Some(&roll("direction", now_ms() - ROLL_WINDOW_MS - 1000.0, &worlds)), &page).is_empty());
-        assert!(dealt_worlds(Some(&roll("surface", now_ms(), &worlds)), &surface_round(true)).is_empty());
-        assert!(dealt_worlds(Some(&json!({ "scope": "direction", "key": "k", "reroll": 0, "at": now_ms() as u64 }).to_string()), &page).is_empty());
-        assert!(dealt_worlds(Some(&roll("direction", now_ms(), &worlds)), &json!({ "options": [{ "id": "a", "comp": "m/a.png" }] })).is_empty());
+        assert!(dealt_worlds(
+            Some(&roll(
+                "direction",
+                now_ms() - ROLL_WINDOW_MS - 1000.0,
+                &worlds
+            )),
+            &page
+        )
+        .is_empty());
+        assert!(dealt_worlds(
+            Some(&roll("surface", now_ms(), &worlds)),
+            &surface_round(true)
+        )
+        .is_empty());
+        assert!(dealt_worlds(
+            Some(
+                &json!({ "scope": "direction", "key": "k", "reroll": 0, "at": now_ms() as u64 })
+                    .to_string()
+            ),
+            &page
+        )
+        .is_empty());
+        assert!(dealt_worlds(
+            Some(&roll("direction", now_ms(), &worlds)),
+            &json!({ "options": [{ "id": "a", "comp": "m/a.png" }] })
+        )
+        .is_empty());
         // Only a slug id with two http(s) single-token URLs reaches the line.
         let odd = json!([
             { "id": "../escape", "board": "https://x.test/a.webp", "hero": "https://x.test/a-hero.webp" },
@@ -3470,11 +4763,21 @@ mod tests {
             { "id": "kept", "board": "https://x.test/a.webp", "hero": "http://x.test/a-hero.webp" }
         ]);
         let kept = dealt_worlds(Some(&roll("direction", now_ms(), &odd)), &page);
-        assert_eq!(kept.iter().map(|w| w["id"].as_str().unwrap()).collect::<Vec<_>>(), vec!["kept"]);
+        assert_eq!(
+            kept.iter()
+                .map(|w| w["id"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            vec!["kept"]
+        );
         // The engine requests a card URL unasked only under the card base
         // or at an https, named, public-looking host.
         let env = Env::new();
-        for ok in ["https://impeccable.style/worlds/cards/a.webp", "https://cdn.example.com/a.webp", "https://cdn.example.com:8443/a.webp", "https://cards.example.xn--p1ai/a.webp"] {
+        for ok in [
+            "https://impeccable.style/worlds/cards/a.webp",
+            "https://cdn.example.com/a.webp",
+            "https://cdn.example.com:8443/a.webp",
+            "https://cards.example.xn--p1ai/a.webp",
+        ] {
             assert!(card_fetch_allowed(&env, ok), "{ok}");
         }
         for no in [
@@ -3498,9 +4801,18 @@ mod tests {
         ] {
             assert!(!card_fetch_allowed(&env, no), "{no}");
         }
-        let local = Env::from([("IMPECCABLE_CARD_BASE".into(), "http://127.0.0.1:4000/cards".into())]);
-        assert!(card_fetch_allowed(&local, "http://127.0.0.1:4000/cards/a.webp"));
-        assert!(!card_fetch_allowed(&local, "http://127.0.0.1:4000/cardsx/a.webp") && !card_fetch_allowed(&local, "http://127.0.0.1:4001/cards/a.webp"));
+        let local = Env::from([(
+            "IMPECCABLE_CARD_BASE".into(),
+            "http://127.0.0.1:4000/cards".into(),
+        )]);
+        assert!(card_fetch_allowed(
+            &local,
+            "http://127.0.0.1:4000/cards/a.webp"
+        ));
+        assert!(
+            !card_fetch_allowed(&local, "http://127.0.0.1:4000/cardsx/a.webp")
+                && !card_fetch_allowed(&local, "http://127.0.0.1:4001/cards/a.webp")
+        );
     }
 
     #[test]
@@ -3512,10 +4824,19 @@ mod tests {
         let handle = card_server(server, stop.clone());
         let dir = temp_project("world-cards");
         let qdir = jsp::join(&[&dir.to_string_lossy(), ".impeccable", "questions"]);
-        write_state(&dir, &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" }));
+        write_state(
+            &dir,
+            &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" }),
+        );
         std::fs::write(dir.join("p.json"), direction_round(true).to_string()).unwrap();
         let card_base = format!("{base}/cards");
-        let update = |extra: &[(&str, &str)]| run_env(&dir, &[extra, &[("IMPECCABLE_CARD_BASE", card_base.as_str())]].concat(), &["--update", "--key", "k1", "--payload", "p.json"]);
+        let update = |extra: &[(&str, &str)]| {
+            run_env(
+                &dir,
+                &[extra, &[("IMPECCABLE_CARD_BASE", card_base.as_str())]].concat(),
+                &["--update", "--key", "k1", "--payload", "p.json"],
+            )
+        };
         const SENTENCE: &str = " The catalog worlds dealt in this roll have card images, listed at the end of this line: when a card's direction builds on one of these worlds, attach that world's board and hero as reference images to that card's comp (the harness image tool's input images, or `impeccable generate-image --ref <board> --ref <hero>`), as style inspiration only, never to copy layout or content; a card for a direction you invented yourself has no card images and gets none. WORLD CARDS: ";
         const FILES: &str = "print-fillmore-handbill board .impeccable/mocks/worlds/print-fillmore-handbill-board.webp hero .impeccable/mocks/worlds/print-fillmore-handbill-hero.webp | broadcast-teletext board .impeccable/mocks/worlds/broadcast-teletext-board.png hero .impeccable/mocks/worlds/broadcast-teletext-hero.webp\n";
 
@@ -3524,30 +4845,70 @@ mod tests {
         write_dealt_roll(&dir, "direction", now_ms(), &two_worlds(&base));
         let (code, out) = update(&[]);
         assert_eq!(code, 0);
-        assert_eq!(next_line(&out), format!("{}{}{}", NEXT_TODAY.trim_end(), SENTENCE, FILES));
+        assert_eq!(
+            next_line(&out),
+            format!("{}{}{}", NEXT_TODAY.trim_end(), SENTENCE, FILES)
+        );
         assert!(read_roll(&qdir).is_none());
-        let card = |name: &str| String::from_utf8_lossy(&std::fs::read(dir.join(".impeccable/mocks/worlds").join(name)).unwrap_or_default()).into_owned();
-        assert!(card("print-fillmore-handbill-board.webp").ends_with("/cards/print-fillmore-handbill.webp"));
+        let card = |name: &str| {
+            String::from_utf8_lossy(
+                &std::fs::read(dir.join(".impeccable/mocks/worlds").join(name)).unwrap_or_default(),
+            )
+            .into_owned()
+        };
+        assert!(card("print-fillmore-handbill-board.webp")
+            .ends_with("/cards/print-fillmore-handbill.webp"));
         assert!(card("broadcast-teletext-board.png").ends_with("/cards/broadcast-teletext.png?v=3"));
-        assert!(card("broadcast-teletext-hero.webp").ends_with("/cards/broadcast-teletext-hero.webp"));
+        assert!(
+            card("broadcast-teletext-hero.webp").ends_with("/cards/broadcast-teletext-hero.webp")
+        );
         // The hand keeps the worlds, so a --wait flip names them too.
-        assert_eq!(Value::Array(hand_worlds(read_hand(&qdir, "k1").as_ref())), two_worlds(&base));
+        assert_eq!(
+            Value::Array(hand_worlds(read_hand(&qdir, "k1").as_ref())),
+            two_worlds(&base)
+        );
 
         // The same worlds dealt again: every file is there, nothing is fetched.
         write_dealt_roll(&dir, "direction", now_ms(), &two_worlds(&base));
         let (_, out) = update(&[]);
-        assert_eq!(next_line(&out), format!("{}{}{}", NEXT_TODAY.trim_end(), SENTENCE, FILES));
+        assert_eq!(
+            next_line(&out),
+            format!("{}{}{}", NEXT_TODAY.trim_end(), SENTENCE, FILES)
+        );
         stop.store(true, std::sync::atomic::Ordering::SeqCst);
         let mut seen = handle.join().unwrap();
         seen.sort();
-        assert_eq!(seen, vec!["/cards/broadcast-teletext-hero.webp", "/cards/broadcast-teletext.png?v=3", "/cards/print-fillmore-handbill-hero.webp", "/cards/print-fillmore-handbill.webp"]);
+        assert_eq!(
+            seen,
+            vec![
+                "/cards/broadcast-teletext-hero.webp",
+                "/cards/broadcast-teletext.png?v=3",
+                "/cards/print-fillmore-handbill-hero.webp",
+                "/cards/print-fillmore-handbill.webp"
+            ]
+        );
 
         // An expired record, a surface roll, and no record print today's line.
-        write_dealt_roll(&dir, "direction", now_ms() - ROLL_WINDOW_MS - 1000.0, &two_worlds(&base));
+        write_dealt_roll(
+            &dir,
+            "direction",
+            now_ms() - ROLL_WINDOW_MS - 1000.0,
+            &two_worlds(&base),
+        );
         assert_eq!(next_line(&update(&[]).1), NEXT_TODAY);
         std::fs::write(dir.join("s.json"), surface_round(true).to_string()).unwrap();
         write_dealt_roll(&dir, "surface", now_ms(), &two_worlds(&base));
-        assert_eq!(next_line(&run_env(&dir, &[("IMPECCABLE_CARD_BASE", card_base.as_str())], &["--update", "--key", "k1", "--payload", "s.json"]).1), NEXT_TODAY);
+        assert_eq!(
+            next_line(
+                &run_env(
+                    &dir,
+                    &[("IMPECCABLE_CARD_BASE", card_base.as_str())],
+                    &["--update", "--key", "k1", "--payload", "s.json"]
+                )
+                .1
+            ),
+            NEXT_TODAY
+        );
         assert!(read_roll(&qdir).is_none());
         assert_eq!(next_line(&update(&[]).1), NEXT_TODAY);
         let _ = std::fs::remove_dir_all(&dir);
@@ -3561,7 +4922,10 @@ mod tests {
         let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let handle = card_server(server, stop.clone());
         let dir = temp_project("world-cards-fail");
-        write_state(&dir, &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" }));
+        write_state(
+            &dir,
+            &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" }),
+        );
         let mut round = direction_round(true);
         round["options"][2]["catalogId"] = json!("a");
         round["options"][3]["catalogId"] = json!("b");
@@ -3576,19 +4940,33 @@ mod tests {
         ]);
         write_dealt_roll(&dir, "direction", now_ms(), &worlds);
         let card_base = format!("{base}/cards");
-        let (code, out) = run_env(&dir, &[("IMPECCABLE_CARD_BASE", card_base.as_str())], &["--update", "--key", "k1", "--payload", "p.json"]);
+        let (code, out) = run_env(
+            &dir,
+            &[("IMPECCABLE_CARD_BASE", card_base.as_str())],
+            &["--update", "--key", "k1", "--payload", "p.json"],
+        );
         assert_eq!(code, 0);
-        assert!(out.starts_with("next round delivered; the page reloads itself\n"), "{out}");
+        assert!(
+            out.starts_with("next round delivered; the page reloads itself\n"),
+            "{out}"
+        );
         let line = next_line(&out);
         assert!(line.contains("`impeccable generate-image --ref <board> --ref <hero>`; any image listed as a URL could not be fetched, so download it into the workspace first when the tool takes files), as style inspiration only"), "{line}");
         assert!(line.ends_with(&format!("WORLD CARDS: a board .impeccable/mocks/worlds/a-board.webp hero {base}/cards/missing-hero.webp | b board {base}/elsewhere/b.webp hero .impeccable/mocks/worlds/b-hero.webp | c board {base}/cards/wall.webp hero .impeccable/mocks/worlds/c-hero.webp\n")), "{line}");
         // Nothing but the three real images is kept: no page saved as a card.
         let cards = dir.join(".impeccable/mocks/worlds");
-        let mut kept: Vec<String> = std::fs::read_dir(&cards).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n != ".gitignore").collect();
+        let mut kept: Vec<String> = std::fs::read_dir(&cards)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n != ".gitignore")
+            .collect();
         kept.sort();
         assert_eq!(kept, vec!["a-board.webp", "b-hero.webp", "c-hero.webp"]);
         // The kept copies name the dealt hand, so their directory ignores itself.
-        assert!(std::fs::read_to_string(cards.join(".gitignore")).unwrap().ends_with("\n*\n"));
+        assert!(std::fs::read_to_string(cards.join(".gitignore"))
+            .unwrap()
+            .ends_with("\n*\n"));
         stop.store(true, std::sync::atomic::Ordering::SeqCst);
         let seen = handle.join().unwrap();
         assert!(!seen.iter().any(|p| p.contains("elsewhere")), "{seen:?}");
@@ -3600,17 +4978,34 @@ mod tests {
         let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
         let base = format!("http://{}", server.server_addr());
         let dir = temp_project("world-cards-fake");
-        write_state(&dir, &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" }));
+        write_state(
+            &dir,
+            &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" }),
+        );
         std::fs::write(dir.join("p.json"), direction_round(true).to_string()).unwrap();
         // One card image an earlier round already fetched.
         std::fs::create_dir_all(dir.join(".impeccable/mocks/worlds")).unwrap();
-        write_file(&dir.join(".impeccable/mocks/worlds/broadcast-teletext-hero.webp"), b"kept");
+        write_file(
+            &dir.join(".impeccable/mocks/worlds/broadcast-teletext-hero.webp"),
+            b"kept",
+        );
         write_dealt_roll(&dir, "direction", now_ms(), &two_worlds(&base));
-        let (code, out) = run_env(&dir, &[("IMPECCABLE_IMAGE_GEN_FAKE", "1")], &["--update", "--key", "k1", "--payload", "p.json"]);
+        let (code, out) = run_env(
+            &dir,
+            &[("IMPECCABLE_IMAGE_GEN_FAKE", "1")],
+            &["--update", "--key", "k1", "--payload", "p.json"],
+        );
         assert_eq!(code, 0);
         assert!(next_line(&out).ends_with(&format!("WORLD CARDS: print-fillmore-handbill board {base}/cards/print-fillmore-handbill.webp hero {base}/cards/print-fillmore-handbill-hero.webp | broadcast-teletext board {base}/cards/broadcast-teletext.png?v=3 hero .impeccable/mocks/worlds/broadcast-teletext-hero.webp\n")), "{out}");
-        assert!(server.recv_timeout(std::time::Duration::from_millis(300)).unwrap().is_none());
-        assert_eq!(std::fs::read(dir.join(".impeccable/mocks/worlds/broadcast-teletext-hero.webp")).unwrap(), b"kept");
+        assert!(server
+            .recv_timeout(std::time::Duration::from_millis(300))
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            std::fs::read(dir.join(".impeccable/mocks/worlds/broadcast-teletext-hero.webp"))
+                .unwrap(),
+            b"kept"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -3631,7 +5026,10 @@ mod tests {
         assert_eq!(restart, hand);
         assert_eq!(Value::Array(hand_worlds(Some(&restart))), worlds);
         // The code-led round flips to comp: its NEXT line names the cards.
-        write_state(&dir, &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" }));
+        write_state(
+            &dir,
+            &json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" }),
+        );
         std::fs::write(flip_file(&qdir, "k1"), "1").unwrap();
         let (code, out) = run_env(&dir, &fake, &["--wait", "--key", "k1", "--poll", "2"]);
         assert_eq!(code, 0);
@@ -3653,9 +5051,17 @@ mod tests {
     #[test]
     fn wait_names_landed_comps_without_a_prompt_sidecar() {
         let dir = temp_project("wait-sidecar");
-        let comps = [".impeccable/mocks/decision/a.png", ".impeccable/mocks/decision/b.png", ".impeccable/mocks/decision/c.png"];
+        let comps = [
+            ".impeccable/mocks/decision/a.png",
+            ".impeccable/mocks/decision/b.png",
+            ".impeccable/mocks/decision/c.png",
+        ];
         let state = json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/", "comps": comps });
-        std::fs::write(dir.join(".impeccable/questions/k1.state.json"), state.to_string()).unwrap();
+        std::fs::write(
+            dir.join(".impeccable/questions/k1.state.json"),
+            state.to_string(),
+        )
+        .unwrap();
         // a landed without a sidecar, b landed with one, c has not landed yet.
         std::fs::write(dir.join(comps[0]), b"png").unwrap();
         std::fs::write(dir.join(comps[1]), b"png").unwrap();
@@ -3667,19 +5073,32 @@ mod tests {
         assert!(out.starts_with("WAITING: "), "{out}");
         assert!(out.contains("COMP SIDECAR MISSING: .impeccable/mocks/decision/a.png landed with no prompt sidecar."), "{out}");
         assert!(out.contains("/skill/reference/visualize.md"), "{out}");
-        assert!(!out.contains("decision/b.png") && !out.contains("decision/c.png"), "{out}");
+        assert!(
+            !out.contains("decision/b.png") && !out.contains("decision/c.png"),
+            "{out}"
+        );
 
-        std::fs::write(dir.join(".impeccable/questions/k1.answer.json"), r#"{"optionId":"a","comp":".impeccable/mocks/decision/a.png"}"#).unwrap();
+        std::fs::write(
+            dir.join(".impeccable/questions/k1.answer.json"),
+            r#"{"optionId":"a","comp":".impeccable/mocks/decision/a.png"}"#,
+        )
+        .unwrap();
         let (code, out) = run_captured(&dir, &["--wait", "--key", "k1", "--poll", "2"]);
         let out = out.replace('\\', "/");
         assert_eq!(code, 0);
         let answer_at = out.find("ANSWER: ").unwrap();
-        let missing_at = out.find("COMP SIDECAR MISSING: .impeccable/mocks/decision/a.png").unwrap();
+        let missing_at = out
+            .find("COMP SIDECAR MISSING: .impeccable/mocks/decision/a.png")
+            .unwrap();
         assert!(answer_at < missing_at, "{out}");
 
         // Once every landed comp has its sidecar, the backstop stays quiet.
         std::fs::write(dir.join(format!("{}.json", comps[0])), r#"{"prompt":"p"}"#).unwrap();
-        std::fs::write(dir.join(".impeccable/questions/k1.state.json"), state.to_string()).unwrap();
+        std::fs::write(
+            dir.join(".impeccable/questions/k1.state.json"),
+            state.to_string(),
+        )
+        .unwrap();
         let (_, out) = run_captured(&dir, &["--wait", "--key", "k1", "--poll", "0"]);
         assert!(!out.contains("COMP SIDECAR MISSING"), "{out}");
 
@@ -3687,7 +5106,8 @@ mod tests {
         // decides, never as a missing sidecar, and not after the pick.
         std::fs::remove_file(dir.join(format!("{}.json", comps[0]))).unwrap();
         let qdir = jsp::join(&[&dir.to_string_lossy(), ".impeccable", "questions"]);
-        let payload = json!({ "options": comps.iter().map(|c| json!({ "comp": c })).collect::<Vec<_>>() });
+        let payload =
+            json!({ "options": comps.iter().map(|c| json!({ "comp": c })).collect::<Vec<_>>() });
         write_hand(&qdir, "k1", &new_hand(&dir.to_string_lossy(), &payload)).unwrap();
         std::fs::remove_file(dir.join(format!("{}.json", comps[1]))).unwrap();
         std::fs::remove_file(dir.join(comps[1])).unwrap();
@@ -3695,9 +5115,16 @@ mod tests {
         let out = out.replace('\\', "/");
         assert!(!out.contains("COMP SIDECAR MISSING"), "{out}");
         assert!(out.contains("COMP STALE: files left from an earlier round sit at this hand's slots, and the page is showing them: .impeccable/mocks/decision/a.png."), "{out}");
-        std::fs::write(dir.join(".impeccable/questions/k1.answer.json"), r#"{"optionId":"a"}"#).unwrap();
+        std::fs::write(
+            dir.join(".impeccable/questions/k1.answer.json"),
+            r#"{"optionId":"a"}"#,
+        )
+        .unwrap();
         let (_, out) = run_captured(&dir, &["--wait", "--key", "k1", "--poll", "2"]);
-        assert!(!out.contains("COMP STALE") && !out.contains("COMP SIDECAR MISSING"), "{out}");
+        assert!(
+            !out.contains("COMP STALE") && !out.contains("COMP SIDECAR MISSING"),
+            "{out}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -3707,10 +5134,18 @@ mod tests {
         let dir = temp_project("wait-render-check");
         let cwd = dir.to_string_lossy().into_owned();
         let qdir = jsp::join(&[&cwd, ".impeccable", "questions"]);
-        let comps = [".impeccable/mocks/decision/a.png", ".impeccable/mocks/decision/b.png"];
-        let payload = json!({ "options": comps.iter().map(|c| json!({ "comp": c })).collect::<Vec<_>>() });
+        let comps = [
+            ".impeccable/mocks/decision/a.png",
+            ".impeccable/mocks/decision/b.png",
+        ];
+        let payload =
+            json!({ "options": comps.iter().map(|c| json!({ "comp": c })).collect::<Vec<_>>() });
         let state = json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/", "comps": comps });
-        std::fs::write(dir.join(".impeccable/questions/k1.state.json"), state.to_string()).unwrap();
+        std::fs::write(
+            dir.join(".impeccable/questions/k1.state.json"),
+            state.to_string(),
+        )
+        .unwrap();
         write_hand(&qdir, "k1", &new_hand(&cwd, &payload)).unwrap();
         let wait = || {
             let (code, out) = run_captured(&dir, &["--wait", "--key", "k1", "--poll", "0"]);
@@ -3748,7 +5183,11 @@ mod tests {
         // Never after the pick: the answer is the user's, not a poll.
         write_hand(&qdir, "k1", &new_hand(&cwd, &payload)).unwrap();
         std::fs::write(dir.join(comps[0]), b"png3").unwrap();
-        std::fs::write(dir.join(".impeccable/questions/k1.answer.json"), r#"{"optionId":"a"}"#).unwrap();
+        std::fs::write(
+            dir.join(".impeccable/questions/k1.answer.json"),
+            r#"{"optionId":"a"}"#,
+        )
+        .unwrap();
         let (code, out) = run_captured(&dir, &["--wait", "--key", "k1", "--poll", "2"]);
         assert_eq!(code, 0);
         assert!(!out.contains(LINE), "{out}");
@@ -3769,7 +5208,11 @@ mod tests {
         std::fs::write(dir.join(format!("{}.json", slot)), r#"{"prompt":"p"}"#).unwrap();
         let payload = json!({ "options": [{ "comp": slot }], "buildPath": { "value": "code", "toggle": true } });
         let state = json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/", "comps": [slot] });
-        std::fs::write(dir.join(".impeccable/questions/k1.state.json"), state.to_string()).unwrap();
+        std::fs::write(
+            dir.join(".impeccable/questions/k1.state.json"),
+            state.to_string(),
+        )
+        .unwrap();
         write_hand(&qdir, "k1", &new_hand(&cwd, &payload)).unwrap();
         let (_, out) = run_captured(&dir, &["--wait", "--key", "k1", "--poll", "0"]);
         assert!(!out.contains(LINE), "{out}");
@@ -3779,8 +5222,17 @@ mod tests {
         std::fs::write(dir.join(comp), b"png").unwrap();
         std::fs::write(dir.join(format!("{}.json", comp)), r#"{"prompt":"p"}"#).unwrap();
         let state = json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/", "comps": [comp] });
-        std::fs::write(dir.join(".impeccable/questions/k2.state.json"), state.to_string()).unwrap();
-        write_hand(&qdir, "k2", &new_hand(&cwd, &json!({ "options": [{ "comp": comp }] }))).unwrap();
+        std::fs::write(
+            dir.join(".impeccable/questions/k2.state.json"),
+            state.to_string(),
+        )
+        .unwrap();
+        write_hand(
+            &qdir,
+            "k2",
+            &new_hand(&cwd, &json!({ "options": [{ "comp": comp }] })),
+        )
+        .unwrap();
         let (_, out) = run_captured(&dir, &["--wait", "--key", "k2", "--poll", "0"]);
         assert!(!out.contains(LINE), "{out}");
         let _ = std::fs::remove_dir_all(&dir);
@@ -3790,14 +5242,30 @@ mod tests {
     fn update_prints_the_visualize_directive_only_when_comps_are_due() {
         let dir = temp_project("update-next");
         let state = json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" });
-        std::fs::write(dir.join(".impeccable/questions/k1.state.json"), state.to_string()).unwrap();
-        std::fs::write(dir.join("comp.json"), json!({ "options": [{ "id": "a", "comp": ".impeccable/mocks/decision/a.png" }] }).to_string()).unwrap();
-        let (code, out) = run_captured(&dir, &["--update", "--key", "k1", "--payload", "comp.json"]);
+        std::fs::write(
+            dir.join(".impeccable/questions/k1.state.json"),
+            state.to_string(),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("comp.json"),
+            json!({ "options": [{ "id": "a", "comp": ".impeccable/mocks/decision/a.png" }] })
+                .to_string(),
+        )
+        .unwrap();
+        let (code, out) =
+            run_captured(&dir, &["--update", "--key", "k1", "--payload", "comp.json"]);
         let out = out.replace('\\', "/");
         assert_eq!(code, 0);
-        assert_eq!(out.lines().next(), Some("next round delivered; the page reloads itself"));
+        assert_eq!(
+            out.lines().next(),
+            Some("next round delivered; the page reloads itself")
+        );
         let next = out.lines().nth(1).unwrap();
-        assert!(next.starts_with("NEXT read ") && next.contains("/skill/reference/visualize.md now"), "{out}");
+        assert!(
+            next.starts_with("NEXT read ") && next.contains("/skill/reference/visualize.md now"),
+            "{out}"
+        );
 
         std::fs::write(dir.join("code.json"), json!({ "options": [{ "id": "a", "comp": ".impeccable/mocks/decision/a.png" }], "buildPath": { "value": "code", "toggle": true } }).to_string()).unwrap();
         let (_, out) = run_captured(&dir, &["--update", "--key", "k1", "--payload", "code.json"]);
@@ -3810,8 +5278,16 @@ mod tests {
 
         // A comp round serves comps already on disk directly in mocks/: no NEXT line.
         write_file(&dir.join(".impeccable/mocks/comp-a.png"), b"comp");
-        std::fs::write(dir.join("round.json"), json!({ "options": [{ "id": "a", "comp": ".impeccable/mocks/comp-a.png" }] }).to_string()).unwrap();
-        let (_, out) = run_captured(&dir, &["--update", "--key", "k1", "--payload", "round.json"]);
+        std::fs::write(
+            dir.join("round.json"),
+            json!({ "options": [{ "id": "a", "comp": ".impeccable/mocks/comp-a.png" }] })
+                .to_string(),
+        )
+        .unwrap();
+        let (_, out) = run_captured(
+            &dir,
+            &["--update", "--key", "k1", "--payload", "round.json"],
+        );
         assert_eq!(out, "next round delivered; the page reloads itself\n");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -3820,29 +5296,57 @@ mod tests {
     fn flip_to_comp_puts_visualize_in_front_of_the_comps() {
         let dir = temp_project("flip-next");
         let state = json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/" });
-        std::fs::write(dir.join(".impeccable/questions/k1.state.json"), state.to_string()).unwrap();
-        std::fs::write(dir.join(".impeccable/questions/k1.flip.json"), r#"{"buildPath":"comp"}"#).unwrap();
+        std::fs::write(
+            dir.join(".impeccable/questions/k1.state.json"),
+            state.to_string(),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join(".impeccable/questions/k1.flip.json"),
+            r#"{"buildPath":"comp"}"#,
+        )
+        .unwrap();
         let (code, out) = run_captured(&dir, &["--wait", "--key", "k1", "--poll", "2"]);
         let out = out.replace('\\', "/");
         assert_eq!(code, 0);
         let lines: Vec<&str> = out.lines().collect();
         assert!(lines[0].starts_with("BUILD PATH FLIPPED: comp"), "{out}");
-        assert!(lines[1].starts_with("NEXT read ") && lines[1].contains("/skill/reference/visualize.md now"), "{out}");
+        assert!(
+            lines[1].starts_with("NEXT read ")
+                && lines[1].contains("/skill/reference/visualize.md now"),
+            "{out}"
+        );
 
         // A flip whose recorded comps all landed owes no new prompt.
         std::fs::write(dir.join(".impeccable/mocks/decision/a.png"), b"png").unwrap();
         let state = json!({ "pid": std::process::id(), "port": 1, "url": "http://127.0.0.1:1/", "comps": [".impeccable/mocks/decision/a.png"] });
-        std::fs::write(dir.join(".impeccable/questions/k1.state.json"), state.to_string()).unwrap();
-        std::fs::write(dir.join(".impeccable/questions/k1.flip.json"), r#"{"buildPath":"comp"}"#).unwrap();
+        std::fs::write(
+            dir.join(".impeccable/questions/k1.state.json"),
+            state.to_string(),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join(".impeccable/questions/k1.flip.json"),
+            r#"{"buildPath":"comp"}"#,
+        )
+        .unwrap();
         let (_, out) = run_captured(&dir, &["--wait", "--key", "k1", "--poll", "2"]);
-        assert!(out.starts_with("BUILD PATH FLIPPED: comp") && !out.contains("NEXT"), "{out}");
+        assert!(
+            out.starts_with("BUILD PATH FLIPPED: comp") && !out.contains("NEXT"),
+            "{out}"
+        );
 
         // The file that sat at the slot when the hand began is not this hand's
         // comp: still owed.
         let qdir = jsp::join(&[&dir.to_string_lossy(), ".impeccable", "questions"]);
-        let payload = json!({ "options": [{ "id": "a", "comp": ".impeccable/mocks/decision/a.png" }] });
+        let payload =
+            json!({ "options": [{ "id": "a", "comp": ".impeccable/mocks/decision/a.png" }] });
         write_hand(&qdir, "k1", &new_hand(&dir.to_string_lossy(), &payload)).unwrap();
-        std::fs::write(dir.join(".impeccable/questions/k1.flip.json"), r#"{"buildPath":"comp"}"#).unwrap();
+        std::fs::write(
+            dir.join(".impeccable/questions/k1.flip.json"),
+            r#"{"buildPath":"comp"}"#,
+        )
+        .unwrap();
         let (_, out) = run_captured(&dir, &["--wait", "--key", "k1", "--poll", "2"]);
         assert!(out.contains("\nNEXT read "), "{out}");
         let _ = std::fs::remove_dir_all(&dir);
@@ -3882,44 +5386,107 @@ mod tests {
     fn reject_detached_post_requires_key_then_origin() {
         // No detached key: no key check, origin still gated.
         assert_eq!(reject_detached_post(None, None, "", 4321), None);
-        assert_eq!(reject_detached_post(None, Some("https://evil.example"), "", 4321), Some(403));
+        assert_eq!(
+            reject_detached_post(None, Some("https://evil.example"), "", 4321),
+            Some(403)
+        );
         // Detached: missing or wrong key is 401 before any origin look.
-        assert_eq!(reject_detached_post(Some("seckey"), None, "", 4321), Some(401));
-        assert_eq!(reject_detached_post(Some("seckey"), None, "key=wrong", 4321), Some(401));
-        assert_eq!(reject_detached_post(Some("seckey"), Some("https://evil.example"), "", 4321), Some(401));
+        assert_eq!(
+            reject_detached_post(Some("seckey"), None, "", 4321),
+            Some(401)
+        );
+        assert_eq!(
+            reject_detached_post(Some("seckey"), None, "key=wrong", 4321),
+            Some(401)
+        );
+        assert_eq!(
+            reject_detached_post(Some("seckey"), Some("https://evil.example"), "", 4321),
+            Some(401)
+        );
         // Right key, bad origin: 403.
-        assert_eq!(reject_detached_post(Some("seckey"), Some("https://evil.example"), "key=seckey", 4321), Some(403));
+        assert_eq!(
+            reject_detached_post(
+                Some("seckey"),
+                Some("https://evil.example"),
+                "key=seckey",
+                4321
+            ),
+            Some(403)
+        );
         // Right key, no or loopback origin: allowed.
-        assert_eq!(reject_detached_post(Some("seckey"), None, "key=seckey", 4321), None);
-        assert_eq!(reject_detached_post(Some("seckey"), Some("http://127.0.0.1:4321"), "key=seckey", 4321), None);
+        assert_eq!(
+            reject_detached_post(Some("seckey"), None, "key=seckey", 4321),
+            None
+        );
+        assert_eq!(
+            reject_detached_post(
+                Some("seckey"),
+                Some("http://127.0.0.1:4321"),
+                "key=seckey",
+                4321
+            ),
+            None
+        );
         // Percent-encoded keys decode the way URLSearchParams does.
-        assert_eq!(reject_detached_post(Some("a b"), None, "key=a%20b", 4321), None);
-        assert_eq!(reject_detached_post(Some("a b"), None, "key=a+b", 4321), None);
+        assert_eq!(
+            reject_detached_post(Some("a b"), None, "key=a%20b", 4321),
+            None
+        );
+        assert_eq!(
+            reject_detached_post(Some("a b"), None, "key=a+b", 4321),
+            None
+        );
     }
 
     #[test]
     fn parse_request_url_matches_new_url_semantics() {
         assert_eq!(parse_request_url("/"), Some(("/".into(), String::new())));
-        assert_eq!(parse_request_url("/answer"), Some(("/answer".into(), String::new())));
-        assert_eq!(parse_request_url("/answer?key=tk"), Some(("/answer".into(), "key=tk".into())));
-        assert_eq!(parse_request_url("/img/3"), Some(("/img/3".into(), String::new())));
-        assert_eq!(parse_request_url("/img/3?x=1"), Some(("/img/3".into(), "x=1".into())));
+        assert_eq!(
+            parse_request_url("/answer"),
+            Some(("/answer".into(), String::new()))
+        );
+        assert_eq!(
+            parse_request_url("/answer?key=tk"),
+            Some(("/answer".into(), "key=tk".into()))
+        );
+        assert_eq!(
+            parse_request_url("/img/3"),
+            Some(("/img/3".into(), String::new()))
+        );
+        assert_eq!(
+            parse_request_url("/img/3?x=1"),
+            Some(("/img/3".into(), "x=1".into()))
+        );
         // Protocol-relative target with an empty host: the URL ctor throws -> 400.
         assert_eq!(parse_request_url("//"), None);
         assert_eq!(parse_request_url("//evil host/x"), None);
         // Dot segments normalize like the URL parser.
-        assert_eq!(parse_request_url("/x/../answer"), Some(("/answer".into(), String::new())));
+        assert_eq!(
+            parse_request_url("/x/../answer"),
+            Some(("/answer".into(), String::new()))
+        );
     }
 
     /// A stand-in `/api/chosen`: records each body with its client header.
-    fn chosen_api() -> (String, std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>) {
+    fn chosen_api() -> (
+        String,
+        std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>,
+    ) {
         let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
-        let base = format!("http://127.0.0.1:{}/api", server.server_addr().to_ip().unwrap().port());
+        let base = format!(
+            "http://127.0.0.1:{}/api",
+            server.server_addr().to_ip().unwrap().port()
+        );
         let seen: std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>> = Default::default();
         let log = seen.clone();
         std::thread::spawn(move || {
             for mut req in server.incoming_requests() {
-                let header = req.headers().iter().find(|h| h.field.equiv("X-Impeccable-Client")).map(|h| h.value.as_str().to_string()).unwrap_or_default();
+                let header = req
+                    .headers()
+                    .iter()
+                    .find(|h| h.field.equiv("X-Impeccable-Client"))
+                    .map(|h| h.value.as_str().to_string())
+                    .unwrap_or_default();
                 let mut body = String::new();
                 let _ = std::io::Read::read_to_string(req.as_reader(), &mut body);
                 log.lock().unwrap().push((header, body));
@@ -3934,12 +5501,22 @@ mod tests {
     /// A re-roll answer keeps the page open, so its server thread is left
     /// running (`--timeout 0`, no heartbeat: it never exits the test process)
     /// and this returns 0 once the answer is accepted.
-    fn answer_on_page(dir: &std::path::Path, payload: &Value, option: &str, extra_env: &[(&str, &str)]) -> i32 {
+    fn answer_on_page(
+        dir: &std::path::Path,
+        payload: &Value,
+        option: &str,
+        extra_env: &[(&str, &str)],
+    ) -> i32 {
         let qdir = dir.join(".impeccable/questions");
         let _ = std::fs::remove_file(qdir.join("pk.state.json"));
         std::fs::write(dir.join("payload.json"), payload.to_string()).unwrap();
         let home = dir.join("home").to_string_lossy().into_owned();
-        let mut env = Env::from([("IMPECCABLE_SELF".to_string(), "impeccable".to_string()), ("IMPECCABLE_SEED_SALT".to_string(), "test-salt".to_string()), ("HOME".to_string(), home.clone()), ("USERPROFILE".to_string(), home)]);
+        let mut env = Env::from([
+            ("IMPECCABLE_SELF".to_string(), "impeccable".to_string()),
+            ("IMPECCABLE_SEED_SALT".to_string(), "test-salt".to_string()),
+            ("HOME".to_string(), home.clone()),
+            ("USERPROFILE".to_string(), home),
+        ]);
         for (k, v) in extra_env {
             env.insert(k.to_string(), v.to_string());
         }
@@ -3947,18 +5524,34 @@ mod tests {
         let server = std::thread::spawn(move || {
             let (mut io, _cap) = Io::captured("", cwd, env);
             // --timeout 0: the lifetime watchdog never fires in the test process.
-            let argv: Vec<String> = ["--payload", "payload.json", "--detached-serve", "--key", "pk", "--timeout", "0", "--no-open"].iter().map(|s| s.to_string()).collect();
+            let argv: Vec<String> = [
+                "--payload",
+                "payload.json",
+                "--detached-serve",
+                "--key",
+                "pk",
+                "--timeout",
+                "0",
+                "--no-open",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
             run(&argv, &mut io)
         });
         let deadline = now_ms() + 5000.0;
         let port = loop {
-            if let Some(p) = read_state(&qdir.to_string_lossy(), "pk").and_then(|s| s.get("port").and_then(Value::as_u64)) {
+            if let Some(p) = read_state(&qdir.to_string_lossy(), "pk")
+                .and_then(|s| s.get("port").and_then(Value::as_u64))
+            {
                 break p;
             }
             assert!(now_ms() < deadline, "server never wrote its state");
             sleep_ms(20);
         };
-        ureq::post(&format!("http://127.0.0.1:{}/answer?key=pk", port)).send_string(&json!({ "optionId": option }).to_string()).unwrap();
+        ureq::post(&format!("http://127.0.0.1:{}/answer?key=pk", port))
+            .send_string(&json!({ "optionId": option }).to_string())
+            .unwrap();
         if option == "reroll" {
             return 0;
         }
@@ -3972,17 +5565,39 @@ mod tests {
     fn a_burst_of_connections_is_fully_served() {
         let dir = temp_project("burst");
         let qdir = dir.join(".impeccable/questions");
-        let payload = json!({ "options": [{ "id": "a", "label": "A" }, { "id": "b", "label": "B" }] });
+        let payload =
+            json!({ "options": [{ "id": "a", "label": "A" }, { "id": "b", "label": "B" }] });
         std::fs::write(dir.join("payload.json"), payload.to_string()).unwrap();
         let cwd = dir.clone();
         let server = std::thread::spawn(move || {
-            let (mut io, _cap) = Io::captured("", cwd, Env::from([("IMPECCABLE_SELF".to_string(), "impeccable".to_string()), ("IMPECCABLE_NO_TELEMETRY".to_string(), "1".to_string())]));
-            let argv: Vec<String> = ["--payload", "payload.json", "--detached-serve", "--key", "pk", "--timeout", "0", "--no-open"].iter().map(|s| s.to_string()).collect();
+            let (mut io, _cap) = Io::captured(
+                "",
+                cwd,
+                Env::from([
+                    ("IMPECCABLE_SELF".to_string(), "impeccable".to_string()),
+                    ("IMPECCABLE_NO_TELEMETRY".to_string(), "1".to_string()),
+                ]),
+            );
+            let argv: Vec<String> = [
+                "--payload",
+                "payload.json",
+                "--detached-serve",
+                "--key",
+                "pk",
+                "--timeout",
+                "0",
+                "--no-open",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
             run(&argv, &mut io)
         });
         let deadline = now_ms() + 5000.0;
         let port = loop {
-            if let Some(p) = read_state(&qdir.to_string_lossy(), "pk").and_then(|s| s.get("port").and_then(Value::as_u64)) {
+            if let Some(p) = read_state(&qdir.to_string_lossy(), "pk")
+                .and_then(|s| s.get("port").and_then(Value::as_u64))
+            {
                 break p as u16;
             }
             assert!(now_ms() < deadline, "server never wrote its state");
@@ -3991,9 +5606,15 @@ mod tests {
         let addr: std::net::SocketAddr = ([127, 0, 0, 1], port).into();
         let request = format!("GET /img/0 HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
         for _ in 0..3 {
-            assert_eq!(impeccable_common::http::burst_answered(addr, request.as_bytes(), 4, 8), 8, "connections stranded");
+            assert_eq!(
+                impeccable_common::http::burst_answered(addr, request.as_bytes(), 4, 8),
+                8,
+                "connections stranded"
+            );
         }
-        ureq::post(&format!("http://127.0.0.1:{}/answer?key=pk", port)).send_string(&json!({ "optionId": "a" }).to_string()).unwrap();
+        ureq::post(&format!("http://127.0.0.1:{}/answer?key=pk", port))
+            .send_string(&json!({ "optionId": "a" }).to_string())
+            .unwrap();
         assert_eq!(server.join().unwrap(), 0);
     }
 
@@ -4001,7 +5622,10 @@ mod tests {
     fn the_page_sends_the_choice_ping_itself_and_the_agent_rerun_becomes_a_no_op() {
         let dir = temp_project("picker-ping");
         let cwd = dir.to_string_lossy().to_string();
-        let qdir = dir.join(".impeccable/questions").to_string_lossy().to_string();
+        let qdir = dir
+            .join(".impeccable/questions")
+            .to_string_lossy()
+            .to_string();
         let worlds = json!([
             { "id": "teletext-service", "board": "https://cards.test/teletext-service.webp", "hero": "https://cards.test/teletext-service-hero.webp" },
             { "id": "microfiche-reader", "board": "https://cards.test/microfiche-reader.webp", "hero": "https://cards.test/microfiche-reader-hero.webp" }
@@ -4013,33 +5637,92 @@ mod tests {
             ],
             "buildPath": { "value": "code", "toggle": true }, "canon": true
         });
-        let round = |n: usize| crate::telemetry::SeedRound { scope: "direction".into(), reroll: n, mode: Some("persuade".into()), pool_revision: Some("0123456789ab".into()), dealt: vec!["teletext-service".into(), "microfiche-reader".into()], ..Default::default() };
+        let round = |n: usize| crate::telemetry::SeedRound {
+            scope: "direction".into(),
+            reroll: n,
+            mode: Some("persuade".into()),
+            pool_revision: Some("0123456789ab".into()),
+            dealt: vec!["teletext-service".into(), "microfiche-reader".into()],
+            ..Default::default()
+        };
         // What concept-seed leaves after an API roll, then what --start does with it.
-        let ledger = crate::telemetry::Ledger::new(&Env::from([("IMPECCABLE_SEED_SALT".to_string(), "test-salt".to_string())]), &cwd);
+        let ledger = crate::telemetry::Ledger::new(
+            &Env::from([("IMPECCABLE_SEED_SALT".to_string(), "test-salt".to_string())]),
+            &cwd,
+        );
         let deal = |n: usize| {
             ledger.record_key("seed-1");
-            record_roll(&cwd, "direction", ledger.reference("seed-1").as_deref(), n, worlds.as_array().unwrap(), Some(&ApiRoll { mode: Some("persuade"), register: None, pool_revision: Some("0123456789ab"), hand_id: Some("00112233445566778899aabbccddeeff") }));
+            record_roll(
+                &cwd,
+                "direction",
+                ledger.reference("seed-1").as_deref(),
+                n,
+                worlds.as_array().unwrap(),
+                Some(&ApiRoll {
+                    mode: Some("persuade"),
+                    register: None,
+                    pool_revision: Some("0123456789ab"),
+                    hand_id: Some("00112233445566778899aabbccddeeff"),
+                }),
+            );
             ledger.record_round("seed-1", &round(n));
             let roll = read_roll(&qdir);
             let _ = std::fs::remove_file(hand_file(&qdir, "pk"));
-            let seed = seed_with_key(roll_seed(roll.as_deref(), &payload), &Env::from([("IMPECCABLE_SEED_SALT".to_string(), "test-salt".to_string())]), &cwd);
+            let seed = seed_with_key(
+                roll_seed(roll.as_deref(), &payload),
+                &Env::from([("IMPECCABLE_SEED_SALT".to_string(), "test-salt".to_string())]),
+                &cwd,
+            );
             assert!(seed.is_some());
-            start_hand(&qdir, "pk", &cwd, &payload, &dealt_worlds(roll.as_deref(), &payload), seed).unwrap();
+            start_hand(
+                &qdir,
+                "pk",
+                &cwd,
+                &payload,
+                &dealt_worlds(roll.as_deref(), &payload),
+                seed,
+            )
+            .unwrap();
         };
         let (base, seen) = chosen_api();
 
         deal(0);
-        assert_eq!(answer_on_page(&dir, &payload, "challenger-teletext", &[("IMPECCABLE_API_URL", &base), ("IMPECCABLE_TELEMETRY_CHANNEL", "test")]), 0);
+        assert_eq!(
+            answer_on_page(
+                &dir,
+                &payload,
+                "challenger-teletext",
+                &[
+                    ("IMPECCABLE_API_URL", &base),
+                    ("IMPECCABLE_TELEMETRY_CHANNEL", "test")
+                ]
+            ),
+            0
+        );
         let got = seen.lock().unwrap().clone();
         assert_eq!(got.len(), 1, "{got:?}");
-        assert_eq!(got[0].0, format!("impeccable/{}+engine test", env!("CARGO_PKG_VERSION")));
+        assert_eq!(
+            got[0].0,
+            format!("impeccable/{}+engine test", env!("CARGO_PKG_VERSION"))
+        );
         let r0 = ledger.round("seed-1", Some(0)).unwrap();
-        assert_eq!(got[0].1, format!(r#"{{"chosenId":"teletext-service","key":"seed-1","scope":"direction","mode":"persuade","kind":"challenger","option":1,"reroll":0,"poolRevision":"0123456789ab","handId":"00112233445566778899aabbccddeeff","pingId":"{}","kindSource":"explicit","source":"picker"}}"#, r0.ping_id.clone().unwrap()));
+        assert_eq!(
+            got[0].1,
+            format!(
+                r#"{{"chosenId":"teletext-service","key":"seed-1","scope":"direction","mode":"persuade","kind":"challenger","option":1,"reroll":0,"poolRevision":"0123456789ab","handId":"00112233445566778899aabbccddeeff","pingId":"{}","kindSource":"explicit","source":"picker"}}"#,
+                r0.ping_id.clone().unwrap()
+            )
+        );
         assert_eq!(r0.recorded.as_deref(), Some("picker"));
         // The agent's rerun for the same round sends nothing.
         let home = dir.join("home").to_string_lossy().into_owned();
         let agent = |extra: &[(&str, &str)], args: &[&str]| -> String {
-            let mut e = Env::from([("IMPECCABLE_API_URL".to_string(), base.clone()), ("IMPECCABLE_SEED_SALT".to_string(), "test-salt".to_string()), ("HOME".to_string(), home.clone()), ("USERPROFILE".to_string(), home.clone())]);
+            let mut e = Env::from([
+                ("IMPECCABLE_API_URL".to_string(), base.clone()),
+                ("IMPECCABLE_SEED_SALT".to_string(), "test-salt".to_string()),
+                ("HOME".to_string(), home.clone()),
+                ("USERPROFILE".to_string(), home.clone()),
+            ]);
             for (k, v) in extra {
                 e.insert(k.to_string(), v.to_string());
             }
@@ -4049,7 +5732,22 @@ mod tests {
             let out = String::from_utf8(cap.stdout.borrow().clone()).unwrap();
             out
         };
-        assert_eq!(agent(&[], &["--kind", "challenger", "--chosen", "teletext-service", "--from", "seed-1", "--scope", "direction"]), "choice already recorded\n");
+        assert_eq!(
+            agent(
+                &[],
+                &[
+                    "--kind",
+                    "challenger",
+                    "--chosen",
+                    "teletext-service",
+                    "--from",
+                    "seed-1",
+                    "--scope",
+                    "direction"
+                ]
+            ),
+            "choice already recorded\n"
+        );
         assert_eq!(seen.lock().unwrap().len(), 1);
 
         // A send still pending: the rerun waits, and a confirmation makes it a no-op.
@@ -4059,23 +5757,71 @@ mod tests {
             let cwd = cwd.clone();
             std::thread::spawn(move || {
                 sleep_ms(300);
-                crate::telemetry::Ledger::new(&Env::from([("IMPECCABLE_SEED_SALT".to_string(), "test-salt".to_string())]), &cwd).confirm("seed-1", 4, "picker", claimed.ping_id.as_deref());
+                crate::telemetry::Ledger::new(
+                    &Env::from([("IMPECCABLE_SEED_SALT".to_string(), "test-salt".to_string())]),
+                    &cwd,
+                )
+                .confirm("seed-1", 4, "picker", claimed.ping_id.as_deref());
             })
         };
-        assert_eq!(agent(&[], &["--kind", "assigned", "--from", "seed-1", "--scope", "direction", "--reroll", "4"]), "choice already recorded\n");
+        assert_eq!(
+            agent(
+                &[],
+                &[
+                    "--kind",
+                    "assigned",
+                    "--from",
+                    "seed-1",
+                    "--scope",
+                    "direction",
+                    "--reroll",
+                    "4"
+                ]
+            ),
+            "choice already recorded\n"
+        );
         confirm.join().unwrap();
         assert_eq!(seen.lock().unwrap().len(), 1);
         // One that never resolves: past the deadline the rerun sends, under the same pingId.
         deal(5);
         let pending = ledger.claim("seed-1", 5).unwrap();
-        assert_eq!(agent(&[("IMPECCABLE_API_TIMEOUT", "300")], &["--kind", "assigned", "--from", "seed-1", "--scope", "direction", "--reroll", "5"]), "choice recorded\n");
-        assert!(seen.lock().unwrap().last().unwrap().1.contains(&format!(r#""pingId":"{}""#, pending.ping_id.unwrap())));
-        assert_eq!(ledger.round("seed-1", Some(5)).unwrap().recorded.as_deref(), Some("agent"));
+        assert_eq!(
+            agent(
+                &[("IMPECCABLE_API_TIMEOUT", "300")],
+                &[
+                    "--kind",
+                    "assigned",
+                    "--from",
+                    "seed-1",
+                    "--scope",
+                    "direction",
+                    "--reroll",
+                    "5"
+                ]
+            ),
+            "choice recorded\n"
+        );
+        assert!(seen
+            .lock()
+            .unwrap()
+            .last()
+            .unwrap()
+            .1
+            .contains(&format!(r#""pingId":"{}""#, pending.ping_id.unwrap())));
+        assert_eq!(
+            ledger.round("seed-1", Some(5)).unwrap().recorded.as_deref(),
+            Some("agent")
+        );
 
         // Opted out: no ping and no mark, so nothing claims the round.
         let sent_before = seen.lock().unwrap().len();
         deal(1);
-        answer_on_page(&dir, &payload, "assigned", &[("IMPECCABLE_API_URL", &base), ("DO_NOT_TRACK", "1")]);
+        answer_on_page(
+            &dir,
+            &payload,
+            "assigned",
+            &[("IMPECCABLE_API_URL", &base), ("DO_NOT_TRACK", "1")],
+        );
         assert_eq!(seen.lock().unwrap().len(), sent_before);
         assert_eq!(ledger.round("seed-1", Some(1)).unwrap().recorded, None);
 
@@ -4087,32 +5833,66 @@ mod tests {
         while seen.lock().unwrap().len() == sent && now_ms() < deadline {
             sleep_ms(20);
         }
-        while ledger.round("seed-1", Some(3)).unwrap().recorded.as_deref() == Some("pending") && now_ms() < deadline {
+        while ledger.round("seed-1", Some(3)).unwrap().recorded.as_deref() == Some("pending")
+            && now_ms() < deadline
+        {
             sleep_ms(20);
         }
         let r3 = ledger.round("seed-1", Some(3)).unwrap();
-        assert_eq!(seen.lock().unwrap().last().unwrap().1, format!(r#"{{"key":"seed-1","scope":"direction","mode":"persuade","kind":"reroll","reroll":3,"poolRevision":"0123456789ab","handId":"00112233445566778899aabbccddeeff","pingId":"{}","kindSource":"explicit","source":"picker"}}"#, r3.ping_id.clone().unwrap()));
+        assert_eq!(
+            seen.lock().unwrap().last().unwrap().1,
+            format!(
+                r#"{{"key":"seed-1","scope":"direction","mode":"persuade","kind":"reroll","reroll":3,"poolRevision":"0123456789ab","handId":"00112233445566778899aabbccddeeff","pingId":"{}","kindSource":"explicit","source":"picker"}}"#,
+                r3.ping_id.clone().unwrap()
+            )
+        );
         assert_eq!(r3.recorded.as_deref(), Some("picker"));
 
         // A ping that cannot leave the machine clears its mark for the agent's rerun.
         deal(2);
-        answer_on_page(&dir, &payload, "assigned", &[("IMPECCABLE_API_URL", "http://127.0.0.1:9/api"), ("IMPECCABLE_API_TIMEOUT", "300")]);
+        answer_on_page(
+            &dir,
+            &payload,
+            "assigned",
+            &[
+                ("IMPECCABLE_API_URL", "http://127.0.0.1:9/api"),
+                ("IMPECCABLE_API_TIMEOUT", "300"),
+            ],
+        );
         assert_eq!(ledger.round("seed-1", Some(2)).unwrap().recorded, None);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn only_an_api_roll_seeds_the_hand() {
-        let page = json!({ "options": [{ "id": "a" }], "buildPath": { "value": "comp", "toggle": true } });
+        let page =
+            json!({ "options": [{ "id": "a" }], "buildPath": { "value": "comp", "toggle": true } });
         let record = |extra: Value| {
-            let mut r = json!({ "scope": "surface", "key": "k", "reroll": 1, "at": now_ms() as u64 });
-            r.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            let mut r =
+                json!({ "scope": "surface", "key": "k", "reroll": 1, "at": now_ms() as u64 });
+            r.as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
             r.to_string()
         };
-        assert_eq!(roll_seed(Some(&record(json!({}))), &page), None, "a local roll");
-        let api = record(json!({ "source": "api", "poolRevision": "0123456789ab", "mode": "operate" }));
-        assert_eq!(roll_seed(Some(&api), &page), Some(json!({ "key": "k", "scope": "surface", "reroll": 1, "mode": "operate", "poolRevision": "0123456789ab", "source": "api", "dealt": [] })));
-        assert_eq!(roll_seed(Some(&api), &json!({ "options": [{ "id": "a" }] })), None, "a page that takes no roll");
+        assert_eq!(
+            roll_seed(Some(&record(json!({}))), &page),
+            None,
+            "a local roll"
+        );
+        let api =
+            record(json!({ "source": "api", "poolRevision": "0123456789ab", "mode": "operate" }));
+        assert_eq!(
+            roll_seed(Some(&api), &page),
+            Some(
+                json!({ "key": "k", "scope": "surface", "reroll": 1, "mode": "operate", "poolRevision": "0123456789ab", "source": "api", "dealt": [] })
+            )
+        );
+        assert_eq!(
+            roll_seed(Some(&api), &json!({ "options": [{ "id": "a" }] })),
+            None,
+            "a page that takes no roll"
+        );
         let stale = json!({ "scope": "direction", "key": "k", "reroll": 0, "at": (now_ms() - ROLL_WINDOW_MS - 1000.0) as u64, "source": "api" }).to_string();
         assert_eq!(roll_seed(Some(&stale), &page), None);
     }
@@ -4128,13 +5908,22 @@ mod tests {
             std::fs::write(dir.join("p.json"), p.to_string()).unwrap();
             run_captured(&dir, &["--start", "--payload", "p.json", "--no-open"]).0
         };
-        let problems = |p: &Value| card_identity_problems(read_roll(&dir.join(".impeccable/questions").to_string_lossy()).as_deref(), p).0;
+        let problems = |p: &Value| {
+            card_identity_problems(
+                read_roll(&dir.join(".impeccable/questions").to_string_lossy()).as_deref(),
+                p,
+            )
+            .0
+        };
         assert!(problems(&round).is_empty(), "{:?}", problems(&round));
         let mut bad = round.clone();
         bad["options"][0].as_object_mut().unwrap().remove("kind");
         bad["options"][1]["kind"] = json!("favourite");
         bad["options"][2]["catalogId"] = json!("challenger-a");
-        bad["options"][3].as_object_mut().unwrap().remove("catalogId");
+        bad["options"][3]
+            .as_object_mut()
+            .unwrap()
+            .remove("catalogId");
         bad["canonCard"]["kind"] = json!("assigned");
         assert_eq!(
             problems(&bad),
@@ -4148,11 +5937,22 @@ mod tests {
         );
         let mut twice = round.clone();
         twice["options"][1]["kind"] = json!("assigned");
-        assert_eq!(problems(&twice), vec!["model-pick is a second assigned card"]);
+        assert_eq!(
+            problems(&twice),
+            vec!["model-pick is a second assigned card"]
+        );
         // Refused before anything is served, the roll record left in place for the rerun.
         assert_eq!(start(&bad), 1);
         assert!(dir.join(".impeccable/questions/roll.json").exists());
-        let msg = card_identity_message(&problems(&bad), &["print-fillmore-handbill".into(), "broadcast-teletext".into()], "rerun --start", "the page was not served");
+        let msg = card_identity_message(
+            &problems(&bad),
+            &[
+                "print-fillmore-handbill".into(),
+                "broadcast-teletext".into(),
+            ],
+            "rerun --start",
+            "the page was not served",
+        );
         assert!(msg.contains("(dealt this roll: print-fillmore-handbill, broadcast-teletext), never the card's own id. Fix the payload and rerun --start; the page was not served.\n"), "{msg}");
         // Pages that are not direction or surface rounds declare nothing.
         let mut plain = bad.clone();
@@ -4179,16 +5979,31 @@ mod tests {
         record_roll(&cwd, "direction", Some("seed-1"), 0, &[], None);
         assert_eq!(std::fs::read_to_string(&ignore).unwrap(), expected);
         // The roll record names its seed by reference and holds no time.
-        let rec: Value = serde_json::from_str(&std::fs::read_to_string(qdir.join("roll.json")).unwrap()).unwrap();
-        assert!(rec.get("at").is_none() && rec.get("key").is_none() && rec["seed"] == "seed-1", "{rec}");
+        let rec: Value =
+            serde_json::from_str(&std::fs::read_to_string(qdir.join("roll.json")).unwrap())
+                .unwrap();
+        assert!(
+            rec.get("at").is_none() && rec.get("key").is_none() && rec["seed"] == "seed-1",
+            "{rec}"
+        );
         // A hand write restores it too, and leaves an existing one byte-equal.
         std::fs::remove_file(&ignore).unwrap();
-        write_hand(&qdir.to_string_lossy(), "k1", &new_hand(&cwd, &json!({ "options": [{ "id": "a" }] }))).unwrap();
+        write_hand(
+            &qdir.to_string_lossy(),
+            "k1",
+            &new_hand(&cwd, &json!({ "options": [{ "id": "a" }] })),
+        )
+        .unwrap();
         assert_eq!(std::fs::read_to_string(&ignore).unwrap(), expected);
         record_roll(&cwd, "direction", Some("seed-1"), 0, &[], None);
         assert_eq!(std::fs::read_to_string(&ignore).unwrap(), expected);
         // Git agrees: nothing under questions/ is offered for a commit.
-        let git = |args: &[&str]| std::process::Command::new("git").args(args).current_dir(&dir).output();
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&dir)
+                .output()
+        };
         if git(&["init", "-q"]).is_ok_and(|o| o.status.success()) {
             let out = git(&["status", "--porcelain", "--untracked-files=all"]).unwrap();
             let listed = String::from_utf8_lossy(&out.stdout).to_string();
@@ -4201,7 +6016,12 @@ mod tests {
     fn tracked_runtime_files_get_a_one_time_notice_and_the_roll_record_moves_aside() {
         let dir = temp_project("tracked-runtime");
         let cwd = dir.to_string_lossy().to_string();
-        let git = |args: &[&str]| std::process::Command::new("git").args(args).current_dir(&dir).output();
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&dir)
+                .output()
+        };
         if !git(&["init", "-q"]).is_ok_and(|o| o.status.success()) {
             return; // no git on this machine: nothing to check
         }
@@ -4209,23 +6029,55 @@ mod tests {
         // Outside any tracked runtime file there is no notice.
         assert_eq!(tracked_runtime_notice(&cwd), None);
         // A project that committed roll.json before the directory ignored itself.
-        std::fs::write(qdir.join("roll.json"), r#"{"scope":"direction","key":"old"}"#).unwrap();
+        std::fs::write(
+            qdir.join("roll.json"),
+            r#"{"scope":"direction","key":"old"}"#,
+        )
+        .unwrap();
         git(&["add", "-f", ".impeccable/questions/roll.json"]).unwrap();
         let notice = tracked_runtime_notice(&cwd).expect("a notice");
-        assert!(notice.starts_with("TRACKED RUNTIME FILES: git already tracks 1 file(s)") && notice.contains("`git rm -r --cached .impeccable/questions`"), "{notice}");
+        assert!(
+            notice.starts_with("TRACKED RUNTIME FILES: git already tracks 1 file(s)")
+                && notice.contains("`git rm -r --cached .impeccable/questions`"),
+            "{notice}"
+        );
         assert_eq!(tracked_runtime_notice(&cwd), None, "once per tracked set");
         // The roll record goes to an untracked name, and the tracked file is left as it was.
-        record_roll(&cwd, "direction", Some("seed:0123456789abcdef"), 0, &[], None);
-        assert_eq!(std::fs::read_to_string(qdir.join("roll.json")).unwrap(), r#"{"scope":"direction","key":"old"}"#);
+        record_roll(
+            &cwd,
+            "direction",
+            Some("seed:0123456789abcdef"),
+            0,
+            &[],
+            None,
+        );
+        assert_eq!(
+            std::fs::read_to_string(qdir.join("roll.json")).unwrap(),
+            r#"{"scope":"direction","key":"old"}"#
+        );
         let local = std::fs::read_to_string(qdir.join("roll.local.json")).unwrap();
         assert!(local.contains("seed:0123456789abcdef"), "{local}");
-        assert!(read_roll(&qdir.to_string_lossy()).unwrap().contains("seed:0123456789abcdef"), "the untracked record wins");
+        assert!(
+            read_roll(&qdir.to_string_lossy())
+                .unwrap()
+                .contains("seed:0123456789abcdef"),
+            "the untracked record wins"
+        );
         let status = git(&["status", "--porcelain", "--untracked-files=all"]).unwrap();
         assert!(!String::from_utf8_lossy(&status.stdout).contains("roll.local.json"));
         // Untracked again: the record returns to roll.json and the aside file goes.
         git(&["rm", "-q", "--cached", ".impeccable/questions/roll.json"]).unwrap();
-        record_roll(&cwd, "direction", Some("seed:fedcba9876543210"), 0, &[], None);
-        assert!(std::fs::read_to_string(qdir.join("roll.json")).unwrap().contains("seed:fedcba9876543210"));
+        record_roll(
+            &cwd,
+            "direction",
+            Some("seed:fedcba9876543210"),
+            0,
+            &[],
+            None,
+        );
+        assert!(std::fs::read_to_string(qdir.join("roll.json"))
+            .unwrap()
+            .contains("seed:fedcba9876543210"));
         assert!(!qdir.join("roll.local.json").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }

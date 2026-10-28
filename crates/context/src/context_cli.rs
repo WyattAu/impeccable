@@ -4,7 +4,9 @@ use crate::context::*;
 use crate::jsp;
 use crate::provider::Provider;
 use crate::staleness::{collect_boot_findings, design_sidecar_candidates_for, BootExtras};
-use crate::staleness_notice::{build_staleness_directive, filter_fresh_findings, staleness_check_disabled};
+use crate::staleness_notice::{
+    build_staleness_directive, filter_fresh_findings, staleness_check_disabled,
+};
 use crate::target_args::{has_target_option, parse_target_options, TargetOptions};
 use crate::util::*;
 use impeccable_common::Io;
@@ -36,9 +38,17 @@ pub fn hook_manifests_for(provider_id: &str) -> &'static [&'static str] {
 /// empty. A non-empty CODEX_HOME is exclusive.
 pub fn user_hook_manifest(provider_id: &str, cwd: &str, env: &Env) -> Option<String> {
     match provider_id {
-        "claude-code" => Some(jsp::join(&[&crate::util::homedir(env), ".claude", "settings.json"])),
+        "claude-code" => Some(jsp::join(&[
+            &crate::util::homedir(env),
+            ".claude",
+            "settings.json",
+        ])),
         "codex" | "agents" => Some(match env_nonempty(env, "CODEX_HOME") {
-            Some(root) => std::path::Path::new(cwd).join(root).join("hooks.json").to_string_lossy().into_owned(),
+            Some(root) => std::path::Path::new(cwd)
+                .join(root)
+                .join("hooks.json")
+                .to_string_lossy()
+                .into_owned(),
             None => jsp::join(&[&crate::util::homedir(env), ".codex", "hooks.json"]),
         }),
         _ => None,
@@ -92,7 +102,14 @@ pub fn automatic_hook_mode(ctx: &Ctx, cwd: &str, env: &Env, provider: &Provider)
     if is_native(ctx.platform.as_deref()) {
         return "none";
     }
-    let active_root = jsp::resolve(if ctx.project_root.is_empty() { cwd } else { &ctx.project_root }, &[]);
+    let active_root = jsp::resolve(
+        if ctx.project_root.is_empty() {
+            cwd
+        } else {
+            &ctx.project_root
+        },
+        &[],
+    );
     if !hook_enabled_at(&active_root, env) {
         return "none";
     }
@@ -113,7 +130,11 @@ pub fn automatic_hook_mode(ctx: &Ctx, cwd: &str, env: &Env, provider: &Provider)
             if let Some(raw) = read_json(&jsp::join(&[&root, rel])) {
                 if let Some(h) = raw.get("hooks") {
                     if crate::staleness::js_truthy(h) && value_has_hook_marker(h) {
-                        return if STOP_REVIEW_PROVIDERS.contains(&provider.id.as_str()) { "stop" } else { "per-edit" };
+                        return if STOP_REVIEW_PROVIDERS.contains(&provider.id.as_str()) {
+                            "stop"
+                        } else {
+                            "per-edit"
+                        };
                     }
                 }
             }
@@ -145,7 +166,14 @@ pub fn automatic_hook_mode(ctx: &Ctx, cwd: &str, env: &Env, provider: &Provider)
 /// the checkout's manifest (#1016); any other `.git` does.
 fn hook_manifest_search_roots(ctx: &Ctx, cwd: &str, env: &Env) -> Vec<String> {
     let mut roots: Vec<String> = Vec::new();
-    let mut current = jsp::resolve(if ctx.project_root.is_empty() { cwd } else { &ctx.project_root }, &[]);
+    let mut current = jsp::resolve(
+        if ctx.project_root.is_empty() {
+            cwd
+        } else {
+            &ctx.project_root
+        },
+        &[],
+    );
     let home = jsp::resolve(&crate::util::homedir(env), &[]);
     loop {
         if current == home {
@@ -188,7 +216,14 @@ fn read_build_path_at(root: &str) -> Option<(String, String)> {
 /// root, only an exact `comp` / `code` counts, first root with a value wins.
 pub fn recorded_build_path(ctx: &Ctx, cwd: &str) -> Option<(String, String)> {
     let mut roots: Vec<String> = Vec::new();
-    for r in [if ctx.project_root.is_empty() { cwd } else { &ctx.project_root }, &ctx.repo_root] {
+    for r in [
+        if ctx.project_root.is_empty() {
+            cwd
+        } else {
+            &ctx.project_root
+        },
+        &ctx.repo_root,
+    ] {
         if r.is_empty() {
             continue;
         }
@@ -207,7 +242,11 @@ fn append_build_path_directive(parts: &mut Parts, ctx: &Ctx, cwd: &str) {
 }
 
 fn append_image_gen_directive(parts: &mut Parts, env: &Env, provider: &Provider) {
-    if !env.get("OPENAI_API_KEY").map(|v| !v.is_empty()).unwrap_or(false) {
+    if !env
+        .get("OPENAI_API_KEY")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false)
+    {
         return;
     }
     parts.push([
@@ -238,7 +277,13 @@ fn append_subagent_authorization_directive(parts: &mut Parts) {
     ].join(" "));
 }
 
-fn append_detector_fallback(parts: &mut Parts, ctx: &Ctx, cwd: &str, env: &Env, provider: &Provider) {
+fn append_detector_fallback(
+    parts: &mut Parts,
+    ctx: &Ctx,
+    cwd: &str,
+    env: &Env,
+    provider: &Provider,
+) {
     if automatic_hook_mode(ctx, cwd, env, provider) != "none" {
         return;
     }
@@ -259,7 +304,10 @@ pub fn probe_image_tools(env: &Env) -> Vec<&'static str> {
         .into_iter()
         .filter(|tool| {
             let mut cmd = std::process::Command::new(probe);
-            cmd.arg(tool).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+            cmd.arg(tool)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null());
             if let Some(p) = env.get("PATH") {
                 cmd.env("PATH", p);
             }
@@ -278,7 +326,11 @@ fn append_image_tools_directive(parts: &mut Parts, env: &Env) {
     });
 }
 
-fn project_roots_diagnostic(ctx: &Ctx, options: &TargetOptions, env: &Env) -> (Option<Vec<String>>, Vec<TargetCandidate>) {
+fn project_roots_diagnostic(
+    ctx: &Ctx,
+    options: &TargetOptions,
+    env: &Env,
+) -> (Option<Vec<String>>, Vec<TargetCandidate>) {
     if has_target_option(options) {
         return (None, vec![]);
     }
@@ -296,15 +348,28 @@ fn project_roots_diagnostic(ctx: &Ctx, options: &TargetOptions, env: &Env) -> (O
     (Some(patterns), cands)
 }
 
-fn append_staleness_directive(parts: &mut Parts, ctx: &Ctx, options: &TargetOptions, cwd: &str, env: &Env) {
-    let project_root = if ctx.project_root.is_empty() { cwd.to_string() } else { ctx.project_root.clone() };
+fn append_staleness_directive(
+    parts: &mut Parts,
+    ctx: &Ctx,
+    options: &TargetOptions,
+    cwd: &str,
+    env: &Env,
+) {
+    let project_root = if ctx.project_root.is_empty() {
+        cwd.to_string()
+    } else {
+        ctx.project_root.clone()
+    };
     if staleness_check_disabled(env, &[Some(&project_root), Some(&ctx.repo_root)]) {
         return;
     }
     let abs_cwd = jsp::resolve(cwd, &[]);
     let (patterns, cands) = project_roots_diagnostic(ctx, options, env);
     let extras = BootExtras {
-        abs_design_path: ctx.design_path.as_deref().map(|p| jsp::resolve(&abs_cwd, &[p])),
+        abs_design_path: ctx
+            .design_path
+            .as_deref()
+            .map(|p| jsp::resolve(&abs_cwd, &[p])),
         sidecar_candidates: design_sidecar_candidates_for(&project_root, Some(&ctx.context_dir)),
         project_root_patterns: patterns,
         target_candidates: cands,
@@ -316,29 +381,66 @@ fn append_staleness_directive(parts: &mut Parts, ctx: &Ctx, options: &TargetOpti
     }
 }
 
-fn append_resolved_context(parts: &mut Parts, ctx: &Ctx, options: &TargetOptions, target_exists: Option<bool>, provider: &Provider) {
-    let target_path = if has_target_option(options) { options.target_path.clone() } else { None };
+fn append_resolved_context(
+    parts: &mut Parts,
+    ctx: &Ctx,
+    options: &TargetOptions,
+    target_exists: Option<bool>,
+    provider: &Provider,
+) {
+    let target_path = if has_target_option(options) {
+        options.target_path.clone()
+    } else {
+        None
+    };
     let mut m = Map::new();
     m.insert("targetPath".into(), opt_string(&target_path));
     if target_path.is_some() {
-        m.insert("targetExists".into(), target_exists.map(Value::Bool).unwrap_or(Value::Null));
+        m.insert(
+            "targetExists".into(),
+            target_exists.map(Value::Bool).unwrap_or(Value::Null),
+        );
     }
-    m.insert("projectRoot".into(), Value::String(ctx.project_root.clone()));
+    m.insert(
+        "projectRoot".into(),
+        Value::String(ctx.project_root.clone()),
+    );
     m.insert("repoRoot".into(), Value::String(ctx.repo_root.clone()));
     m.insert("productPath".into(), opt_string(&ctx.product_path));
     m.insert("designPath".into(), opt_string(&ctx.design_path));
-    m.insert("surfaceBriefPath".into(), opt_string(&ctx.surface_brief_path));
-    m.insert("surfaceBriefReason".into(), Value::String(ctx.surface_brief_reason.to_string()));
-    m.insert("surfaceBriefCandidates".into(), serde_json::to_value(&ctx.surface_brief_candidates).unwrap());
-    m.insert("hasVisualImplementation".into(), Value::Bool(ctx.has_visual_implementation));
+    m.insert(
+        "surfaceBriefPath".into(),
+        opt_string(&ctx.surface_brief_path),
+    );
+    m.insert(
+        "surfaceBriefReason".into(),
+        Value::String(ctx.surface_brief_reason.to_string()),
+    );
+    m.insert(
+        "surfaceBriefCandidates".into(),
+        serde_json::to_value(&ctx.surface_brief_candidates).unwrap(),
+    );
+    m.insert(
+        "hasVisualImplementation".into(),
+        Value::Bool(ctx.has_visual_implementation),
+    );
     m.insert("platform".into(), opt_string(&ctx.platform));
-    let full = format!("RESOLVED_CONTEXT:\n{}", json_pretty(&Value::Object(m.clone())));
+    let full = format!(
+        "RESOLVED_CONTEXT:\n{}",
+        json_pretty(&Value::Object(m.clone()))
+    );
     if ctx.surface_brief_candidates.is_empty() {
         parts.push(full);
         return;
     }
-    m.insert("surfaceBriefCandidates".into(), Value::String(candidates_omitted(ctx, provider)));
-    parts.sized(full, format!("RESOLVED_CONTEXT:\n{}", json_pretty(&Value::Object(m))));
+    m.insert(
+        "surfaceBriefCandidates".into(),
+        Value::String(candidates_omitted(ctx, provider)),
+    );
+    parts.sized(
+        full,
+        format!("RESOLVED_CONTEXT:\n{}", json_pretty(&Value::Object(m))),
+    );
 }
 
 fn candidates_omitted(ctx: &Ctx, provider: &Provider) -> String {
@@ -377,12 +479,24 @@ fn append_surface_brief_context(parts: &mut Parts, ctx: &Ctx, provider: &Provide
         provider.verb_cmd("surface-brief")
     );
     parts.sized(
-        format!("{} Candidates:\n{}", head, json_pretty(&serde_json::to_value(&ctx.surface_brief_candidates).unwrap())),
-        format!("{} Candidates: {}.", head, candidates_omitted(ctx, provider)),
+        format!(
+            "{} Candidates:\n{}",
+            head,
+            json_pretty(&serde_json::to_value(&ctx.surface_brief_candidates).unwrap())
+        ),
+        format!(
+            "{} Candidates: {}.",
+            head,
+            candidates_omitted(ctx, provider)
+        ),
     );
 }
 
-fn should_warn_missing_target(ctx: &Ctx, target_provided: bool, target_exists: Option<bool>) -> bool {
+fn should_warn_missing_target(
+    ctx: &Ctx,
+    target_provided: bool,
+    target_exists: Option<bool>,
+) -> bool {
     if ctx.is_monorepo && target_provided && target_exists == Some(false) {
         return true;
     }
@@ -403,11 +517,20 @@ fn build_missing_target_directive(provider: &Provider) -> String {
 fn build_target_selection_directive(sel: &TargetSelection) -> String {
     let mut m = Map::new();
     m.insert("targetPath".into(), Value::Null);
-    m.insert("projectRoot".into(), Value::String(sel.project_root.clone()));
+    m.insert(
+        "projectRoot".into(),
+        Value::String(sel.project_root.clone()),
+    );
     m.insert("repoRoot".into(), Value::String(sel.repo_root.clone()));
-    m.insert("targetCandidates".into(), serde_json::to_value(&sel.target_candidates).unwrap());
+    m.insert(
+        "targetCandidates".into(),
+        serde_json::to_value(&sel.target_candidates).unwrap(),
+    );
     if sel.skipped_non_ui > 0 {
-        m.insert("skippedNonUiWorkspaces".into(), Value::from(sel.skipped_non_ui));
+        m.insert(
+            "skippedNonUiWorkspaces".into(),
+            Value::from(sel.skipped_non_ui),
+        );
     }
     let skipped = if sel.skipped_non_ui > 0 {
         format!(
@@ -428,11 +551,9 @@ fn build_target_selection_directive(sel: &TargetSelection) -> String {
 
 // ─── Update check ──────────────────────────────────────────────────────────
 
-static FRONTMATTER_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?s)^---[ \t]*\r?\n(.*?)\r?\n---(?:[ \t]*\r?\n|[ \t]*$)").unwrap()
-});
-static METADATA_KEY_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^metadata:\s*(?:#.*)?$").unwrap());
+static FRONTMATTER_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?s)^---[ \t]*\r?\n(.*?)\r?\n---(?:[ \t]*\r?\n|[ \t]*$)").unwrap());
+static METADATA_KEY_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^metadata:\s*(?:#.*)?$").unwrap());
 static VERSION_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^version:\s*(.+?)\s*$").unwrap());
 
 /// JS: context.mjs#parseSkillFrontmatterVersion
@@ -455,7 +576,10 @@ pub(crate) fn parse_skill_frontmatter_version(content: &str) -> Option<String> {
         if trimmed_start.is_empty() || trimmed_start.starts_with('#') {
             continue;
         }
-        let indent_text: String = line.chars().take_while(|c| *c == ' ' || *c == '\t').collect();
+        let indent_text: String = line
+            .chars()
+            .take_while(|c| *c == ' ' || *c == '\t')
+            .collect();
         // JS `indentText.replace(/\t/g, '  ').length`.
         let indent = indent_text.replace('\t', "  ").chars().count();
 
@@ -521,7 +645,8 @@ fn update_cache_path(env: &Env) -> String {
 }
 
 fn compare_semver(a: &str, b: &str) -> i64 {
-    let parse = |s: &str| -> Vec<i64> { s.split('.').map(|n| js_parse_int(n).unwrap_or(0)).collect() };
+    let parse =
+        |s: &str| -> Vec<i64> { s.split('.').map(|n| js_parse_int(n).unwrap_or(0)).collect() };
     let pa = parse(a);
     let pb = parse(b);
     for i in 0..pa.len().max(pb.len()) {
@@ -567,7 +692,9 @@ fn fetch_latest_skill_version(env: &Env) -> Option<String> {
     }
     let text = res.into_string().ok()?;
     let data: Value = serde_json::from_str(&text).ok()?;
-    data.get("skills").and_then(|v| v.as_str()).map(|s| s.to_string())
+    data.get("skills")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
 }
 
 fn build_update_directive(local: &str, latest: &str) -> String {
@@ -581,7 +708,11 @@ fn update_check_disabled_by_config(cwd: &str) -> bool {
     let mut value: Option<bool> = None;
     for name in ["config.json", "config.local.json"] {
         if let Some(raw) = read_json(&jsp::join(&[cwd, ".impeccable", name])) {
-            if let Some(b) = raw.as_object().and_then(|o| o.get("updateCheck")).and_then(|v| v.as_bool()) {
+            if let Some(b) = raw
+                .as_object()
+                .and_then(|o| o.get("updateCheck"))
+                .and_then(|v| v.as_bool())
+            {
                 value = Some(b);
             }
         }
@@ -591,7 +722,11 @@ fn update_check_disabled_by_config(cwd: &str) -> bool {
 
 /// JS: computeUpdateDirective()
 pub fn compute_update_directive(cwd: &str, env: &Env, provider: &Provider) -> Option<String> {
-    if env.get("IMPECCABLE_NO_UPDATE_CHECK").map(|v| !v.is_empty()).unwrap_or(false) {
+    if env
+        .get("IMPECCABLE_NO_UPDATE_CHECK")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false)
+    {
         return None;
     }
     if update_check_disabled_by_config(cwd) {
@@ -603,8 +738,13 @@ pub fn compute_update_directive(cwd: &str, env: &Env, provider: &Provider) -> Op
     }
     let now = now_ms();
     let cache_path = update_cache_path(env);
-    let mut cache: Map<String, Value> = read_json(&cache_path).and_then(|v| v.as_object().cloned()).unwrap_or_default();
-    let last_check = cache.get("lastCheck").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let mut cache: Map<String, Value> = read_json(&cache_path)
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default();
+    let last_check = cache
+        .get("lastCheck")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
     if last_check == 0.0 || now - last_check > CHECK_INTERVAL_MS {
         let latest = fetch_latest_skill_version(env);
         cache.insert("lastCheck".into(), Value::from(now as i64));
@@ -615,13 +755,25 @@ pub fn compute_update_directive(cwd: &str, env: &Env, provider: &Provider) -> Op
         }
         write_update_cache(&cache_path, &cache);
     }
-    let latest = cache.get("latestVersion").and_then(|v| v.as_str()).map(|s| s.to_string())?;
+    let latest = cache
+        .get("latestVersion")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())?;
     if latest.is_empty() || compare_semver(&latest, &local) <= 0 {
         return None;
     }
-    let notified = cache.get("notifiedVersion").and_then(|v| v.as_str()).map(|s| s.to_string());
-    let notified_at = cache.get("notifiedAt").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    if notified.as_deref() == Some(latest.as_str()) && notified_at != 0.0 && now - notified_at < RENOTIFY_INTERVAL_MS {
+    let notified = cache
+        .get("notifiedVersion")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let notified_at = cache
+        .get("notifiedAt")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    if notified.as_deref() == Some(latest.as_str())
+        && notified_at != 0.0
+        && now - notified_at < RENOTIFY_INTERVAL_MS
+    {
         return None;
     }
     cache.insert("notifiedVersion".into(), Value::String(latest.clone()));
@@ -637,7 +789,10 @@ fn write_update_cache(path: &str, cache: &Map<String, Value>) {
 
 // ─── native refs ───────────────────────────────────────────────────────────
 
-fn load_native_platform_references(platform: Option<&str>, provider: &Provider) -> Vec<(String, String, String)> {
+fn load_native_platform_references(
+    platform: Option<&str>,
+    provider: &Provider,
+) -> Vec<(String, String, String)> {
     let names: Vec<&str> = match platform {
         Some("adaptive") => vec!["ios", "android"],
         Some("ios") => vec!["ios"],
@@ -715,7 +870,11 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
         };
         let mut parts = Parts(lines.into_iter().map(Part::Text).collect());
         if ctx.has_design {
-            parts.doc("# DESIGN.md".to_string(), ctx.design_path.as_deref().unwrap_or_default(), ctx.design.as_deref().unwrap_or_default());
+            parts.doc(
+                "# DESIGN.md".to_string(),
+                ctx.design_path.as_deref().unwrap_or_default(),
+                ctx.design.as_deref().unwrap_or_default(),
+            );
         }
         append_surface_brief_context(&mut parts, &ctx, &provider);
         append_resolved_context(&mut parts, &ctx, &options, target_exists, &provider);
@@ -736,9 +895,17 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
         return 0;
     }
     let mut parts = Parts::default();
-    parts.doc("# PRODUCT.md".to_string(), ctx.product_path.as_deref().unwrap_or_default(), ctx.product.as_deref().unwrap_or_default());
+    parts.doc(
+        "# PRODUCT.md".to_string(),
+        ctx.product_path.as_deref().unwrap_or_default(),
+        ctx.product.as_deref().unwrap_or_default(),
+    );
     if ctx.has_design {
-        parts.doc("# DESIGN.md".to_string(), ctx.design_path.as_deref().unwrap_or_default(), ctx.design.as_deref().unwrap_or_default());
+        parts.doc(
+            "# DESIGN.md".to_string(),
+            ctx.design_path.as_deref().unwrap_or_default(),
+            ctx.design.as_deref().unwrap_or_default(),
+        );
     }
     append_surface_brief_context(&mut parts, &ctx, &provider);
     append_resolved_context(&mut parts, &ctx, &options, target_exists, &provider);
@@ -757,8 +924,17 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             "WORLD_DISCOVERY_REQUIRED: PRODUCT.md exists but no DESIGN.md or incumbent visual implementation was found. For a new build or redesign, load reference/new-work.md and establish the visual world with the human or structured simulated user before developing the task concept. Scoped fixes to existing code do not need this flow.".to_string()
         });
     }
-    for (name, path, content) in load_native_platform_references(ctx.platform.as_deref(), &provider) {
-        parts.doc(format!("# NATIVE PLATFORM REFERENCE: {} (reference/{}.md)", name.to_uppercase(), name), &path, &content);
+    for (name, path, content) in load_native_platform_references(ctx.platform.as_deref(), &provider)
+    {
+        parts.doc(
+            format!(
+                "# NATIVE PLATFORM REFERENCE: {} (reference/{}.md)",
+                name.to_uppercase(),
+                name
+            ),
+            &path,
+            &content,
+        );
     }
     append_image_tools_directive(&mut parts, &env);
     append_staleness_directive(&mut parts, &ctx, &options, &cwd, &env);
@@ -780,7 +956,10 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
 enum Part {
     Text(String),
     /// Output whose size grows with the project, and the compact stand-in an over-budget run swaps in.
-    Sized { full: String, compact: String },
+    Sized {
+        full: String,
+        compact: String,
+    },
 }
 
 impl Part {
@@ -807,13 +986,21 @@ impl Parts {
     fn doc(&mut self, heading: String, path: &str, body: &str) {
         let body = js_trim(body);
         let pointer = format!("DOCUMENT_NOT_INLINED: {} ({} characters) is omitted here because inlining it would push this output's directives past agent tool-output limits. Read {} in full with your file-read tool before any design decision. Do not rerun `impeccable context` to see it.", path, body.chars().count(), path);
-        self.sized(format!("{}\n\n{}", heading, body), format!("{}\n\n{}", heading, pointer));
+        self.sized(
+            format!("{}\n\n{}", heading, body),
+            format!("{}\n\n{}", heading, pointer),
+        );
     }
 
     /// Joins the parts. Over the budget, the largest sized parts take their compact form, one at a time, so the directives survive agent output truncation.
     fn render(mut self) -> String {
         loop {
-            let out = self.0.iter().map(Part::text).collect::<Vec<_>>().join("\n\n---\n\n");
+            let out = self
+                .0
+                .iter()
+                .map(Part::text)
+                .collect::<Vec<_>>()
+                .join("\n\n---\n\n");
             let largest = self
                 .0
                 .iter()
@@ -841,15 +1028,27 @@ mod skill_version_tests {
     /// Values recorded from origin/main's `parseSkillFrontmatterVersion` (#703).
     #[test]
     fn frontmatter_version_shapes() {
-        assert_eq!(v("---\nname: impeccable\nversion: 4.1.3\n---\n\nbody\n").as_deref(), Some("4.1.3"));
-        assert_eq!(v("---\nname: impeccable\nversion: \"4.1.3\"\n---\n").as_deref(), Some("4.1.3"));
-        assert_eq!(v("---\nname: impeccable\nversion: '4.1.3'\n---\n").as_deref(), Some("4.1.3"));
+        assert_eq!(
+            v("---\nname: impeccable\nversion: 4.1.3\n---\n\nbody\n").as_deref(),
+            Some("4.1.3")
+        );
+        assert_eq!(
+            v("---\nname: impeccable\nversion: \"4.1.3\"\n---\n").as_deref(),
+            Some("4.1.3")
+        );
+        assert_eq!(
+            v("---\nname: impeccable\nversion: '4.1.3'\n---\n").as_deref(),
+            Some("4.1.3")
+        );
         assert_eq!(
             v("---\nname: impeccable\nmetadata:\n  version: 4.1.3\n  argument-hint: \"[t]\"\n---\n").as_deref(),
             Some("4.1.3")
         );
         // A metadata version wins over a legacy top-level one, in either order.
-        assert_eq!(v("---\nversion: 1.0.0\nmetadata:\n  version: 4.1.3\n---\n").as_deref(), Some("4.1.3"));
+        assert_eq!(
+            v("---\nversion: 1.0.0\nmetadata:\n  version: 4.1.3\n---\n").as_deref(),
+            Some("4.1.3")
+        );
         assert_eq!(
             v("---\nmetadata:\n  version: 4.1.3\nname: x\nversion: 2.0.0\n---\n").as_deref(),
             Some("4.1.3")
@@ -859,11 +1058,26 @@ mod skill_version_tests {
             v("---\nmetadata:\n  a:\n    version: 9.9.9\n  version: 4.1.3\n---\n").as_deref(),
             Some("4.1.3")
         );
-        assert_eq!(v("---\nmetadata:\n\tversion: 4.1.3\n---\n").as_deref(), Some("4.1.3"));
-        assert_eq!(v("---\nmetadata: # note\n  version: 4.1.3\n---\n").as_deref(), Some("4.1.3"));
-        assert_eq!(v("---\r\nmetadata:\r\n  version: 4.1.3\r\n---\r\n").as_deref(), Some("4.1.3"));
-        assert_eq!(v("---\n# version: 9.9.9\nversion: 4.1.3\n---\n").as_deref(), Some("4.1.3"));
-        assert_eq!(v("---  \nversion: 4.1.3\n---  \n").as_deref(), Some("4.1.3"));
+        assert_eq!(
+            v("---\nmetadata:\n\tversion: 4.1.3\n---\n").as_deref(),
+            Some("4.1.3")
+        );
+        assert_eq!(
+            v("---\nmetadata: # note\n  version: 4.1.3\n---\n").as_deref(),
+            Some("4.1.3")
+        );
+        assert_eq!(
+            v("---\r\nmetadata:\r\n  version: 4.1.3\r\n---\r\n").as_deref(),
+            Some("4.1.3")
+        );
+        assert_eq!(
+            v("---\n# version: 9.9.9\nversion: 4.1.3\n---\n").as_deref(),
+            Some("4.1.3")
+        );
+        assert_eq!(
+            v("---  \nversion: 4.1.3\n---  \n").as_deref(),
+            Some("4.1.3")
+        );
         assert_eq!(v("version: 4.1.3\n"), None);
         assert_eq!(v("---\nversion:\n---\n"), None);
     }
@@ -877,13 +1091,23 @@ mod output_budget_tests {
     fn over_budget_demotes_the_largest_documents_until_it_fits() {
         let mut parts = Parts::default();
         parts.doc("# PRODUCT.md".into(), "PRODUCT.md", "short product");
-        parts.doc("# DESIGN.md".into(), "DESIGN.md", &"d".repeat(OUTPUT_BUDGET_CHARS));
-        parts.doc("# SURFACE BRIEF (b.md)".into(), "b.md", &"b".repeat(OUTPUT_BUDGET_CHARS - 100));
+        parts.doc(
+            "# DESIGN.md".into(),
+            "DESIGN.md",
+            &"d".repeat(OUTPUT_BUDGET_CHARS),
+        );
+        parts.doc(
+            "# SURFACE BRIEF (b.md)".into(),
+            "b.md",
+            &"b".repeat(OUTPUT_BUDGET_CHARS - 100),
+        );
         parts.push("DIRECTIVE_TAIL".into());
         let out = parts.render();
         assert!(out.chars().count() <= OUTPUT_BUDGET_CHARS);
         assert!(out.starts_with("# PRODUCT.md\n\nshort product\n\n---\n\n# DESIGN.md\n\nDOCUMENT_NOT_INLINED: DESIGN.md (24000 characters)"));
-        assert!(out.contains("# SURFACE BRIEF (b.md)\n\nDOCUMENT_NOT_INLINED: b.md (23900 characters)"));
+        assert!(
+            out.contains("# SURFACE BRIEF (b.md)\n\nDOCUMENT_NOT_INLINED: b.md (23900 characters)")
+        );
         assert!(out.ends_with("\n\n---\n\nDIRECTIVE_TAIL\n"));
     }
 
@@ -891,10 +1115,16 @@ mod output_budget_tests {
     fn over_budget_compacts_oversized_lists_too() {
         let mut parts = Parts::default();
         parts.doc("# DESIGN.md".into(), "DESIGN.md", "small design");
-        parts.sized(format!("CANDIDATES:\n{}", "c".repeat(OUTPUT_BUDGET_CHARS)), "CANDIDATES: omitted".into());
+        parts.sized(
+            format!("CANDIDATES:\n{}", "c".repeat(OUTPUT_BUDGET_CHARS)),
+            "CANDIDATES: omitted".into(),
+        );
         parts.push("DIRECTIVE_TAIL".into());
         let out = parts.render();
-        assert_eq!(out, "# DESIGN.md\n\nsmall design\n\n---\n\nCANDIDATES: omitted\n\n---\n\nDIRECTIVE_TAIL\n");
+        assert_eq!(
+            out,
+            "# DESIGN.md\n\nsmall design\n\n---\n\nCANDIDATES: omitted\n\n---\n\nDIRECTIVE_TAIL\n"
+        );
     }
 
     #[cfg(not(windows))]
@@ -926,7 +1156,10 @@ mod user_scope_hook_tests {
             let root = std::env::temp_dir().join(format!(
                 "impeccable-codex-user-hook-{}-{}",
                 std::process::id(),
-                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
             ));
             let project = root.join("project");
             let home = root.join("home");
@@ -934,10 +1167,17 @@ mod user_scope_hook_tests {
             std::fs::create_dir_all(&home).unwrap();
             let env = Env::from([
                 ("HOME".to_string(), home.to_string_lossy().into_owned()),
-                ("USERPROFILE".to_string(), home.to_string_lossy().into_owned()),
+                (
+                    "USERPROFILE".to_string(),
+                    home.to_string_lossy().into_owned(),
+                ),
                 ("IMPECCABLE_PROVIDER_ID".to_string(), provider.to_string()),
             ]);
-            Self { root, project: project.to_string_lossy().into_owned(), env }
+            Self {
+                root,
+                project: project.to_string_lossy().into_owned(),
+                env,
+            }
         }
 
         fn put(&self, path: &str, body: &str) {
@@ -978,7 +1218,14 @@ mod user_scope_hook_tests {
         for provider in ["codex", "agents"] {
             let mut fixture = UserHookFixture::new(provider);
             fixture.put("custom-home/hooks.json", CODEX_HOOK);
-            fixture.env.insert("CODEX_HOME".to_string(), fixture.root.join("custom-home").to_string_lossy().into_owned());
+            fixture.env.insert(
+                "CODEX_HOME".to_string(),
+                fixture
+                    .root
+                    .join("custom-home")
+                    .to_string_lossy()
+                    .into_owned(),
+            );
             assert_eq!(fixture.mode(), "stop", "{provider}");
         }
     }
@@ -988,15 +1235,26 @@ mod user_scope_hook_tests {
         let mut fixture = UserHookFixture::new("codex");
         // Windows strips trailing spaces from path components, so the
         // edge-space spelling only exists on Unix; both keep an interior one.
-        let home = if cfg!(windows) { "codex home" } else { " codex home " };
+        let home = if cfg!(windows) {
+            "codex home"
+        } else {
+            " codex home "
+        };
         fixture.put(&format!("caller/{home}/hooks.json"), CODEX_HOOK);
-        fixture.env.insert("CODEX_HOME".to_string(), home.to_string());
+        fixture
+            .env
+            .insert("CODEX_HOME".to_string(), home.to_string());
         let cwd = fixture.root.join("caller").to_string_lossy().into_owned();
-        let options = TargetOptions { target_path: Some(fixture.project.clone()) };
+        let options = TargetOptions {
+            target_path: Some(fixture.project.clone()),
+        };
         let ctx = load_context(&cwd, &options, &fixture.env);
         let provider = crate::provider::detect(&fixture.env, &cwd);
         assert_eq!(ctx.project_root, fixture.project);
-        assert_eq!(automatic_hook_mode(&ctx, &cwd, &fixture.env, &provider), "stop");
+        assert_eq!(
+            automatic_hook_mode(&ctx, &cwd, &fixture.env, &provider),
+            "stop"
+        );
     }
 
     #[test]
@@ -1012,7 +1270,14 @@ mod user_scope_hook_tests {
         for provider in ["codex", "agents"] {
             let mut fixture = UserHookFixture::new(provider);
             fixture.put("home/.codex/hooks.json", CODEX_HOOK);
-            fixture.env.insert("CODEX_HOME".to_string(), fixture.root.join("custom-home").to_string_lossy().into_owned());
+            fixture.env.insert(
+                "CODEX_HOME".to_string(),
+                fixture
+                    .root
+                    .join("custom-home")
+                    .to_string_lossy()
+                    .into_owned(),
+            );
             assert_eq!(fixture.mode(), "none", "{provider}: missing directory");
             std::fs::create_dir_all(fixture.root.join("custom-home")).unwrap();
             assert_eq!(fixture.mode(), "none", "{provider}: missing manifest");
@@ -1042,15 +1307,29 @@ mod user_scope_hook_tests {
     fn disabled_project_or_environment_blocks_user_hooks() {
         let mut fixture = UserHookFixture::new("codex");
         fixture.put("home/.codex/hooks.json", CODEX_HOOK);
-        fixture.env.insert("IMPECCABLE_HOOK_DISABLED".to_string(), "yes".to_string());
+        fixture
+            .env
+            .insert("IMPECCABLE_HOOK_DISABLED".to_string(), "yes".to_string());
         assert_eq!(fixture.mode(), "none", "environment disabled");
         fixture.env.remove("IMPECCABLE_HOOK_DISABLED");
-        fixture.put("project/.impeccable/config.json", r#"{"hook":{"enabled":false}}"#);
+        fixture.put(
+            "project/.impeccable/config.json",
+            r#"{"hook":{"enabled":false}}"#,
+        );
         assert_eq!(fixture.mode(), "none", "project disabled");
-        fixture.put("project/.impeccable/config.local.json", r#"{"hook":{"enabled":true}}"#);
+        fixture.put(
+            "project/.impeccable/config.local.json",
+            r#"{"hook":{"enabled":true}}"#,
+        );
         assert_eq!(fixture.mode(), "stop", "local config re-enables hooks");
-        fixture.put("project/.impeccable/config.json", r#"{"hook":{"enabled":true}}"#);
-        fixture.put("project/.impeccable/config.local.json", r#"{"hook":{"enabled":false}}"#);
+        fixture.put(
+            "project/.impeccable/config.json",
+            r#"{"hook":{"enabled":true}}"#,
+        );
+        fixture.put(
+            "project/.impeccable/config.local.json",
+            r#"{"hook":{"enabled":false}}"#,
+        );
         assert_eq!(fixture.mode(), "none", "local config disables hooks");
     }
 
@@ -1058,7 +1337,10 @@ mod user_scope_hook_tests {
     fn home_lifecycle_config_does_not_disable_an_unrelated_project() {
         let fixture = UserHookFixture::new("codex");
         fixture.put("home/.codex/hooks.json", CODEX_HOOK);
-        fixture.put("home/.impeccable/config.json", r#"{"hook":{"enabled":false}}"#);
+        fixture.put(
+            "home/.impeccable/config.json",
+            r#"{"hook":{"enabled":false}}"#,
+        );
         assert_eq!(fixture.mode(), "stop");
     }
 
@@ -1068,7 +1350,14 @@ mod user_scope_hook_tests {
             let mut fixture = UserHookFixture::new(provider);
             fixture.put("home/.codex/hooks.json", CODEX_HOOK);
             fixture.put("custom-home/hooks.json", CODEX_HOOK);
-            fixture.env.insert("CODEX_HOME".to_string(), fixture.root.join("custom-home").to_string_lossy().into_owned());
+            fixture.env.insert(
+                "CODEX_HOME".to_string(),
+                fixture
+                    .root
+                    .join("custom-home")
+                    .to_string_lossy()
+                    .into_owned(),
+            );
             assert_eq!(fixture.mode(), "none", "{provider}");
         }
     }
@@ -1078,7 +1367,10 @@ mod user_scope_hook_tests {
         let fixture = UserHookFixture::new("codex");
         fixture.put("home/.codex/hooks.json", CODEX_HOOK);
         for platform in ["ios", "android", "adaptive"] {
-            fixture.put("project/PRODUCT.md", &format!("# Product\n\n## Platform\n{platform}\n"));
+            fixture.put(
+                "project/PRODUCT.md",
+                &format!("# Product\n\n## Platform\n{platform}\n"),
+            );
             let ctx = load_context(&fixture.project, &TargetOptions::default(), &fixture.env);
             assert_eq!(ctx.platform.as_deref(), Some(platform));
             assert_eq!(fixture.mode(), "none", "{platform}");
@@ -1089,7 +1381,10 @@ mod user_scope_hook_tests {
     fn project_hooks_still_supply_coverage_with_missing_custom_home() {
         let mut fixture = UserHookFixture::new("codex");
         fixture.put("project/.codex/hooks.json", CODEX_HOOK);
-        fixture.env.insert("CODEX_HOME".to_string(), fixture.root.join("missing").to_string_lossy().into_owned());
+        fixture.env.insert(
+            "CODEX_HOME".to_string(),
+            fixture.root.join("missing").to_string_lossy().into_owned(),
+        );
         assert_eq!(fixture.mode(), "stop");
     }
 
@@ -1099,8 +1394,14 @@ mod user_scope_hook_tests {
         let mut fixture = UserHookFixture::new("codex");
         fixture.put("real-home/hooks.json", CODEX_HOOK);
         std::fs::create_dir_all(fixture.root.join("real-home/child")).unwrap();
-        std::os::unix::fs::symlink(fixture.root.join("real-home/child"), fixture.root.join("project/link")).unwrap();
-        fixture.env.insert("CODEX_HOME".to_string(), "link/..".to_string());
+        std::os::unix::fs::symlink(
+            fixture.root.join("real-home/child"),
+            fixture.root.join("project/link"),
+        )
+        .unwrap();
+        fixture
+            .env
+            .insert("CODEX_HOME".to_string(), "link/..".to_string());
         assert_eq!(fixture.mode(), "stop");
     }
 
@@ -1109,7 +1410,10 @@ mod user_scope_hook_tests {
         let root = std::env::temp_dir().join(format!(
             "impeccable-user-hook-context-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         let project = root.join("project");
         let home = root.join("home");
@@ -1191,22 +1495,46 @@ mod worktree_hook_tests {
         };
         let settings = r#"{"hooks":{"PostToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"\"${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/impeccable\" hook"}]}]}}"#;
         put(at(&["main", ".claude", "settings.json"]), settings);
-        put(at(&["main", ".git", "worktrees", "demo", "commondir"]), "../..\n");
-        put(at(&["main", ".git", "worktrees", "ext", "commondir"]), "../..\n");
-        put(at(&["main", ".git", "worktrees", "other", "commondir"]), "../..\n");
-        put(at(&["main", ".claude", "worktrees", "demo", ".git"]), &format!("gitdir: {}\n", at(&["main", ".git", "worktrees", "demo"])));
-        put(at(&["ext", ".git"]), &format!("gitdir: {}\n", at(&["main", ".git", "worktrees", "ext"])));
+        put(
+            at(&["main", ".git", "worktrees", "demo", "commondir"]),
+            "../..\n",
+        );
+        put(
+            at(&["main", ".git", "worktrees", "ext", "commondir"]),
+            "../..\n",
+        );
+        put(
+            at(&["main", ".git", "worktrees", "other", "commondir"]),
+            "../..\n",
+        );
+        put(
+            at(&["main", ".claude", "worktrees", "demo", ".git"]),
+            &format!("gitdir: {}\n", at(&["main", ".git", "worktrees", "demo"])),
+        );
+        put(
+            at(&["ext", ".git"]),
+            &format!("gitdir: {}\n", at(&["main", ".git", "worktrees", "ext"])),
+        );
         // A worktree inside an unrelated repo must not borrow that repo's manifest.
         put(at(&["other", ".claude", "settings.json"]), settings);
         std::fs::create_dir_all(at(&["other", ".git"])).unwrap();
-        put(at(&["other", "wt", ".git"]), &format!("gitdir: {}\n", at(&["main", ".git", "worktrees", "other"])));
+        put(
+            at(&["other", "wt", ".git"]),
+            &format!("gitdir: {}\n", at(&["main", ".git", "worktrees", "other"])),
+        );
         std::fs::create_dir_all(at(&["main", ".git", "modules", "sub"])).unwrap();
-        put(at(&["main", "sub", ".git"]), "gitdir: ../.git/modules/sub\n");
+        put(
+            at(&["main", "sub", ".git"]),
+            "gitdir: ../.git/modules/sub\n",
+        );
 
         let env = Env::from([
             ("HOME".to_string(), tmp.clone()),
             ("USERPROFILE".to_string(), tmp.clone()),
-            ("IMPECCABLE_PROVIDER_ID".to_string(), "claude-code".to_string()),
+            (
+                "IMPECCABLE_PROVIDER_ID".to_string(),
+                "claude-code".to_string(),
+            ),
         ]);
         let provider = crate::provider::detect(&env, &tmp);
         let mode = |dir: String| {
@@ -1223,7 +1551,8 @@ mod worktree_hook_tests {
 
     #[test]
     fn cursor_post_edit_and_unmigrated_gate_both_count_as_per_edit_coverage() {
-        let base = std::env::temp_dir().join(format!("impeccable-cursor-hook-{}", std::process::id()));
+        let base =
+            std::env::temp_dir().join(format!("impeccable-cursor-hook-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let tmp = base.to_string_lossy().into_owned();
         let project = jsp::join(&[&tmp, "proj"]);

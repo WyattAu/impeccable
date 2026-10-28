@@ -16,12 +16,12 @@
 
 pub mod approved_comp;
 pub mod build_phase;
-pub mod completion;
 pub mod comp_diff;
 pub mod comp_spec;
+pub mod completion;
 pub mod displacement;
-mod map_inspection;
 pub mod font_match;
+mod map_inspection;
 mod util;
 
 use impeccable_common::Io;
@@ -39,14 +39,22 @@ pub fn run_comp_diff(argv: &[String], io: &mut Io) -> i32 {
 /// `impeccable font-match ...`. `renderer` supplies the headless-browser
 /// specimen rendering; pass [`font_match::NoRenderer`] where no browser is
 /// available (the catalog/shortlist path owns the ranking then).
-pub fn run_font_match(argv: &[String], io: &mut Io, renderer: &mut dyn font_match::FontRenderer) -> i32 {
+pub fn run_font_match(
+    argv: &[String],
+    io: &mut Io,
+    renderer: &mut dyn font_match::FontRenderer,
+) -> i32 {
     font_match::run(argv, io, renderer)
 }
 
 /// `impeccable build-phase ...`. `organic_scan` is the injected CSS
 /// organic-clip-path scanner (pass [`build_phase::no_organic_scan`] to skip it,
 /// matching the JS degraded path).
-pub fn run_build_phase(argv: &[String], io: &mut Io, organic_scan: build_phase::OrganicScan) -> i32 {
+pub fn run_build_phase(
+    argv: &[String],
+    io: &mut Io,
+    organic_scan: build_phase::OrganicScan,
+) -> i32 {
     build_phase::run(argv, io, organic_scan)
 }
 

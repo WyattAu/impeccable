@@ -83,7 +83,11 @@ fn flagged(findings: &[Finding]) -> Vec<(String, String)> {
         .map(|f| {
             (
                 f.antipattern.clone(),
-                f.extras.get("selector").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                f.extras
+                    .get("selector")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
             )
         })
         .collect()
@@ -94,7 +98,10 @@ fn has(flagged: &[(String, String)], rule: &str, selector: &str) -> bool {
 }
 
 fn hidden(kind: &str, name: &str) -> HiddenOverlay {
-    HiddenOverlay { kind: kind.into(), name: name.into() }
+    HiddenOverlay {
+        kind: kind.into(),
+        name: name.into(),
+    }
 }
 
 const KEEP: ScanOptions = ScanOptions {
@@ -115,11 +122,16 @@ fn a_driver_tour_is_hidden_and_the_page_under_it_scored() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/driver-tour.html");
 
-    let scan = engine.detect_url_scan(&url, &ScanOptions::default()).expect("scan");
+    let scan = engine
+        .detect_url_scan(&url, &ScanOptions::default())
+        .expect("scan");
     let found = flagged(&scan.findings);
     assert!(has(&found, "low-contrast", "#covered-copy"), "{found:#?}");
     assert!(has(&found, "low-contrast", "#covered-cta"), "{found:#?}");
-    assert!(!has(&found, "low-contrast", "#driver-popover-description"), "{found:#?}");
+    assert!(
+        !has(&found, "low-contrast", "#driver-popover-description"),
+        "{found:#?}"
+    );
     for f in &scan.findings {
         assert_eq!(
             f.extras.get("overlaysHidden"),
@@ -130,21 +142,42 @@ fn a_driver_tour_is_hidden_and_the_page_under_it_scored() {
     }
     assert_eq!(
         scan.notes,
-        vec![format!("Hid the driver.js tour on {url} before scanning. Pass --no-overlay-hiding to scan it.")]
+        vec![format!(
+            "Hid the driver.js tour on {url} before scanning. Pass --no-overlay-hiding to scan it."
+        )]
     );
 
     let mut browser = engine.launch().expect("launch");
-    let (_, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
-    let (kept, kept_evidence) =
-        detect_url_evidence(&mut browser, &url, &KEEP, "load", 100, &EvidenceRequest::default()).expect("scan");
+    let (_, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
+    let (kept, kept_evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &KEEP,
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
     let report = evidence.overlays.as_ref().expect("overlay report");
     assert_eq!(report.hidden, vec![hidden("tour", "driver.js")]);
     assert_eq!(
         report.matched,
-        vec![("driver.js".to_string(), vec![".driver-popover".to_string(), "svg.driver-overlay".to_string()])]
+        vec![(
+            "driver.js".to_string(),
+            vec![
+                ".driver-popover".to_string(),
+                "svg.driver-overlay".to_string()
+            ]
+        )]
     );
     assert_eq!(
         report.unlocked,
@@ -159,12 +192,21 @@ fn a_driver_tour_is_hidden_and_the_page_under_it_scored() {
     assert_eq!(report.waited_ms, 0);
     let snapshot = evidence.scan_snapshot.as_deref().unwrap();
     assert!(snapshot.contains("impeccable-overlay-hide"));
-    assert!(!snapshot.contains(r#"["aria-controls","driver-popover-content"]"#), "highlight aria removed");
-    assert!(!snapshot.contains(r#"["class","driver-active driver-fade"]"#), "body classes removed");
+    assert!(
+        !snapshot.contains(r#"["aria-controls","driver-popover-content"]"#),
+        "highlight aria removed"
+    );
+    assert!(
+        !snapshot.contains(r#"["class","driver-active driver-fade"]"#),
+        "body classes removed"
+    );
 
     // Opted out, the tour stays and its popover is scored as the page.
     let shown = flagged(&kept);
-    assert!(has(&shown, "low-contrast", "#driver-popover-description"), "{shown:#?}");
+    assert!(
+        has(&shown, "low-contrast", "#driver-popover-description"),
+        "{shown:#?}"
+    );
     assert!(kept_evidence.overlays.is_none());
 }
 
@@ -174,19 +216,44 @@ fn a_stuck_preloader_is_waited_for_then_hidden() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/preloader-stuck.html");
     let mut browser = engine.launch().expect("launch");
-    let (findings, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
-    let (kept, _) = detect_url_evidence(&mut browser, &url, &KEEP, "load", 100, &EvidenceRequest::default()).expect("scan");
+    let (findings, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
+    let (kept, _) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &KEEP,
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
     let found = flagged(&findings);
     assert!(has(&found, "low-contrast", "#covered-copy"), "{found:#?}");
     let report = evidence.overlays.as_ref().expect("overlay report");
     assert_eq!(report.hidden, vec![hidden("preloader", "div#preloader")]);
-    assert!(report.waited_ms >= impeccable_browser::overlays::PRELOADER_WAIT_MS, "{}", report.waited_ms);
-    assert!(evidence.scan_snapshot.as_deref().unwrap().contains("data-impeccable-hidden"));
+    assert!(
+        report.waited_ms >= impeccable_browser::overlays::PRELOADER_WAIT_MS,
+        "{}",
+        report.waited_ms
+    );
+    assert!(evidence
+        .scan_snapshot
+        .as_deref()
+        .unwrap()
+        .contains("data-impeccable-hidden"));
     // Kept, the white layer covers the copy and it is not scored.
-    assert!(!has(&flagged(&kept), "low-contrast", "#covered-copy"), "{kept:#?}");
+    assert!(
+        !has(&flagged(&kept), "low-contrast", "#covered-copy"),
+        "{kept:#?}"
+    );
 }
 
 /// A loader whose short message mentions entering but offers no way
@@ -197,11 +264,20 @@ fn a_stuck_preloader_that_mentions_entering_is_hidden() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/preloader-enter-text.html");
     let mut browser = engine.launch().expect("launch");
-    let (findings, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
+    let (findings, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
-    assert!(has(&flagged(&findings), "low-contrast", "#covered-copy"), "{findings:#?}");
+    assert!(
+        has(&flagged(&findings), "low-contrast", "#covered-copy"),
+        "{findings:#?}"
+    );
     let report = evidence.overlays.as_ref().expect("overlay report");
     assert_eq!(report.hidden, vec![hidden("preloader", "div#preloader")]);
 }
@@ -212,11 +288,20 @@ fn a_stuck_preloader_clicks_pass_through_is_hidden_too() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/preloader-pass-through.html");
     let mut browser = engine.launch().expect("launch");
-    let (findings, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
+    let (findings, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
-    assert!(has(&flagged(&findings), "low-contrast", "#covered-copy"), "{findings:#?}");
+    assert!(
+        has(&flagged(&findings), "low-contrast", "#covered-copy"),
+        "{findings:#?}"
+    );
     let report = evidence.overlays.as_ref().expect("overlay report");
     assert_eq!(report.hidden, vec![hidden("preloader", "div#preloader")]);
 }
@@ -227,13 +312,22 @@ fn a_stuck_preloaders_scroll_lock_is_undone() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/preloader-locked.html");
     let mut browser = engine.launch().expect("launch");
-    let (_, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
+    let (_, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
     let report = evidence.overlays.as_ref().expect("overlay report");
     assert_eq!(report.hidden, vec![hidden("preloader", "div#preloader")]);
-    assert_eq!(report.unlocked, vec!["body.is-loading", "body style overflow"]);
+    assert_eq!(
+        report.unlocked,
+        vec!["body.is-loading", "body style overflow"]
+    );
 }
 
 #[test]
@@ -242,9 +336,15 @@ fn a_site_modals_scroll_lock_stays_when_a_preloader_is_hidden() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/preloader-locked-modal.html");
     let mut browser = engine.launch().expect("launch");
-    let (_, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
+    let (_, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
     let report = evidence.overlays.as_ref().expect("overlay report");
     assert_eq!(report.hidden, vec![hidden("preloader", "div#preloader")]);
@@ -257,14 +357,27 @@ fn a_preloader_that_clears_is_waited_for_and_nothing_hidden() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/preloader-clears.html");
     let mut browser = engine.launch().expect("launch");
-    let (findings, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
+    let (findings, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
-    assert!(has(&flagged(&findings), "low-contrast", "#covered-copy"), "{findings:#?}");
+    assert!(
+        has(&flagged(&findings), "low-contrast", "#covered-copy"),
+        "{findings:#?}"
+    );
     let report = evidence.overlays.as_ref().expect("overlay report");
     assert!(report.hidden.is_empty(), "{report:?}");
-    assert!(report.waited_ms > 0 && report.waited_ms < impeccable_browser::overlays::PRELOADER_WAIT_MS, "{}", report.waited_ms);
+    assert!(
+        report.waited_ms > 0 && report.waited_ms < impeccable_browser::overlays::PRELOADER_WAIT_MS,
+        "{}",
+        report.waited_ms
+    );
 }
 
 #[test]
@@ -272,10 +385,15 @@ fn a_routing_gate_named_like_a_loader_stays() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/gate.html");
-    let scan = engine.detect_url_scan(&url, &ScanOptions::default()).expect("scan");
+    let scan = engine
+        .detect_url_scan(&url, &ScanOptions::default())
+        .expect("scan");
     let found = flagged(&scan.findings);
     assert!(has(&found, "low-contrast", "#gate-hint"), "{found:#?}");
-    assert!(scan.findings.iter().all(|f| f.extras.get("overlaysHidden").is_none()));
+    assert!(scan
+        .findings
+        .iter()
+        .all(|f| f.extras.get("overlaysHidden").is_none()));
     assert!(scan.notes.is_empty(), "{:?}", scan.notes);
 }
 
@@ -284,10 +402,15 @@ fn a_lovable_badge_is_hidden_and_the_copy_under_it_scored() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/lovable-badge.html");
-    let scan = engine.detect_url_scan(&url, &ScanOptions::default()).expect("scan");
+    let scan = engine
+        .detect_url_scan(&url, &ScanOptions::default())
+        .expect("scan");
     let found = flagged(&scan.findings);
     assert!(has(&found, "low-contrast", "#covered-copy"), "{found:#?}");
-    assert!(!found.iter().any(|(_, s)| s.contains("lovable-badge")), "{found:#?}");
+    assert!(
+        !found.iter().any(|(_, s)| s.contains("lovable-badge")),
+        "{found:#?}"
+    );
     for f in &scan.findings {
         assert_eq!(
             f.extras.get("overlaysHidden"),
@@ -297,21 +420,43 @@ fn a_lovable_badge_is_hidden_and_the_copy_under_it_scored() {
     }
     assert_eq!(
         scan.notes,
-        vec![format!("Hid the Lovable badge on {url} before scanning. Pass --no-overlay-hiding to scan it.")]
+        vec![format!(
+            "Hid the Lovable badge on {url} before scanning. Pass --no-overlay-hiding to scan it."
+        )]
     );
 
     let mut browser = engine.launch().expect("launch");
-    let (_, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
-    let (kept, _) = detect_url_evidence(&mut browser, &url, &KEEP, "load", 100, &EvidenceRequest::default()).expect("scan");
+    let (_, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
+    let (kept, _) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &KEEP,
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
     let report = evidence.overlays.as_ref().expect("overlay report");
     assert_eq!(report.hidden, vec![hidden("badge", "Lovable")]);
-    assert_eq!(report.matched, vec![("Lovable".to_string(), vec!["#lovable-badge".to_string()])]);
+    assert_eq!(
+        report.matched,
+        vec![("Lovable".to_string(), vec!["#lovable-badge".to_string()])]
+    );
     // Kept, the badge's own label is scored as the page's.
     let shown = flagged(&kept);
-    assert!(shown.iter().any(|(_, s)| s.contains("lovable-badge")), "{shown:#?}");
+    assert!(
+        shown.iter().any(|(_, s)| s.contains("lovable-badge")),
+        "{shown:#?}"
+    );
 }
 
 #[test]
@@ -320,17 +465,43 @@ fn a_click_to_enter_splash_is_hidden() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/splash.html");
     let mut browser = engine.launch().expect("launch");
-    let (findings, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
-    let (kept, _) = detect_url_evidence(&mut browser, &url, &KEEP, "load", 100, &EvidenceRequest::default()).expect("scan");
+    let (findings, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
+    let (kept, _) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &KEEP,
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
-    assert!(has(&flagged(&findings), "low-contrast", "#covered-copy"), "{findings:#?}");
+    assert!(
+        has(&flagged(&findings), "low-contrast", "#covered-copy"),
+        "{findings:#?}"
+    );
     let report = evidence.overlays.as_ref().expect("overlay report");
-    assert_eq!(report.hidden, vec![hidden("splash", "div.splash (\"Enter NoteForge \u{2192}\")")]);
+    assert_eq!(
+        report.hidden,
+        vec![hidden(
+            "splash",
+            "div.splash (\"Enter NoteForge \u{2192}\")"
+        )]
+    );
     // Hidden at once: a splash is never waited for.
     assert_eq!(report.waited_ms, 0);
-    assert!(!has(&flagged(&kept), "low-contrast", "#covered-copy"), "{kept:#?}");
+    assert!(
+        !has(&flagged(&kept), "low-contrast", "#covered-copy"),
+        "{kept:#?}"
+    );
 }
 
 #[test]
@@ -338,9 +509,18 @@ fn an_age_gate_stays() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/age-gate.html");
-    let scan = engine.detect_url_scan(&url, &ScanOptions::default()).expect("scan");
-    assert!(!has(&flagged(&scan.findings), "low-contrast", "#covered-copy"), "{:#?}", scan.findings);
-    assert!(scan.findings.iter().all(|f| f.extras.get("overlaysHidden").is_none()));
+    let scan = engine
+        .detect_url_scan(&url, &ScanOptions::default())
+        .expect("scan");
+    assert!(
+        !has(&flagged(&scan.findings), "low-contrast", "#covered-copy"),
+        "{:#?}",
+        scan.findings
+    );
+    assert!(scan
+        .findings
+        .iter()
+        .all(|f| f.extras.get("overlaysHidden").is_none()));
 }
 
 #[test]
@@ -349,14 +529,27 @@ fn an_intro_that_ends_is_waited_for_and_nothing_hidden() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/intro-clears.html");
     let mut browser = engine.launch().expect("launch");
-    let (findings, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
+    let (findings, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
-    assert!(has(&flagged(&findings), "low-contrast", "#covered-copy"), "{findings:#?}");
+    assert!(
+        has(&flagged(&findings), "low-contrast", "#covered-copy"),
+        "{findings:#?}"
+    );
     let report = evidence.overlays.as_ref().expect("overlay report");
     assert!(report.hidden.is_empty(), "{report:?}");
-    assert!(report.waited_ms > 0 && report.waited_ms < impeccable_browser::overlays::PRELOADER_WAIT_MS, "{}", report.waited_ms);
+    assert!(
+        report.waited_ms > 0 && report.waited_ms < impeccable_browser::overlays::PRELOADER_WAIT_MS,
+        "{}",
+        report.waited_ms
+    );
 }
 
 #[test]
@@ -365,14 +558,27 @@ fn an_intro_that_never_ends_is_hidden_after_its_budget() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/intro-stuck.html");
     let mut browser = engine.launch().expect("launch");
-    let (findings, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
+    let (findings, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
-    assert!(has(&flagged(&findings), "low-contrast", "#covered-copy"), "{findings:#?}");
+    assert!(
+        has(&flagged(&findings), "low-contrast", "#covered-copy"),
+        "{findings:#?}"
+    );
     let report = evidence.overlays.as_ref().expect("overlay report");
     assert_eq!(report.hidden, vec![hidden("intro", "div.cine-intro")]);
-    assert!(report.waited_ms >= impeccable_browser::overlays::INTRO_WAIT_MS, "{}", report.waited_ms);
+    assert!(
+        report.waited_ms >= impeccable_browser::overlays::INTRO_WAIT_MS,
+        "{}",
+        report.waited_ms
+    );
 }
 
 /// A named intro whose text is longer than a splash allows and mentions
@@ -383,11 +589,20 @@ fn a_long_named_intro_that_says_enter_is_still_hidden() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/intro-enter-text.html");
     let mut browser = engine.launch().expect("launch");
-    let (findings, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
+    let (findings, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
-    assert!(has(&flagged(&findings), "low-contrast", "#covered-copy"), "{findings:#?}");
+    assert!(
+        has(&flagged(&findings), "low-contrast", "#covered-copy"),
+        "{findings:#?}"
+    );
     let report = evidence.overlays.as_ref().expect("overlay report");
     assert_eq!(report.hidden, vec![hidden("intro", "div.cine-intro")]);
 }
@@ -400,9 +615,15 @@ fn a_long_named_age_gate_stays() {
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/intro-age-gate.html");
     let mut browser = engine.launch().expect("launch");
-    let (_, evidence) =
-        detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-            .expect("scan");
+    let (_, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &ScanOptions::default(),
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("scan");
     browser.close();
     let report = evidence.overlays.as_ref().expect("overlay report");
     assert!(report.hidden.is_empty(), "{report:?}");
@@ -416,12 +637,26 @@ fn heroes_that_are_the_page_stay() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let mut browser = engine.launch().expect("launch");
-    for page in ["stay-landing.html", "stay-curtain.html", "stay-intro-hero.html"] {
+    for page in [
+        "stay-landing.html",
+        "stay-curtain.html",
+        "stay-intro-hero.html",
+    ] {
         let url = format!("http://127.0.0.1:{port}/{page}");
-        let (findings, evidence) =
-            detect_url_evidence(&mut browser, &url, &ScanOptions::default(), "load", 100, &EvidenceRequest::default())
-                .expect("scan");
-        assert!(has(&flagged(&findings), "low-contrast", "#own"), "{page}: {:#?}", flagged(&findings));
+        let (findings, evidence) = detect_url_evidence(
+            &mut browser,
+            &url,
+            &ScanOptions::default(),
+            "load",
+            100,
+            &EvidenceRequest::default(),
+        )
+        .expect("scan");
+        assert!(
+            has(&flagged(&findings), "low-contrast", "#own"),
+            "{page}: {:#?}",
+            flagged(&findings)
+        );
         let report = evidence.overlays.as_ref().expect("overlay report");
         assert!(report.hidden.is_empty(), "{page}: {report:?}");
         assert_eq!(report.waited_ms, 0, "{page}");

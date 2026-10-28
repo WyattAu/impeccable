@@ -57,12 +57,15 @@ fn a_repeated_id_does_not_send_the_pixel_pass_to_a_collapsed_copy() {
     let port = serve(html);
     let engine = BrowserEngine::new(env);
     let url = format!("http://127.0.0.1:{port}/");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     let pixel: Vec<&str> = findings
         .iter()
         .filter(|f| {
             f.antipattern == "low-contrast"
-                && f.extras.get("selector").and_then(|v| v.as_str()) == Some("#flag-scroller-vector-copy")
+                && f.extras.get("selector").and_then(|v| v.as_str())
+                    == Some("#flag-scroller-vector-copy")
         })
         .map(|f| f.snippet.as_str())
         .collect();
@@ -117,12 +120,18 @@ fn a_right_to_left_page_reads_pixels_where_the_text_paints() {
     let port = serve(RTL_VECTOR_PAGE.to_string());
     let engine = BrowserEngine::new(env);
     let url = format!("http://127.0.0.1:{port}/");
-    let options = ScanOptions { viewport: Some((1280, 800)), ..Default::default() };
+    let options = ScanOptions {
+        viewport: Some((1280, 800)),
+        ..Default::default()
+    };
     let findings = engine.detect_url(&url, &options).expect("scan");
     for id in ["#rtl-vector-copy", "#rtl-overflow-copy"] {
         let pixel: Vec<&str> = findings
             .iter()
-            .filter(|f| f.antipattern == "low-contrast" && f.extras.get("selector").and_then(|v| v.as_str()) == Some(id))
+            .filter(|f| {
+                f.antipattern == "low-contrast"
+                    && f.extras.get("selector").and_then(|v| v.as_str()) == Some(id)
+            })
             .map(|f| f.snippet.as_str())
             .collect();
         assert!(

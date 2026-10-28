@@ -175,7 +175,7 @@ pub fn is_kicker_candidate(o: &KickerCandidateInput) -> bool {
         return false;
     }
     let kicker_len = utf16_len(o.kicker_text);
-    if o.kicker_text.is_empty() || kicker_len < 2 || kicker_len > 34 {
+    if o.kicker_text.is_empty() || !(2..=34).contains(&kicker_len) {
         return false;
     }
     if STEP_RE.is_match(o.kicker_text) || TWO_DIGITS_RE.is_match(o.kicker_text) {
@@ -449,8 +449,12 @@ pub fn is_id_like_class(token: &str) -> bool {
 /// box), so the face and `white-space` alone cannot tell a code sample from a
 /// pricing label.
 pub fn reads_as_code(text: &str) -> bool {
-    text.chars()
-        .any(|c| matches!(c, '{' | '}' | '[' | ']' | '<' | '>' | '=' | ';' | '"' | '`' | '\\' | '_'))
+    text.chars().any(|c| {
+        matches!(
+            c,
+            '{' | '}' | '[' | ']' | '<' | '>' | '=' | ';' | '"' | '`' | '\\' | '_'
+        )
+    })
 }
 
 /// Whether a computed `font-family` leads with a monospace face: a generic
@@ -568,10 +572,35 @@ mod tests {
 
     #[test]
     fn reads_as_code_wants_a_character_code_is_written_with() {
-        for code in ["\"data\":", "\"id\": 7,", "},", "{", "<div>", "const x = 1", "published_date", "`npm i`", "a\\b", "items[0]", "run();"] {
+        for code in [
+            "\"data\":",
+            "\"id\": 7,",
+            "},",
+            "{",
+            "<div>",
+            "const x = 1",
+            "published_date",
+            "`npm i`",
+            "a\\b",
+            "items[0]",
+            "run();",
+        ] {
             assert!(reads_as_code(code), "{code}");
         }
-        for label in ["$50/seat", "per Month", "200+", "4.9", "© 2026 VexoAI, Inc.", "Type II", "G2", "v2.0-beta", "don't", "(optional)", "50% off: today", "A / B"] {
+        for label in [
+            "$50/seat",
+            "per Month",
+            "200+",
+            "4.9",
+            "© 2026 VexoAI, Inc.",
+            "Type II",
+            "G2",
+            "v2.0-beta",
+            "don't",
+            "(optional)",
+            "50% off: today",
+            "A / B",
+        ] {
             assert!(!reads_as_code(label), "{label}");
         }
     }
@@ -584,7 +613,10 @@ mod tests {
         assert_eq!(label_size_ceiling(24.0, KICKER_BASE_MAX_PX), 14.0);
         assert_eq!(label_size_ceiling(44.0, KICKER_BASE_MAX_PX), 16.0);
         assert_eq!(label_size_ceiling(0.0, NUMBERED_LABEL_BASE_MAX_PX), 13.0);
-        assert_eq!(label_size_ceiling(f64::NAN, NUMBERED_LABEL_BASE_MAX_PX), 13.0);
+        assert_eq!(
+            label_size_ceiling(f64::NAN, NUMBERED_LABEL_BASE_MAX_PX),
+            13.0
+        );
     }
 
     /// opentrailpaper.com: 15.04px tracked kickers above 44px h2s.
@@ -697,7 +729,9 @@ mod tests {
     fn is_cjk_text_cases() {
         assert!(is_cjk_text("赓续长征精神 奋进复兴征程|福建守护"));
         assert!(is_cjk_text("この段落は日本語の文字組みです"));
-        assert!(is_cjk_text("한국어 문장은 자간을 줄여도 글자 모양이 남습니다"));
+        assert!(is_cjk_text(
+            "한국어 문장은 자간을 줄여도 글자 모양이 남습니다"
+        ));
         assert!(!is_cjk_text("The APIs powering your next feature"));
         assert!(!is_cjk_text(""));
         assert!(!is_cjk_text("משרד ההגנה של דרום קוריאה מסר"));
@@ -753,13 +787,23 @@ mod tests {
         ] {
             assert!(is_monospace_family(family), "{family}");
         }
-        for family in ["\"Monotype Corsiva\", cursive", "Inter, monospace", "system-ui, sans-serif", ""] {
+        for family in [
+            "\"Monotype Corsiva\", cursive",
+            "Inter, monospace",
+            "system-ui, sans-serif",
+            "",
+        ] {
             assert!(!is_monospace_family(family), "{family}");
         }
         assert_eq!(average_glyph_advance_em("plain latin text"), 0.5);
-        assert_eq!(average_glyph_advance_em_at("plain latin text", MONOSPACE_ADVANCE_EM), 0.6);
+        assert_eq!(
+            average_glyph_advance_em_at("plain latin text", MONOSPACE_ADVANCE_EM),
+            0.6
+        );
         // A full-width glyph is an em in either face: one of four.
-        assert!((average_glyph_advance_em_at("ab c漢", 0.6) - (0.6 * 4.0 + 1.0) / 5.0).abs() < 1e-12);
+        assert!(
+            (average_glyph_advance_em_at("ab c漢", 0.6) - (0.6 * 4.0 + 1.0) / 5.0).abs() < 1e-12
+        );
     }
 
     #[test]

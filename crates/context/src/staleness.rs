@@ -23,7 +23,10 @@ impl Finding {
         let mut m = Map::new();
         m.insert("id".into(), Value::String(self.id.clone()));
         m.insert("artifact".into(), Value::String(self.artifact.clone()));
-        m.insert("path".into(), self.path.clone().map(Value::String).unwrap_or(Value::Null));
+        m.insert(
+            "path".into(),
+            self.path.clone().map(Value::String).unwrap_or(Value::Null),
+        );
         m.insert("severity".into(), Value::String(self.severity.to_string()));
         m.insert("summary".into(), Value::String(self.summary.clone()));
         m.insert("fix".into(), Value::String(self.fix.clone()));
@@ -31,15 +34,45 @@ impl Finding {
     }
 }
 
-pub fn finding(id: &str, artifact: &str, path: Option<String>, severity: &'static str, summary: String, fix: String) -> Finding {
-    Finding { id: id.to_string(), artifact: artifact.to_string(), path, severity, summary, fix }
+pub fn finding(
+    id: &str,
+    artifact: &str,
+    path: Option<String>,
+    severity: &'static str,
+    summary: String,
+    fix: String,
+) -> Finding {
+    Finding {
+        id: id.to_string(),
+        artifact: artifact.to_string(),
+        path,
+        severity,
+        summary,
+        fix,
+    }
 }
 
-const KNOWN_CONFIG_KEYS: [&str; 10] =
-    ["hook", "detector", "updateCheck", "stalenessCheck", "projectRoots", "buildPath", "browser", "telemetry", "$schema", "version"];
+const KNOWN_CONFIG_KEYS: [&str; 10] = [
+    "hook",
+    "detector",
+    "updateCheck",
+    "stalenessCheck",
+    "projectRoots",
+    "buildPath",
+    "browser",
+    "telemetry",
+    "$schema",
+    "version",
+];
 const BUILD_PATH_VALUES: [&str; 2] = ["comp", "code"];
 const DIRECTION_WORK_PATHS: [&str; 2] = [".impeccable/surfaces", ".impeccable/mocks/decision"];
-const KNOWN_DETECTOR_KEYS: [&str; 5] = ["ignoreRules", "ignoreFiles", "ignoreValues", "designSystem", "extensions"];
+const KNOWN_DETECTOR_KEYS: [&str; 5] = [
+    "ignoreRules",
+    "ignoreFiles",
+    "ignoreValues",
+    "designSystem",
+    "extensions",
+];
 
 struct NativeEvidence {
     platform: &'static str,
@@ -49,18 +82,29 @@ const NATIVE_EVIDENCE_PATHS: [(&str, &str, &str); 5] = [
     ("pubspec.yaml", "adaptive", "a Flutter pubspec.yaml"),
     ("ios/Podfile", "ios", "an ios/Podfile"),
     ("android/build.gradle", "android", "an android/build.gradle"),
-    ("android/build.gradle.kts", "android", "an android/build.gradle.kts"),
+    (
+        "android/build.gradle.kts",
+        "android",
+        "an android/build.gradle.kts",
+    ),
     ("ios/Runner.xcodeproj", "ios", "an ios/Runner.xcodeproj"),
 ];
 const NATIVE_EVIDENCE_DEPENDENCIES: [(&str, &str, &str); 3] = [
     ("react-native", "adaptive", "a react-native dependency"),
     ("expo", "adaptive", "an expo dependency"),
-    ("@react-native/metro-config", "adaptive", "a React Native metro config dependency"),
+    (
+        "@react-native/metro-config",
+        "adaptive",
+        "a React Native metro config dependency",
+    ),
 ];
 
 /// JS: designSidecarCandidatesFor(projectRoot, contextDir)
 pub fn design_sidecar_candidates_for(project_root: &str, context_dir: Option<&str>) -> Vec<String> {
-    let mut c = vec![jsp::join(&[project_root, ".impeccable", "design.json"]), jsp::join(&[project_root, "DESIGN.json"])];
+    let mut c = vec![
+        jsp::join(&[project_root, ".impeccable", "design.json"]),
+        jsp::join(&[project_root, "DESIGN.json"]),
+    ];
     let ctx_legacy = jsp::join(&[context_dir.unwrap_or(project_root), "DESIGN.json"]);
     if !c.contains(&ctx_legacy) {
         c.push(ctx_legacy);
@@ -69,7 +113,9 @@ pub fn design_sidecar_candidates_for(project_root: &str, context_dir: Option<&st
 }
 
 fn has_section(markdown: &str, heading: &str) -> bool {
-    Regex::new(&format!(r"(?im)^##\s+{}\s*$", regex::escape(heading))).map(|r| r.is_match(markdown)).unwrap_or(false)
+    Regex::new(&format!(r"(?im)^##\s+{}\s*$", regex::escape(heading)))
+        .map(|r| r.is_match(markdown))
+        .unwrap_or(false)
 }
 
 pub fn to_relative(file_path: Option<&str>, root: &str) -> Option<String> {
@@ -83,12 +129,18 @@ pub fn to_relative(file_path: Option<&str>, root: &str) -> Option<String> {
 }
 
 fn wrap_ticks(items: &[String]) -> String {
-    items.iter().map(|k| format!("`{}`", k)).collect::<Vec<_>>().join(", ")
+    items
+        .iter()
+        .map(|k| format!("`{}`", k))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// JS: checkProduct
 pub fn check_product(product: Option<&str>, product_path: &str) -> Vec<Finding> {
-    let Some(product) = product.filter(|p| !p.is_empty()) else { return vec![] };
+    let Some(product) = product.filter(|p| !p.is_empty()) else {
+        return vec![];
+    };
     let mut out = Vec::new();
     for (heading, reason) in PRODUCT_DEPRECATED_SECTIONS {
         if !has_section(product, heading) {
@@ -126,8 +178,12 @@ pub fn check_product(product: Option<&str>, product_path: &str) -> Vec<Finding> 
                 "PRODUCT.md",
                 Some(product_path.to_string()),
                 "route",
-                format!("PRODUCT.md is stamped product-schema {}; the current record is {}.", v, PRODUCT_SCHEMA_VERSION),
-                "Offer `init` to bring the record current, preserving confirmed answers.".to_string(),
+                format!(
+                    "PRODUCT.md is stamped product-schema {}; the current record is {}.",
+                    v, PRODUCT_SCHEMA_VERSION
+                ),
+                "Offer `init` to bring the record current, preserving confirmed answers."
+                    .to_string(),
             ));
         }
     }
@@ -191,7 +247,11 @@ pub fn check_native_platform_evidence(
             platforms.push(e.platform);
         }
     }
-    let suggested = if platforms.len() > 1 || platforms.contains(&"adaptive") { "adaptive" } else { platforms[0] };
+    let suggested = if platforms.len() > 1 || platforms.contains(&"adaptive") {
+        "adaptive"
+    } else {
+        platforms[0]
+    };
     let declared = if platform == Some("web") {
         "PRODUCT.md declares `## Platform: web`"
     } else if product.map(|p| !p.is_empty()).unwrap_or(false) {
@@ -227,10 +287,16 @@ pub fn js_truthy(v: &Value) -> bool {
 }
 
 /// JS: checkDesignSidecar
-pub fn check_design_sidecar(design_path: Option<&str>, sidecar_candidates: &[String], project_root: &str) -> Vec<Finding> {
+pub fn check_design_sidecar(
+    design_path: Option<&str>,
+    sidecar_candidates: &[String],
+    project_root: &str,
+) -> Vec<Finding> {
     let mut out = Vec::new();
     let canonical = sidecar_candidates.first();
-    let Some(present) = sidecar_candidates.iter().find(|c| exists(c)) else { return out };
+    let Some(present) = sidecar_candidates.iter().find(|c| exists(c)) else {
+        return out;
+    };
     let rel_present = to_relative(Some(present), project_root).unwrap();
     if let Some(canon) = canonical {
         if jsp::resolve(present, &[]) != jsp::resolve(canon, &[]) {
@@ -250,7 +316,9 @@ pub fn check_design_sidecar(design_path: Option<&str>, sidecar_candidates: &[Str
     let sidecar = read_json(present);
     let schema_version = read_sidecar_schema_version(sidecar.as_ref());
     if let Some(sc) = &sidecar {
-        if js_truthy(sc) && (schema_version.is_none() || schema_version.unwrap() < DESIGN_SIDECAR_SCHEMA_VERSION) {
+        if js_truthy(sc)
+            && (schema_version.is_none() || schema_version.unwrap() < DESIGN_SIDECAR_SCHEMA_VERSION)
+        {
             out.push(finding(
                 "design-sidecar-schema-outdated",
                 "design.json",
@@ -309,8 +377,20 @@ pub fn check_config(project_root: &str, repo_root: Option<&str>) -> Vec<Finding>
             let fp = jsp::join(&[&root, ".impeccable", name]);
             let Some(raw) = read_json(&fp) else { continue };
             let Some(obj) = raw.as_object() else { continue };
-            let rel = to_relative(Some(&fp), if project_root.is_empty() { &root } else { project_root }).unwrap();
-            let unknown: Vec<String> = obj.keys().filter(|k| !KNOWN_CONFIG_KEYS.contains(&k.as_str())).cloned().collect();
+            let rel = to_relative(
+                Some(&fp),
+                if project_root.is_empty() {
+                    &root
+                } else {
+                    project_root
+                },
+            )
+            .unwrap();
+            let unknown: Vec<String> = obj
+                .keys()
+                .filter(|k| !KNOWN_CONFIG_KEYS.contains(&k.as_str()))
+                .cloned()
+                .collect();
             if !unknown.is_empty() {
                 out.push(finding(
                     "config-unknown-keys",
@@ -327,7 +407,10 @@ pub fn check_config(project_root: &str, repo_root: Option<&str>) -> Vec<Finding>
                 ));
             }
             if let Some(bp) = obj.get("buildPath") {
-                let ok = bp.as_str().map(|s| BUILD_PATH_VALUES.contains(&s)).unwrap_or(false);
+                let ok = bp
+                    .as_str()
+                    .map(|s| BUILD_PATH_VALUES.contains(&s))
+                    .unwrap_or(false);
                 if !ok {
                     out.push(finding(
                         "config-invalid-build-path",
@@ -345,7 +428,11 @@ pub fn check_config(project_root: &str, repo_root: Option<&str>) -> Vec<Finding>
                 }
             }
             if let Some(det) = obj.get("detector").and_then(|d| d.as_object()) {
-                let unknown_d: Vec<String> = det.keys().filter(|k| !KNOWN_DETECTOR_KEYS.contains(&k.as_str())).cloned().collect();
+                let unknown_d: Vec<String> = det
+                    .keys()
+                    .filter(|k| !KNOWN_DETECTOR_KEYS.contains(&k.as_str()))
+                    .cloned()
+                    .collect();
                 if !unknown_d.is_empty() {
                     out.push(finding(
                         "config-unknown-detector-keys",
@@ -373,20 +460,33 @@ pub fn js_json_stringify(v: &Value) -> String {
 }
 
 /// JS: checkBuildPathUnset
-pub fn check_build_path_unset(project_root: &str, repo_root: Option<&str>, product: Option<&str>) -> Vec<Finding> {
+pub fn check_build_path_unset(
+    project_root: &str,
+    repo_root: Option<&str>,
+    product: Option<&str>,
+) -> Vec<Finding> {
     if project_root.is_empty() || !product.map(|p| !p.is_empty()).unwrap_or(false) {
         return vec![];
     }
     for root in unique_roots(project_root, repo_root) {
         for name in ["config.json", "config.local.json"] {
             if let Some(raw) = read_json(&jsp::join(&[&root, ".impeccable", name])) {
-                if js_truthy(&raw) && raw.as_object().map(|o| o.contains_key("buildPath")).unwrap_or(false) {
+                if js_truthy(&raw)
+                    && raw
+                        .as_object()
+                        .map(|o| o.contains_key("buildPath"))
+                        .unwrap_or(false)
+                {
                     return vec![];
                 }
             }
         }
     }
-    let evidence: Vec<&str> = DIRECTION_WORK_PATHS.iter().copied().filter(|rel| exists(&jsp::join(&[project_root, rel]))).collect();
+    let evidence: Vec<&str> = DIRECTION_WORK_PATHS
+        .iter()
+        .copied()
+        .filter(|rel| exists(&jsp::join(&[project_root, rel])))
+        .collect();
     if evidence.is_empty() {
         return vec![];
     }
@@ -407,12 +507,15 @@ pub fn check_surface_briefs(candidates: &[BriefSummary], project_root: &str) -> 
     }
     let mut orphaned: Vec<&BriefSummary> = Vec::new();
     for b in candidates {
-        let Some(t) = b.primary_target.as_deref() else { continue };
+        let Some(t) = b.primary_target.as_deref() else {
+            continue;
+        };
         if t.is_empty() {
             continue;
         }
         let lower = t.to_ascii_lowercase();
-        if lower.starts_with("http://") || lower.starts_with("https://") || t.starts_with("route:") {
+        if lower.starts_with("http://") || lower.starts_with("https://") || t.starts_with("route:")
+        {
             continue;
         }
         if !exists(&jsp::join(&[project_root, t])) {
@@ -422,7 +525,11 @@ pub fn check_surface_briefs(candidates: &[BriefSummary], project_root: &str) -> 
     if orphaned.is_empty() {
         return vec![];
     }
-    let paths: Vec<String> = orphaned.iter().map(|b| b.path.clone()).filter(|p| !p.is_empty()).collect();
+    let paths: Vec<String> = orphaned
+        .iter()
+        .map(|b| b.path.clone())
+        .filter(|p| !p.is_empty())
+        .collect();
     vec![finding(
         "surface-brief-orphaned",
         "surface brief",
@@ -443,7 +550,10 @@ pub fn check_surface_briefs(candidates: &[BriefSummary], project_root: &str) -> 
 
 /// JS: checkProjectRoots
 pub fn check_project_roots(patterns: &[String], candidates_len: usize) -> Vec<Finding> {
-    let positive: Vec<&String> = patterns.iter().filter(|p| !p.is_empty() && !js_trim(p).starts_with('!')).collect();
+    let positive: Vec<&String> = patterns
+        .iter()
+        .filter(|p| !p.is_empty() && !js_trim(p).starts_with('!'))
+        .collect();
     if positive.is_empty() || candidates_len > 0 {
         return vec![];
     }
@@ -481,13 +591,25 @@ pub struct BootFindingGroups {
 }
 
 pub fn collect_boot_finding_groups(ctx: &Ctx, cwd: &str, extras: &BootExtras) -> BootFindingGroups {
-    let project_root = if ctx.project_root.is_empty() { cwd.to_string() } else { ctx.project_root.clone() };
+    let project_root = if ctx.project_root.is_empty() {
+        cwd.to_string()
+    } else {
+        ctx.project_root.clone()
+    };
     BootFindingGroups {
-        product: check_product(ctx.product.as_deref(), ctx.product_path.as_deref().unwrap_or("PRODUCT.md")),
+        product: check_product(
+            ctx.product.as_deref(),
+            ctx.product_path.as_deref().unwrap_or("PRODUCT.md"),
+        ),
         // Only checked once a PRODUCT.md exists. Without one the boot already
         // emits NO_PRODUCT_MD and routes into init, which asks for the
         // platform directly; a second signal saying the same thing is noise.
-        native_platform: if ctx.product.as_deref().map(|p| !p.is_empty()).unwrap_or(false) {
+        native_platform: if ctx
+            .product
+            .as_deref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false)
+        {
             check_native_platform_evidence(
                 &project_root,
                 ctx.platform.as_deref(),
@@ -497,9 +619,17 @@ pub fn collect_boot_finding_groups(ctx: &Ctx, cwd: &str, extras: &BootExtras) ->
         } else {
             Vec::new()
         },
-        design_sidecar: check_design_sidecar(extras.abs_design_path.as_deref(), &extras.sidecar_candidates, &project_root),
+        design_sidecar: check_design_sidecar(
+            extras.abs_design_path.as_deref(),
+            &extras.sidecar_candidates,
+            &project_root,
+        ),
         config: check_config(&project_root, Some(&ctx.repo_root)),
-        build_path: check_build_path_unset(&project_root, Some(&ctx.repo_root), ctx.product.as_deref()),
+        build_path: check_build_path_unset(
+            &project_root,
+            Some(&ctx.repo_root),
+            ctx.product.as_deref(),
+        ),
         surface_briefs: check_surface_briefs(&ctx.surface_brief_candidates, &project_root),
         project_roots: match &extras.project_root_patterns {
             Some(patterns) => check_project_roots(patterns, extras.target_candidates.len()),

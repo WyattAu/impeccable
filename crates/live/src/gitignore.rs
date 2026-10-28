@@ -181,7 +181,11 @@ mod tests {
         std::fs::write(jsp::join(&[&worktree_git, "commondir"]), "../..\n").unwrap();
         let wt = jsp::join(&[&tmp, "wt"]);
         std::fs::create_dir_all(&wt).unwrap();
-        std::fs::write(jsp::join(&[&wt, ".git"]), format!("gitdir: {worktree_git}\n")).unwrap();
+        std::fs::write(
+            jsp::join(&[&wt, ".git"]),
+            format!("gitdir: {worktree_git}\n"),
+        )
+        .unwrap();
 
         assert_eq!(
             resolve_git_info_exclude_path(&wt),

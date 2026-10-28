@@ -11,8 +11,8 @@ use crate::background::{
     resolve_text_surface, sv, sv_opt, CustomPropMap, TextSurface,
 };
 use crate::cascade::StyleValues;
-use crate::layer::picture_under_text;
 use crate::dom::{StaticDocument, StaticElement};
+use crate::layer::picture_under_text;
 use crate::quality::{
     collapse_ws, is_in_non_rendered_markup, is_visually_hidden, pf0, resolve_font_size_px,
 };
@@ -25,14 +25,13 @@ use impeccable_core::checks::measures::{
     GptBorderShadowRowTree, OversizedH1Input, StyleMap, ICON_MAX_PX,
 };
 use impeccable_core::checks::rules::{
-    check_borders, check_colors_deduped_shaped, check_glow, check_hero_eyebrow, check_hover_contrast,
-    check_icon_tile, check_italic_serif, check_kicker_above_heading, check_motion,
-    check_placeholder_colors, check_stripe_child, is_close_letter_text, is_emoji_only_text,
-    is_glyph_only_text, is_heading_tag, is_icon_ligature_text, is_rounded_away_from_side,
-    names_close_control,
-    resolve_hero_heading_size_px, BorderOpts, ColorOpts, GlowOpts, HeroEyebrowOpts,
-    HoverContrastOpts, IconTileOpts, ItalicSerifOpts, KickerCandidate, MotionOpts, RuleHit,
-    SafeTagTextSeen, Sides,
+    check_borders, check_colors_deduped_shaped, check_glow, check_hero_eyebrow,
+    check_hover_contrast, check_icon_tile, check_italic_serif, check_kicker_above_heading,
+    check_motion, check_placeholder_colors, check_stripe_child, is_close_letter_text,
+    is_emoji_only_text, is_glyph_only_text, is_heading_tag, is_icon_ligature_text,
+    is_rounded_away_from_side, names_close_control, resolve_hero_heading_size_px, BorderOpts,
+    ColorOpts, GlowOpts, HeroEyebrowOpts, HoverContrastOpts, IconTileOpts, ItalicSerifOpts,
+    KickerCandidate, MotionOpts, RuleHit, SafeTagTextSeen, Sides,
 };
 use impeccable_core::checks::text_rules::{
     check_numbered_section_labels, is_kicker_candidate, is_numbered_section_label_candidate,
@@ -330,11 +329,15 @@ pub fn collect_numbered_section_label_candidates(
         }
         if is_kicker_card_context(&heading, &label)
             || label
-                .query_selector(impeccable_core::browser::text_collectors::NUMBERED_LABEL_MEDIA_SELECTOR)
+                .query_selector(
+                    impeccable_core::browser::text_collectors::NUMBERED_LABEL_MEDIA_SELECTOR,
+                )
                 .is_some()
             || label.query_selector_all("svg").iter().any(|svg| {
                 svg.parent_element().is_some_and(|box_| {
-                    impeccable_core::browser::text_collectors::holds_number_text(&box_.direct_text())
+                    impeccable_core::browser::text_collectors::holds_number_text(
+                        &box_.direct_text(),
+                    )
                 })
             })
         {
@@ -588,11 +591,12 @@ pub fn check_element_borders(
     let own_bg = parse_any_color(sv_opt(style, "backgroundColor"));
     // An accent on any edge is gated on the corners (left and right by the
     // rounded-card decision, top and bottom by r6-t2-side-tab-bands).
-    let corners = if widths.top > 0.0 || widths.right > 0.0 || widths.bottom > 0.0 || widths.left > 0.0 {
-        resolve_side_accent_corners(el, style, pf0(sv(style, "width")))
-    } else {
-        None
-    };
+    let corners =
+        if widths.top > 0.0 || widths.right > 0.0 || widths.bottom > 0.0 || widths.left > 0.0 {
+            resolve_side_accent_corners(el, style, pf0(sv(style, "width")))
+        } else {
+            None
+        };
     check_borders(
         tag,
         &widths,
@@ -655,7 +659,7 @@ fn inherits_scored_text_color(
         if !js::trim(&direct).is_empty() {
             return ancestor_scores_its_text(&c, &direct);
         }
-        if read_own_background_color(&c, c.style()).map_or(false, |b| a_gt(&b, 0.0)) {
+        if read_own_background_color(&c, c.style()).is_some_and(|b| a_gt(&b, 0.0)) {
             return false;
         }
         cur = c.parent_element();
@@ -687,12 +691,16 @@ fn text_clipped_by_an_ancestor(el: &StaticElement<'_>) -> bool {
     for _ in 0..MAX_ANCESTORS {
         let Some(c) = cur else { return false };
         let style = c.style();
-        if impeccable_core::checks::rules::background_clips_to_text(sv(style, "webkitBackgroundClip"))
-            || impeccable_core::checks::rules::background_clips_to_text(sv(style, "backgroundClip"))
-        {
+        if impeccable_core::checks::rules::background_clips_to_text(sv(
+            style,
+            "webkitBackgroundClip",
+        )) || impeccable_core::checks::rules::background_clips_to_text(sv(
+            style,
+            "backgroundClip",
+        )) {
             return true;
         }
-        if read_own_background_color(&c, style).map_or(false, |b| b.alpha_or_one() >= 0.95) {
+        if read_own_background_color(&c, style).is_some_and(|b| b.alpha_or_one() >= 0.95) {
             return false;
         }
         cur = c.parent_element();
@@ -708,7 +716,7 @@ fn text_clipped_by_an_ancestor(el: &StaticElement<'_>) -> bool {
 fn background_is_icon(el: &StaticElement<'_>) -> bool {
     let image = sv(el.style(), "backgroundImage");
     !js::to_lower_case(image).contains("gradient")
-        && data_svg_intrinsic_size(image).map_or(false, |(w, h)| w <= ICON_MAX_PX && h <= ICON_MAX_PX)
+        && data_svg_intrinsic_size(image).is_some_and(|(w, h)| w <= ICON_MAX_PX && h <= ICON_MAX_PX)
 }
 
 /// The boxes whose background image is an icon beside this element's text:
@@ -769,7 +777,11 @@ fn fold_surface_opacity(
             reached = true;
             break;
         }
-        let fill = surface.overlays.iter().find(|(n, _)| *n == c.id()).map(|(_, f)| *f);
+        let fill = surface
+            .overlays
+            .iter()
+            .find(|(n, _)| *n == c.id())
+            .map(|(_, f)| *f);
         layers.push((fill, opacity_of(c.style())));
         cur = c.parent_element();
     }
@@ -902,13 +914,13 @@ pub fn check_element_stripe_child(el: &StaticElement<'_>, style: &StyleValues) -
         // Opposing insets stretch only an auto-height box. With a definite
         // height CSS drops the bottom constraint instead of stretching it.
         let height_stretches = height_raw == "100%"
-            || (auto_height && static_edge_hugs(&inset[0]) && static_edge_hugs(&inset[2]));
+            || (auto_height && static_edge_hugs(inset[0]) && static_edge_hugs(inset[2]));
         if !height_stretches {
             return Vec::new();
         }
-        if static_edge_hugs(&inset[3]) {
+        if static_edge_hugs(inset[3]) {
             Some("left")
-        } else if static_edge_hugs(&inset[1]) {
+        } else if static_edge_hugs(inset[1]) {
             Some("right")
         } else {
             None
@@ -962,7 +974,7 @@ pub fn check_element_stripe_child(el: &StaticElement<'_>, style: &StyleValues) -
         }
     }
     let bg_raw = sv(style, "backgroundColor");
-    let bg = parse_rgb(Some(&bg_raw)).or_else(|| parse_any_color(Some(&bg_raw)));
+    let bg = parse_rgb(Some(bg_raw)).or_else(|| parse_any_color(Some(bg_raw)));
     check_stripe_child(&class_selector(el), width, edge, bg)
 }
 
@@ -1046,7 +1058,12 @@ pub fn check_element_colors(
     } else {
         9.0
     };
-    let surface = resolve_text_surface(el, custom_props, &|c| icons.contains(&c.id()), coverage_font_px);
+    let surface = resolve_text_surface(
+        el,
+        custom_props,
+        &|c| icons.contains(&c.id()),
+        coverage_font_px,
+    );
     let effective_bg = surface.info.color;
 
     let mut own_bg = custom_props
@@ -1164,8 +1181,16 @@ pub fn check_element_colors(
                 let t = js::to_lower_case(el.get_attribute("type").unwrap_or("text"));
                 matches!(
                     t.as_str(),
-                    "hidden" | "checkbox" | "radio" | "file" | "submit" | "button" | "image"
-                        | "reset" | "range" | "color"
+                    "hidden"
+                        | "checkbox"
+                        | "radio"
+                        | "file"
+                        | "submit"
+                        | "button"
+                        | "image"
+                        | "reset"
+                        | "range"
+                        | "color"
                 ) || el
                     .get_attribute("value")
                     .is_some_and(|v| !js::trim(v).is_empty())
@@ -1343,7 +1368,7 @@ pub fn check_element_italic_serif(
                 || matches!(sv(s, "visibility"), "hidden" | "collapse")
                 || sv(s, "contentVisibility") == "hidden"
                 || sv_opt(s, "opacity").is_some_and(|v| parse_float(v) <= 0.01)
-                || parent.get_attribute("aria-hidden").as_deref() == Some("true")
+                || parent.get_attribute("aria-hidden") == Some("true")
                 || parent.get_attribute("hidden").is_some()
             {
                 hidden = true;
@@ -1561,7 +1586,7 @@ fn gpt_border_shadow_paints_at_rest(el: &StaticElement<'_>) -> bool {
     let mut hidden = false;
     let mut out_of_flow = false;
     let mut depth = 0usize;
-    let mut current = Some(el.clone());
+    let mut current = Some(*el);
     while let Some(node) = current {
         if node.get_attribute("hidden").is_some() {
             return false;
@@ -1866,8 +1891,12 @@ pub fn check_element_hard_offset_shadow(el: &StaticElement<'_>) -> Vec<RuleHit> 
         }
         current = node.parent_element();
     }
-    if matches!(sv(el.style(), "visibility"), "hidden" | "collapse") { return Vec::new(); }
+    if matches!(sv(el.style(), "visibility"), "hidden" | "collapse") {
+        return Vec::new();
+    }
     impeccable_core::checks::hard_offset_shadow::check_hard_offset_shadow(
-        box_shadow, sv(el.style(), "color"), static_effective_opacity(el),
+        box_shadow,
+        sv(el.style(), "color"),
+        static_effective_opacity(el),
     )
 }

@@ -40,16 +40,26 @@ pub fn decode_png(buf: &[u8]) -> Result<Decoded, String> {
     let mut reader = dec.read_info().map_err(|e| format!("png: {e}"))?;
     let bufsize = reader.output_buffer_size().ok_or("png: image too large")?;
     let mut raw = vec![0u8; bufsize];
-    let info = reader.next_frame(&mut raw).map_err(|e| format!("png: {e}"))?;
+    let info = reader
+        .next_frame(&mut raw)
+        .map_err(|e| format!("png: {e}"))?;
     let (w, h) = (info.width as usize, info.height as usize);
     raw.truncate(info.buffer_size());
     let data = to_rgba8(&raw, w, h, info.color_type);
 
     let mut text = HashMap::new();
     for c in &reader.info().uncompressed_latin1_text {
-        text.entry(c.keyword.clone()).or_insert_with(|| c.text.clone());
+        text.entry(c.keyword.clone())
+            .or_insert_with(|| c.text.clone());
     }
-    Ok(Decoded { image: Image { width: w, height: h, data }, text })
+    Ok(Decoded {
+        image: Image {
+            width: w,
+            height: h,
+            data,
+        },
+        text,
+    })
 }
 
 fn to_rgba8(raw: &[u8], w: usize, h: usize, ct: png::ColorType) -> Vec<u8> {
@@ -116,7 +126,9 @@ pub fn encode_png(img: &Image, text: &[(String, String)]) -> Result<Vec<u8>, Str
             let _ = enc.add_text_chunk(k.clone(), v.clone());
         }
         let mut writer = enc.write_header().map_err(|e| format!("png: {e}"))?;
-        writer.write_image_data(&img.data).map_err(|e| format!("png: {e}"))?;
+        writer
+            .write_image_data(&img.data)
+            .map_err(|e| format!("png: {e}"))?;
     }
     Ok(out)
 }
@@ -132,7 +144,13 @@ pub fn load_raster(file: &std::path::Path) -> Result<(Decoded, std::path::PathBu
     }
     let image = decode_source(&buf)
         .map_err(|e| format!("png: {file:?} is not a PNG and could not be decoded: {e}"))?;
-    Ok((Decoded { image, text: HashMap::new() }, file.to_path_buf()))
+    Ok((
+        Decoded {
+            image,
+            text: HashMap::new(),
+        },
+        file.to_path_buf(),
+    ))
 }
 
 /// Decode an image from its own bytes, using any format `load_raster` reads.
@@ -140,36 +158,61 @@ pub fn decode_source(bytes: &[u8]) -> Result<Image, String> {
     if is_png(bytes) {
         return Ok(decode_png(bytes)?.image);
     }
-    let rgba = image::load_from_memory(bytes).map_err(|e| format!("not a decodable image: {e}"))?.to_rgba8();
+    let rgba = image::load_from_memory(bytes)
+        .map_err(|e| format!("not a decodable image: {e}"))?
+        .to_rgba8();
     let (width, height) = (rgba.width() as usize, rgba.height() as usize);
-    Ok(Image { width, height, data: rgba.into_raw() })
+    Ok(Image {
+        width,
+        height,
+        data: rgba.into_raw(),
+    })
 }
 
 /// Decode a static review image from its pinned bytes. Keep the original file
 /// as review evidence.
 pub fn decode_review_image(bytes: &[u8]) -> Result<(Image, &'static str), String> {
     if is_png(bytes) {
-        if bytes.len() < 24 { return Err("truncated PNG".into()); }
+        if bytes.len() < 24 {
+            return Err("truncated PNG".into());
+        }
         let width = u32::from_be_bytes(bytes[16..20].try_into().unwrap());
         let height = u32::from_be_bytes(bytes[20..24].try_into().unwrap());
-        if u64::from(width) * u64::from(height) > 32_000_000 { return Err("preview exceeds 32 megapixels".into()); }
+        if u64::from(width) * u64::from(height) > 32_000_000 {
+            return Err("preview exceeds 32 megapixels".into());
+        }
         return Ok((decode_png(bytes)?.image, "PNG"));
     }
-    let format = image::guess_format(bytes).map_err(|e| format!("unsupported review image: {e}"))?;
+    let format =
+        image::guess_format(bytes).map_err(|e| format!("unsupported review image: {e}"))?;
     let name = match format {
         image::ImageFormat::WebP => {
-            let decoder = image::codecs::webp::WebPDecoder::new(std::io::Cursor::new(bytes)).map_err(|e| e.to_string())?;
-            if decoder.has_animation() { return Err("animated WebP requires a static review state".into()); }
+            let decoder = image::codecs::webp::WebPDecoder::new(std::io::Cursor::new(bytes))
+                .map_err(|e| e.to_string())?;
+            if decoder.has_animation() {
+                return Err("animated WebP requires a static review state".into());
+            }
             "WebP"
-        },
+        }
         image::ImageFormat::Jpeg => "JPEG",
         _ => return Err("review images must be static PNG, WebP or JPEG".into()),
     };
     let reader = image::ImageReader::with_format(std::io::Cursor::new(bytes), format);
     let (width, height) = reader.into_dimensions().map_err(|e| e.to_string())?;
-    if u64::from(width) * u64::from(height) > 32_000_000 { return Err("preview exceeds 32 megapixels".into()); }
-    let rgba = image::load_from_memory_with_format(bytes, format).map_err(|e| e.to_string())?.to_rgba8();
-    Ok((Image {width: width as usize, height: height as usize, data: rgba.into_raw()}, name))
+    if u64::from(width) * u64::from(height) > 32_000_000 {
+        return Err("preview exceeds 32 megapixels".into());
+    }
+    let rgba = image::load_from_memory_with_format(bytes, format)
+        .map_err(|e| e.to_string())?
+        .to_rgba8();
+    Ok((
+        Image {
+            width: width as usize,
+            height: height as usize,
+            data: rgba.into_raw(),
+        },
+        name,
+    ))
 }
 
 #[cfg(test)]
@@ -188,13 +231,20 @@ mod review_image_tests {
     fn review_webp_and_jpeg_decode_original_bytes_and_keep_alpha() {
         let pixels = [25, 90, 65, 120, 200, 40, 35, 255];
         let mut webp = Vec::new();
-        image::codecs::webp::WebPEncoder::new_lossless(&mut webp).encode(&pixels, 2, 1, image::ExtendedColorType::Rgba8).unwrap();
+        image::codecs::webp::WebPEncoder::new_lossless(&mut webp)
+            .encode(&pixels, 2, 1, image::ExtendedColorType::Rgba8)
+            .unwrap();
         let (decoded, format) = decode_review_image(&webp).unwrap();
-        assert_eq!(format, "WebP"); assert_eq!(decoded.width, 2); assert_eq!(decoded.data, pixels);
+        assert_eq!(format, "WebP");
+        assert_eq!(decoded.width, 2);
+        assert_eq!(decoded.data, pixels);
         let mut jpeg = Vec::new();
-        image::codecs::jpeg::JpegEncoder::new(&mut jpeg).encode(&[25, 90, 65], 1, 1, image::ExtendedColorType::Rgb8).unwrap();
+        image::codecs::jpeg::JpegEncoder::new(&mut jpeg)
+            .encode(&[25, 90, 65], 1, 1, image::ExtendedColorType::Rgb8)
+            .unwrap();
         let (decoded, format) = decode_review_image(&jpeg).unwrap();
-        assert_eq!(format, "JPEG"); assert_eq!(decoded.data[3], 255);
+        assert_eq!(format, "JPEG");
+        assert_eq!(decoded.data[3], 255);
         assert!(decode_review_image(b"not an image").is_err());
     }
 

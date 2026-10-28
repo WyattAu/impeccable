@@ -168,8 +168,12 @@ fn browser() -> Option<Browser> {
 /// plus what the page's visual IO answers for the image.
 fn capture(browser: &mut Browser, port: u16) -> (Value, Value) {
     let mut page = browser.new_page().unwrap();
-    page.goto(&format!("http://127.0.0.1:{port}/"), "load", Duration::from_secs(15))
-        .unwrap();
+    page.goto(
+        &format!("http://127.0.0.1:{port}/"),
+        "load",
+        Duration::from_secs(15),
+    )
+    .unwrap();
     snapshot_engine::ensure_snapshot_js(&mut page).unwrap();
     let json = snapshot_engine::capture_snapshot_json(&mut page).expect("capture");
     let image = page
@@ -188,7 +192,9 @@ fn capture(browser: &mut Browser, port: u16) -> (Value, Value) {
     // reads, `new Array(n)`), even with the page's `parseFloat`,
     // `Reflect.construct` and `Reflect.apply` replaced.
     let scoped = page
-        .evaluate_value("[parseFloat('0.5'), new Array(3).length, Number('7'), Array.from('ab').length]")
+        .evaluate_value(
+            "[parseFloat('0.5'), new Array(3).length, Number('7'), Array.from('ab').length]",
+        )
         .expect("scoped natives");
     assert_eq!(scoped, serde_json::json!([0.5, 3, 7, 2]));
     page.close();
@@ -208,11 +214,20 @@ fn page_replaced_builtins_do_not_change_the_capture() {
     // Every part of the capture that builds a Map, a Set or an array ran.
     let els = hostile_snap["els"].as_array().expect("els");
     assert!(els.len() > 10);
-    assert!(els.iter().any(|e| e.get("an").is_some()), "running animation recorded");
+    assert!(
+        els.iter().any(|e| e.get("an").is_some()),
+        "running animation recorded"
+    );
     assert!(els.iter().any(|e| e.get("st").is_some()), "states recorded");
-    assert!(els.iter().any(|e| e.get("sh").is_some()), "shadow tree captured");
+    assert!(
+        els.iter().any(|e| e.get("sh").is_some()),
+        "shadow tree captured"
+    );
     let linked = hostile_snap["linkedCss"].as_str().unwrap_or("");
-    assert!(linked.contains(".lede") && linked.contains("@keyframes pulse"), "{linked}");
+    assert!(
+        linked.contains(".lede") && linked.contains("@keyframes pulse"),
+        "{linked}"
+    );
     assert_eq!(benign_image, serde_json::json!({ "w": 40, "h": 40 }));
     assert_eq!(hostile_image, benign_image);
     assert_eq!(hostile_snap, benign_snap);
@@ -231,8 +246,14 @@ fn page_replaced_builtins_do_not_change_the_scan() {
     let scan = |port: u16| {
         let engine = BrowserEngine::new(env.clone());
         let mut browser = engine.launch().expect("launch");
-        let options = ScanOptions { viewport: Some((1280, 800)), ..Default::default() };
-        let request = EvidenceRequest { screenshot: false, ..Default::default() };
+        let options = ScanOptions {
+            viewport: Some((1280, 800)),
+            ..Default::default()
+        };
+        let request = EvidenceRequest {
+            screenshot: false,
+            ..Default::default()
+        };
         let (findings, evidence) = detect_url_evidence(
             &mut browser,
             &format!("http://127.0.0.1:{port}/"),
@@ -243,13 +264,18 @@ fn page_replaced_builtins_do_not_change_the_scan() {
         )
         .expect("scan");
         browser.close();
-        let ids: Vec<String> = findings.iter().map(|f| format!("{}|{}", f.antipattern, f.snippet)).collect();
+        let ids: Vec<String> = findings
+            .iter()
+            .map(|f| format!("{}|{}", f.antipattern, f.snippet))
+            .collect();
         (ids, evidence.scan_snapshot.is_some())
     };
     let (benign_findings, benign_captured) = scan(benign);
     assert!(benign_captured);
     assert!(
-        benign_findings.iter().any(|f| f.starts_with("low-contrast|")),
+        benign_findings
+            .iter()
+            .any(|f| f.starts_with("low-contrast|")),
         "the faint band reaches the visual pass: {benign_findings:?}"
     );
     for (name, port) in [("legacy", legacy), ("hostile", hostile)] {

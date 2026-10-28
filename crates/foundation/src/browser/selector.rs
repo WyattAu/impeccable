@@ -728,7 +728,7 @@ impl<'a> Element for SnapEl<'a> {
     fn has_class(&self, name: &Atom, case_sensitivity: CaseSensitivity) -> bool {
         match self.snap.attr(self.id, "class") {
             Some(v) => v
-                .split(|c: char| matches!(c, ' ' | '\t' | '\n' | '\x0C' | '\r'))
+                .split([' ', '\t', '\n', '\x0C', '\r'])
                 .any(|c| !c.is_empty() && case_sensitivity.eq(name.0.as_bytes(), c.as_bytes())),
             None => false,
         }

@@ -93,7 +93,10 @@ pub trait UrlEngine {
     /// [`UrlEngine::detect_url`] plus notes for the text output. Engines with
     /// nothing to say keep the default.
     fn detect_url_scan(&self, url: &str, options: &ScanOptions) -> Result<UrlScan, EngineError> {
-        Ok(UrlScan { findings: self.detect_url(url, options)?, notes: Vec::new() })
+        Ok(UrlScan {
+            findings: self.detect_url(url, options)?,
+            notes: Vec::new(),
+        })
     }
     /// A shared-browser session for multi-URL scans (`createBrowserDetector()`:
     /// `waitUntil: 'load'`, `settleMs: 100`). Return `None` when the engine has
@@ -112,7 +115,9 @@ pub trait UrlEngine {
         _target: Option<&str>,
         _options: &ScanOptions,
     ) -> Result<UrlScan, EngineError> {
-        Err(EngineError::new("this build cannot attach to a running app (--cdp)"))
+        Err(EngineError::new(
+            "this build cannot attach to a running app (--cdp)",
+        ))
     }
 }
 
@@ -121,7 +126,10 @@ pub trait SharedBrowser {
     fn detect_url(&self, url: &str, options: &ScanOptions) -> Result<Vec<Finding>, EngineError>;
     /// [`SharedBrowser::detect_url`] plus notes, as [`UrlEngine::detect_url_scan`].
     fn detect_url_scan(&self, url: &str, options: &ScanOptions) -> Result<UrlScan, EngineError> {
-        Ok(UrlScan { findings: self.detect_url(url, options)?, notes: Vec::new() })
+        Ok(UrlScan {
+            findings: self.detect_url(url, options)?,
+            notes: Vec::new(),
+        })
     }
     fn close(&self);
     /// The eager half of `createBrowserDetector()`: bring the browser up now,

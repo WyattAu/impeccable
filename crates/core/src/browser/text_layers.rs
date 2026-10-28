@@ -293,10 +293,11 @@ fn background_images(dom: &dyn Dom, node: ElId, image: &str) -> Images {
         } else {
             sizes[i % sizes.len()].as_str()
         };
-        let repeats = !shorthand.get(i).map_or(false, |s| s.contains("no-repeat"));
+        let repeats = !shorthand.get(i).is_some_and(|s| s.contains("no-repeat"));
         if lower.contains("url(") {
             match drawn_tile(layer, size) {
-                Some((w, h)) if repeats && w <= TEXTURE_MAX_TILE_PX && h <= TEXTURE_MAX_TILE_PX => {}
+                Some((w, h)) if repeats && w <= TEXTURE_MAX_TILE_PX && h <= TEXTURE_MAX_TILE_PX => {
+                }
                 Some(_) => picture = true,
                 None if !repeats
                     || size.contains("cover")
@@ -310,8 +311,11 @@ fn background_images(dom: &dyn Dom, node: ElId, image: &str) -> Images {
         } else if lower.contains("gradient(") {
             let small_cell = repeats
                 && explicit_cell(size)
-                    .map_or(false, |(w, h)| w <= TEXTURE_MAX_CELL_PX && h <= TEXTURE_MAX_CELL_PX);
-            if js::trim(&lower).starts_with("repeating-") || small_cell || gradient_is_decoration(&lower) {
+                    .is_some_and(|(w, h)| w <= TEXTURE_MAX_CELL_PX && h <= TEXTURE_MAX_CELL_PX);
+            if js::trim(&lower).starts_with("repeating-")
+                || small_cell
+                || gradient_is_decoration(&lower)
+            {
                 continue;
             }
             gradient
@@ -379,7 +383,11 @@ fn detached_paint(dom: &dyn Dom, node: ElId) -> Option<Paint> {
     let tag = tag_lower(dom, node);
     let svg = dom.namespace_uri(node) == NS_SVG;
     if MEDIA_TAGS.contains(&tag.as_str()) || (svg && tag == "image") {
-        return Some(if faint { Paint::Texture } else { Paint::Picture });
+        return Some(if faint {
+            Paint::Texture
+        } else {
+            Paint::Picture
+        });
     }
     if svg && SVG_SHAPES.contains(&tag.as_str()) {
         return Some(if faint {
@@ -410,7 +418,12 @@ fn detached_paint(dom: &dyn Dom, node: ElId) -> Option<Paint> {
     }
     let fill = parse_rgb_or_any(&dom.style(node, "backgroundColor"))?;
     let alpha = fill.alpha_or_one() * opacity;
-    (alpha > FAINT_PAINT).then(|| Paint::Fill(Rgba { a: Some(alpha), ..fill }))
+    (alpha > FAINT_PAINT).then_some({
+        Paint::Fill(Rgba {
+            a: Some(alpha),
+            ..fill
+        })
+    })
 }
 
 /// Whether paint laid over the named surface moves it by more than one
@@ -419,9 +432,9 @@ fn detached_paint(dom: &dyn Dom, node: ElId) -> Option<Paint> {
 fn moves_surface(paint: &[Rgba], resolved: Option<Rgba>) -> Option<bool> {
     let surface = resolved?;
     Some(
-        paint
-            .iter()
-            .any(|c| distance(&composite_color_over(c, &surface), &surface) > SAME_SURFACE_DISTANCE),
+        paint.iter().any(|c| {
+            distance(&composite_color_over(c, &surface), &surface) > SAME_SURFACE_DISTANCE
+        }),
     )
 }
 
@@ -429,12 +442,20 @@ fn moves_surface(paint: &[Rgba], resolved: Option<Rgba>) -> Option<bool> {
 /// topmost first) that is not the text's ancestor and [`covers`] it there.
 /// With `stays`, only a layer that stays over the text as the page scrolls
 /// counts ([`stays_over_the_text`]).
-fn cover_above(dom: &dyn Dom, el: ElId, above: &[ElId], x: f64, y: f64, stays: bool) -> Option<ElId> {
+fn cover_above(
+    dom: &dyn Dom,
+    el: ElId,
+    above: &[ElId],
+    x: f64,
+    y: f64,
+    stays: bool,
+) -> Option<ElId> {
     let font_px = js::parse_float(&dom.style(el, "fontSize"));
-    above
-        .iter()
-        .copied()
-        .find(|&node| !dom.contains(node, el) && covers(dom, node, x, y, font_px) && (!stays || stays_over_the_text(dom, node, el)))
+    above.iter().copied().find(|&node| {
+        !dom.contains(node, el)
+            && covers(dom, node, x, y, font_px)
+            && (!stays || stays_over_the_text(dom, node, el))
+    })
 }
 
 /// Whether a covering layer stays over the text when the visitor scrolls:
@@ -500,7 +521,10 @@ fn covering_layer_holds_text(
     answers: &[AtPoint],
     stays: bool,
 ) -> bool {
-    let Some(text) = dom.direct_text_rect(el).filter(|r| r.all_finite() && r.width > 0.0 && r.height > 0.0) else {
+    let Some(text) = dom
+        .direct_text_rect(el)
+        .filter(|r| r.all_finite() && r.width > 0.0 && r.height > 0.0)
+    else {
         return false;
     };
     let area = text.width * text.height;
@@ -549,7 +573,10 @@ fn moves_only(transform: &str) -> bool {
     let Some(inner) = t.strip_prefix("matrix(").and_then(|r| r.strip_suffix(')')) else {
         return false;
     };
-    let v: Vec<f64> = inner.split(',').map(|n| js::parse_float(js::trim(n))).collect();
+    let v: Vec<f64> = inner
+        .split(',')
+        .map(|n| js::parse_float(js::trim(n)))
+        .collect();
     v.len() == 6 && v[0] == 1.0 && v[1] == 0.0 && v[2] == 0.0 && v[3] == 1.0
 }
 
@@ -579,13 +606,13 @@ fn at_point(
     }
     // The walk found no surface of its own and fell back to the document, so
     // paint under the text is better evidence than the ground it named.
-    let on_ground = host.map_or(true, |h| is_document_surface(dom, h));
+    let on_ground = host.is_none_or(|h| is_document_surface(dom, h));
     let last = stack.iter().rposition(|&n| in_text(n)).unwrap_or(first);
     for &node in &stack[last + 1..] {
         // The host can sit inside a shadow tree (a component's own fill), and
         // a stack names only the shadow host, so containment is read through
         // the flat tree.
-        if host.map_or(false, |h| flat_contains(dom, node, h)) || is_document_surface(dom, node) {
+        if host.is_some_and(|h| flat_contains(dom, node, h)) || is_document_surface(dom, node) {
             return AtPoint::Consistent;
         }
         if in_text(node) || dom.contains(node, el) {
@@ -667,7 +694,13 @@ pub fn covered_for_good(dom: &dyn Dom, el: ElId) -> bool {
     layers(dom, el, None, None, true) == TextLayers::Covered
 }
 
-fn layers(dom: &dyn Dom, el: ElId, host: Option<ElId>, resolved: Option<Rgba>, stays: bool) -> TextLayers {
+fn layers(
+    dom: &dyn Dom,
+    el: ElId,
+    host: Option<ElId>,
+    resolved: Option<Rgba>,
+    stays: bool,
+) -> TextLayers {
     let (vw, vh) = occlusion_viewport(dom);
     let Some(rect) = occlusion_probe_rect(dom, el, &dom.rect(el)) else {
         return TextLayers::Undecided;
@@ -692,7 +725,11 @@ fn layers(dom: &dyn Dom, el: ElId, host: Option<ElId>, resolved: Option<Rgba>, s
     if answers.contains(&AtPoint::Unanswered) {
         return TextLayers::Undecided;
     }
-    let deciding: Vec<AtPoint> = answers.iter().copied().filter(|a| *a != AtPoint::Silent).collect();
+    let deciding: Vec<AtPoint> = answers
+        .iter()
+        .copied()
+        .filter(|a| *a != AtPoint::Silent)
+        .collect();
     if deciding.is_empty() || deciding.len() * 2 < points.len() {
         return TextLayers::Undecided;
     }
@@ -701,10 +738,14 @@ fn layers(dom: &dyn Dom, el: ElId, host: Option<ElId>, resolved: Option<Rgba>, s
     // by a row: a layer that covers the text at one deciding point and
     // holds most of the text's own box covers it.
     if deciding.iter().all(|a| *a == AtPoint::Covered)
-        || (deciding.contains(&AtPoint::Covered) && covering_layer_holds_text(dom, el, &points, &answers, stays))
+        || (deciding.contains(&AtPoint::Covered)
+            && covering_layer_holds_text(dom, el, &points, &answers, stays))
     {
         TextLayers::Covered
-    } else if deciding.iter().all(|a| matches!(a, AtPoint::Covered | AtPoint::Unread)) {
+    } else if deciding
+        .iter()
+        .all(|a| matches!(a, AtPoint::Covered | AtPoint::Unread))
+    {
         TextLayers::UnreadSurface
     } else {
         TextLayers::Consistent
@@ -730,7 +771,9 @@ pub(crate) fn url_may_be_transparent(url: &str) -> bool {
         return !matches!(mime.trim(), "image/jpeg" | "image/jpg" | "image/pjpeg");
     }
     let path = lower.split(['?', '#']).next().unwrap_or("");
-    ![".jpg", ".jpeg", ".jpe", ".jfif", ".pjpeg", ".pjp"].iter().any(|ext| path.ends_with(ext))
+    ![".jpg", ".jpeg", ".jpe", ".jfif", ".pjpeg", ".pjp"]
+        .iter()
+        .any(|ext| path.ends_with(ext))
 }
 
 /// `el`'s box cut to the overflow clip of every box from its parent up to
@@ -836,12 +879,16 @@ fn covered_by_a_later_fill(dom: &dyn Dom, el: ElId) -> bool {
         if !z_auto(held) {
             return false;
         }
-        let Some(parent) = dom.parent(held) else { return false };
+        let Some(parent) = dom.parent(held) else {
+            return false;
+        };
         if Some(parent) == body || dom.document_element() == Some(parent) {
             return false;
         }
         let siblings = dom.children(parent);
-        let Some(at) = siblings.iter().position(|&c| c == held) else { return false };
+        let Some(at) = siblings.iter().position(|&c| c == held) else {
+            return false;
+        };
         for &sib in &siblings[at + 1..] {
             if !z_auto(sib)
                 || !super::painted::later_sibling_paints_after(dom, parent, held, sib)
@@ -870,10 +917,15 @@ fn covered_by_a_later_fill(dom: &dyn Dom, el: ElId) -> bool {
 /// it applies (positioned, or a flex or grid item). `None` otherwise.
 fn stack_z(dom: &dyn Dom, e: ElId) -> Option<f64> {
     let z = dom.style(e, "zIndex");
-    let z = js::parse_float(&z).is_finite().then(|| js::parse_float(&z))?;
+    let z = js::parse_float(&z)
+        .is_finite()
+        .then(|| js::parse_float(&z))?;
     let positioned = !matches!(dom.style(e, "position").as_str(), "static" | "");
     let item = dom.parent(e).is_some_and(|p| {
-        matches!(dom.style(p, "display").as_str(), "flex" | "grid" | "inline-flex" | "inline-grid")
+        matches!(
+            dom.style(p, "display").as_str(),
+            "flex" | "grid" | "inline-flex" | "inline-grid"
+        )
     });
     (positioned || item).then_some(z)
 }
@@ -907,11 +959,17 @@ fn covered_by_a_higher_sibling(dom: &dyn Dom, el: ElId) -> bool {
             ranked = Some((held, z));
             break;
         }
-        let Some(parent) = dom.parent(held) else { return false };
+        let Some(parent) = dom.parent(held) else {
+            return false;
+        };
         held = parent;
     }
-    let Some((held, z)) = ranked else { return false };
-    let Some(parent) = dom.parent(held) else { return false };
+    let Some((held, z)) = ranked else {
+        return false;
+    };
+    let Some(parent) = dom.parent(held) else {
+        return false;
+    };
     let z_auto = |e: ElId| matches!(dom.style(e, "zIndex").as_str(), "auto" | "");
     let positioned = |e: ElId| !matches!(dom.style(e, "position").as_str(), "static" | "");
     let opaque = |e: ElId| {
@@ -920,7 +978,10 @@ fn covered_by_a_higher_sibling(dom: &dyn Dom, el: ElId) -> bool {
     };
     let mut read = 0usize;
     for sib in dom.children(parent) {
-        if sib == held || !stack_z(dom, sib).is_some_and(|zs| zs > z) || !super::painted::painted_at_capture(dom, sib) {
+        if sib == held
+            || !stack_z(dom, sib).is_some_and(|zs| zs > z)
+            || !super::painted::painted_at_capture(dom, sib)
+        {
             continue;
         }
         let mut boxes = vec![sib];
@@ -1020,7 +1081,12 @@ fn fill_covers_ranked(
     if clip == "padding-box" || webkit_clip == "padding-box" {
         let own = dom.rect(fill);
         let border = |side: &str| js::parse_float(&dom.style(fill, &format!("border{side}Width")));
-        let (t, rt, b, l) = (border("Top"), border("Right"), border("Bottom"), border("Left"));
+        let (t, rt, b, l) = (
+            border("Top"),
+            border("Right"),
+            border("Bottom"),
+            border("Left"),
+        );
         if ![t, rt, b, l].iter().all(|w| w.is_finite() && *w >= 0.0) {
             return false;
         }
@@ -1116,7 +1182,9 @@ const AVATAR_MAX_TEXT: usize = 3;
 ///
 /// An image whose load state was not recorded covers nothing.
 fn covered_by_a_later_picture(dom: &dyn Dom, el: ElId) -> bool {
-    let Some(parent) = dom.parent(el) else { return false };
+    let Some(parent) = dom.parent(el) else {
+        return false;
+    };
     let text = dom
         .direct_text_rect(el)
         .filter(|r| r.all_finite() && r.width > 0.0 && r.height > 0.0)
@@ -1142,7 +1210,9 @@ fn covered_by_a_later_picture(dom: &dyn Dom, el: ElId) -> bool {
         o.is_finite() && o >= PICTURE_COVER_MIN_OPACITY
     };
     let siblings = dom.children(parent);
-    let Some(at) = siblings.iter().position(|&c| c == el) else { return false };
+    let Some(at) = siblings.iter().position(|&c| c == el) else {
+        return false;
+    };
     siblings[at + 1..].iter().any(|&sib| {
         if !z_auto(sib)
             || !(positioned(sib) || !positioned(el))
@@ -1160,11 +1230,16 @@ fn covered_by_a_later_picture(dom: &dyn Dom, el: ElId) -> bool {
         };
         pictures.into_iter().any(|img| {
             let loaded = dom.image_complete(img) == Some(true)
-                && dom.image_natural_size(img).is_some_and(|(w, h)| w > 0.0 && h > 0.0);
+                && dom
+                    .image_natural_size(img)
+                    .is_some_and(|(w, h)| w > 0.0 && h > 0.0);
             if !loaded || !matches!(dom.style(img, "objectFit").as_str(), "fill" | "cover" | "") {
                 return false;
             }
-            let src = dom.image_current_src(img).or_else(|| dom.attr(img, "src")).unwrap_or_default();
+            let src = dom
+                .image_current_src(img)
+                .or_else(|| dom.attr(img, "src"))
+                .unwrap_or_default();
             if url_may_be_transparent(&src) {
                 return false;
             }

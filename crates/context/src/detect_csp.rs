@@ -7,35 +7,73 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::{Map, Value};
 
-const SKIP_DIRS: [&str; 11] =
-    ["node_modules", ".git", ".next", ".turbo", ".svelte-kit", ".nuxt", ".astro", "dist", "build", "out", ".vercel"];
+const SKIP_DIRS: [&str; 11] = [
+    "node_modules",
+    ".git",
+    ".next",
+    ".turbo",
+    ".svelte-kit",
+    ".nuxt",
+    ".astro",
+    "dist",
+    "build",
+    "out",
+    ".vercel",
+];
 const SCAN_EXTS: [&str; 8] = [".js", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".tsx", ".jsx"];
 const LAYOUT_EXTS: [&str; 6] = [".tsx", ".jsx", ".astro", ".vue", ".svelte", ".html"];
 const MAX_DEPTH: usize = 6;
 const MAX_READ_BYTES: usize = 64 * 1024;
 
 static MONOREPO_HELPER: Lazy<Vec<Regex>> = Lazy::new(|| {
-    ["buildCSPConfig", "buildSecurityHeaders", "additionalScriptSrc", "additionalConnectSrc", "createBaseNextConfig"]
-        .iter()
-        .map(|w| Regex::new(&format!(r"(?-u:\b){}(?-u:\b)", w)).unwrap())
-        .collect()
+    [
+        "buildCSPConfig",
+        "buildSecurityHeaders",
+        "additionalScriptSrc",
+        "additionalConnectSrc",
+        "createBaseNextConfig",
+    ]
+    .iter()
+    .map(|w| Regex::new(&format!(r"(?-u:\b){}(?-u:\b)", w)).unwrap())
+    .collect()
 });
 static SVELTEKIT: Lazy<Vec<Regex>> = Lazy::new(|| {
-    [r"(?-u:\b)kit\s*:", r"(?-u:\b)csp\s*:", r"(?-u:\b)directives\s*:"].iter().map(|r| Regex::new(r).unwrap()).collect()
+    [
+        r"(?-u:\b)kit\s*:",
+        r"(?-u:\b)csp\s*:",
+        r"(?-u:\b)directives\s*:",
+    ]
+    .iter()
+    .map(|r| Regex::new(r).unwrap())
+    .collect()
 });
 static NUXT_SECURITY: Lazy<Vec<Regex>> = Lazy::new(|| {
-    [r#"['"]nuxt-security['"]"#, r"(?-u:\b)contentSecurityPolicy(?-u:\b)"].iter().map(|r| Regex::new(r).unwrap()).collect()
+    [
+        r#"['"]nuxt-security['"]"#,
+        r"(?-u:\b)contentSecurityPolicy(?-u:\b)",
+    ]
+    .iter()
+    .map(|r| Regex::new(r).unwrap())
+    .collect()
 });
 static INLINE_HEADER: Lazy<Vec<Regex>> = Lazy::new(|| {
-    [r#"(?i)["']Content-Security-Policy["']"#, r"(?-u:\b)script-src(?-u:\b)", r"(?-u:\b)connect-src(?-u:\b)"]
-        .iter()
-        .map(|r| Regex::new(r).unwrap())
-        .collect()
+    [
+        r#"(?i)["']Content-Security-Policy["']"#,
+        r"(?-u:\b)script-src(?-u:\b)",
+        r"(?-u:\b)connect-src(?-u:\b)",
+    ]
+    .iter()
+    .map(|r| Regex::new(r).unwrap())
+    .collect()
 });
-static MIDDLEWARE_HINT: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?i)headers\.set\(\s*["']Content-Security-Policy["']"#).unwrap());
-static META_TAG_HINT: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?i)http-equiv\s*=\s*["']Content-Security-Policy["']"#).unwrap());
-static MONOREPO_PATH: Lazy<Regex> = Lazy::new(|| Regex::new(r"packages/[^/]+/src/.*(config|next-config|security)").unwrap());
-static CONFIG_PATH: Lazy<Regex> = Lazy::new(|| Regex::new(r"(^|/)(next|nuxt|vite|astro|svelte)\.config\.").unwrap());
+static MIDDLEWARE_HINT: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r#"(?i)headers\.set\(\s*["']Content-Security-Policy["']"#).unwrap());
+static META_TAG_HINT: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r#"(?i)http-equiv\s*=\s*["']Content-Security-Policy["']"#).unwrap());
+static MONOREPO_PATH: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"packages/[^/]+/src/.*(config|next-config|security)").unwrap());
+static CONFIG_PATH: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(^|/)(next|nuxt|vite|astro|svelte)\.config\.").unwrap());
 
 struct Hits {
     append_arrays: Vec<String>,
@@ -45,7 +83,9 @@ struct Hits {
 }
 
 fn is_config(rel: &str, name: &str) -> bool {
-    Regex::new(&format!(r"(^|/){}\.config\.", name)).map(|r| r.is_match(rel)).unwrap_or(false)
+    Regex::new(&format!(r"(^|/){}\.config\.", name))
+        .map(|r| r.is_match(rel))
+        .unwrap_or(false)
 }
 
 const NEXT_MIDDLEWARE_FILES: &[&str] = &["middleware.ts", "middleware.js", "middleware.mjs"];
@@ -61,7 +101,10 @@ const NEXT_CONFIG_FILES: &[&str] = &[
 
 /// JS: detect-csp.mjs#hasNextProjectMarker
 fn has_next_project_marker(project_root: &str) -> bool {
-    if NEXT_CONFIG_FILES.iter().any(|n| exists(&jsp::join(&[project_root, n]))) {
+    if NEXT_CONFIG_FILES
+        .iter()
+        .any(|n| exists(&jsp::join(&[project_root, n])))
+    {
         return true;
     }
     if ["app", "pages", "src/app", "src/pages"]
@@ -147,7 +190,9 @@ fn walk(root: &str, dir: &str, depth: usize, hits: &mut Hits) {
     if depth > MAX_DEPTH {
         return;
     }
-    let Some(entries) = read_dir_entries(dir) else { return };
+    let Some(entries) = read_dir_entries(dir) else {
+        return;
+    };
     for e in entries {
         let abs = jsp::join(&[dir, &e.name]);
         if e.is_dir {
@@ -164,8 +209,14 @@ fn walk(root: &str, dir: &str, depth: usize, hits: &mut Hits) {
         if !SCAN_EXTS.contains(&ext.as_str()) && !LAYOUT_EXTS.contains(&ext.as_str()) {
             continue;
         }
-        let Ok(bytes) = std::fs::read(&abs) else { continue };
-        let slice = if bytes.len() > MAX_READ_BYTES { &bytes[..MAX_READ_BYTES] } else { &bytes[..] };
+        let Ok(bytes) = std::fs::read(&abs) else {
+            continue;
+        };
+        let slice = if bytes.len() > MAX_READ_BYTES {
+            &bytes[..MAX_READ_BYTES]
+        } else {
+            &bytes[..]
+        };
         let body = String::from_utf8_lossy(slice);
         // Candidate patterns use '/', while native Windows relative paths
         // use '\\'. Normalize once for classification and portable signals;
@@ -176,7 +227,12 @@ fn walk(root: &str, dir: &str, depth: usize, hits: &mut Hits) {
 }
 
 pub fn detect_csp(cwd: &str) -> Value {
-    let mut hits = Hits { append_arrays: vec![], append_string: vec![], middleware: vec![], meta_tag: vec![] };
+    let mut hits = Hits {
+        append_arrays: vec![],
+        append_string: vec![],
+        middleware: vec![],
+        meta_tag: vec![],
+    };
     walk(cwd, cwd, 0, &mut hits);
     let (shape, signals): (Option<&str>, Vec<String>) = if !hits.append_arrays.is_empty() {
         (Some("append-arrays"), hits.append_arrays)
@@ -190,8 +246,16 @@ pub fn detect_csp(cwd: &str) -> Value {
         (None, vec![])
     };
     let mut m = Map::new();
-    m.insert("shape".into(), shape.map(|s| Value::String(s.to_string())).unwrap_or(Value::Null));
-    m.insert("signals".into(), Value::Array(signals.into_iter().map(Value::String).collect()));
+    m.insert(
+        "shape".into(),
+        shape
+            .map(|s| Value::String(s.to_string()))
+            .unwrap_or(Value::Null),
+    );
+    m.insert(
+        "signals".into(),
+        Value::Array(signals.into_iter().map(Value::String).collect()),
+    );
     Value::Object(m)
 }
 
@@ -217,7 +281,8 @@ mod tests {
             loop {
                 let root = std::env::temp_dir().join(format!(
                     "impeccable-csp-761-{}-{}",
-                    std::process::id(), NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed),
+                    std::process::id(),
+                    NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed),
                 ));
                 match std::fs::create_dir(&root) {
                     Ok(()) => return Self(root),
@@ -247,18 +312,54 @@ mod tests {
         // Exercise the filesystem walker and native path.relative semantics,
         // not just regexes with pre-normalized input. Windows CI reproduces #761.
         for (path, body, shape) in [
-            ("packages/app/src/security/csp.ts", "buildCSPConfig()", "append-arrays"),
-            ("packages/app/src/next-config.ts", "createBaseNextConfig()", "append-arrays"),
-            ("apps/web/svelte.config.js", "kit: { csp: { directives: {} } }", "append-arrays"),
-            ("apps/web/nuxt.config.ts", "'nuxt-security'; contentSecurityPolicy", "append-arrays"),
-            ("apps/web/next.config.mjs", "'Content-Security-Policy': 'script-src self; connect-src self'", "append-string"),
-            ("next.config.mjs", "'Content-Security-Policy': 'script-src self; connect-src self'", "append-string"),
-            ("apps/web/src/middleware.ts", "headers.set('Content-Security-Policy', policy)", "middleware"),
-            ("apps/web/src/layout.astro", "<meta http-equiv='Content-Security-Policy'>", "meta-tag"),
+            (
+                "packages/app/src/security/csp.ts",
+                "buildCSPConfig()",
+                "append-arrays",
+            ),
+            (
+                "packages/app/src/next-config.ts",
+                "createBaseNextConfig()",
+                "append-arrays",
+            ),
+            (
+                "apps/web/svelte.config.js",
+                "kit: { csp: { directives: {} } }",
+                "append-arrays",
+            ),
+            (
+                "apps/web/nuxt.config.ts",
+                "'nuxt-security'; contentSecurityPolicy",
+                "append-arrays",
+            ),
+            (
+                "apps/web/next.config.mjs",
+                "'Content-Security-Policy': 'script-src self; connect-src self'",
+                "append-string",
+            ),
+            (
+                "next.config.mjs",
+                "'Content-Security-Policy': 'script-src self; connect-src self'",
+                "append-string",
+            ),
+            (
+                "apps/web/src/middleware.ts",
+                "headers.set('Content-Security-Policy', policy)",
+                "middleware",
+            ),
+            (
+                "apps/web/src/layout.astro",
+                "<meta http-equiv='Content-Security-Policy'>",
+                "meta-tag",
+            ),
         ] {
-            assert_eq!(Fixture::new().scan(path, body), serde_json::json!({
-                "shape": shape, "signals": [path],
-            }), "{path}");
+            assert_eq!(
+                Fixture::new().scan(path, body),
+                serde_json::json!({
+                    "shape": shape, "signals": [path],
+                }),
+                "{path}"
+            );
         }
     }
 
@@ -266,23 +367,34 @@ mod tests {
     fn unrelated_nested_files_are_not_csp_candidates() {
         for (path, body) in [
             ("packages/app/src/utils/csp.ts", "buildCSPConfig()"),
-            ("apps/web/not-svelte.config.js", "kit: { csp: { directives: {} } }"),
-            ("apps/web/next.config.mjs", "'Content-Security-Policy': 'script-src self'"),
+            (
+                "apps/web/not-svelte.config.js",
+                "kit: { csp: { directives: {} } }",
+            ),
+            (
+                "apps/web/next.config.mjs",
+                "'Content-Security-Policy': 'script-src self'",
+            ),
         ] {
-            assert_eq!(Fixture::new().scan(path, body), serde_json::json!({
-                "shape": null, "signals": [],
-            }), "{path}");
+            assert_eq!(
+                Fixture::new().scan(path, body),
+                serde_json::json!({
+                    "shape": null, "signals": [],
+                }),
+                "{path}"
+            );
         }
     }
 
     #[cfg(unix)]
     #[test]
     fn posix_backslashes_remain_literal_filename_characters() {
-        let result = Fixture::new().scan(
-            "packages/app/src/config\\notes.ts", "buildCSPConfig()",
+        let result = Fixture::new().scan("packages/app/src/config\\notes.ts", "buildCSPConfig()");
+        assert_eq!(
+            result,
+            serde_json::json!({
+                "shape": "append-arrays", "signals": ["packages/app/src/config\\notes.ts"],
+            })
         );
-        assert_eq!(result, serde_json::json!({
-            "shape": "append-arrays", "signals": ["packages/app/src/config\\notes.ts"],
-        }));
     }
 }

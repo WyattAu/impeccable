@@ -44,7 +44,9 @@ pub fn control_of(tag: &str, input_type: Option<&str>, role: Option<&str>) -> Op
         "button" => Some(Control::Button),
         "select" | "textarea" => Some(Control::Field),
         "input" => {
-            let kind = input_type.map(|t| js::to_lower_case(js::trim(t))).unwrap_or_default();
+            let kind = input_type
+                .map(|t| js::to_lower_case(js::trim(t)))
+                .unwrap_or_default();
             match kind.as_str() {
                 "hidden" => None,
                 "range" => Some(Control::Seek),
@@ -58,9 +60,30 @@ pub fn control_of(tag: &str, input_type: Option<&str>, role: Option<&str>) -> Op
 
 /// Words a media player's own buttons are named with.
 const MEDIA_WORDS: [&str; 24] = [
-    "play", "pause", "stop", "mute", "unmute", "volume", "sound", "skip", "forward", "fast",
-    "rewind", "replay", "back", "previous", "prev", "next", "seek", "speed", "playback",
-    "fullscreen", "full", "exit", "captions", "subtitles",
+    "play",
+    "pause",
+    "stop",
+    "mute",
+    "unmute",
+    "volume",
+    "sound",
+    "skip",
+    "forward",
+    "fast",
+    "rewind",
+    "replay",
+    "back",
+    "previous",
+    "prev",
+    "next",
+    "seek",
+    "speed",
+    "playback",
+    "fullscreen",
+    "full",
+    "exit",
+    "captions",
+    "subtitles",
 ];
 
 fn first_word(name: &str) -> String {
@@ -109,10 +132,16 @@ mod tests {
     fn controls_and_names() {
         assert_eq!(control_of("button", None, None), Some(Control::Button));
         assert_eq!(control_of("div", None, Some("slider")), Some(Control::Seek));
-        assert_eq!(control_of("input", Some("range"), None), Some(Control::Seek));
+        assert_eq!(
+            control_of("input", Some("range"), None),
+            Some(Control::Seek)
+        );
         assert_eq!(control_of("input", Some("hidden"), None), None);
         assert_eq!(control_of("input", None, None), Some(Control::Field));
-        assert_eq!(control_of("div", None, Some("switch")), Some(Control::Field));
+        assert_eq!(
+            control_of("div", None, Some("switch")),
+            Some(Control::Field)
+        );
         assert_eq!(control_of("div", None, None), None);
         assert!(is_play_name("Play intro"));
         assert!(is_play_name(" pause "));

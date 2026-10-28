@@ -80,7 +80,12 @@ fn findings(engine: &BrowserEngine, port: u16, fixture: &str, rule: &str) -> Vec
         .into_iter()
         .filter(|f| f.antipattern == rule)
         .map(|f| {
-            let selector = f.extras.get("selector").and_then(|s| s.as_str()).unwrap_or("").to_string();
+            let selector = f
+                .extras
+                .get("selector")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string();
             (f.snippet, selector)
         })
         .collect()
@@ -93,17 +98,39 @@ fn rendered_answers_drop_the_should_pass_cases() {
     let Some(engine) = engine() else { return };
     let port = serve();
     for (rule, flag, pass) in [
-        ("gray-on-color", vec!["#flag-gray-class"], vec!["#pass-gray-class-white"]),
-        ("wide-tracking", vec!["#flag-tracked-mixed"], vec!["#pass-tracked-caps"]),
-        ("ai-color-palette", vec!["#flag-cyan-blue"], vec!["#pass-cyan-mint"]),
-        ("side-tab", vec!["#flag-stripe-rounded"], vec!["#pass-stripe-square", "#pass-stripe-heading"]),
+        (
+            "gray-on-color",
+            vec!["#flag-gray-class"],
+            vec!["#pass-gray-class-white"],
+        ),
+        (
+            "wide-tracking",
+            vec!["#flag-tracked-mixed"],
+            vec!["#pass-tracked-caps"],
+        ),
+        (
+            "ai-color-palette",
+            vec!["#flag-cyan-blue"],
+            vec!["#pass-cyan-mint"],
+        ),
+        (
+            "side-tab",
+            vec!["#flag-stripe-rounded"],
+            vec!["#pass-stripe-square", "#pass-stripe-heading"],
+        ),
     ] {
         let found = findings(&engine, port, FIXTURE, rule);
         for selector in flag {
-            assert!(found.iter().any(|(_, s)| s == selector), "{rule}: missing {selector} in {found:#?}");
+            assert!(
+                found.iter().any(|(_, s)| s == selector),
+                "{rule}: missing {selector} in {found:#?}"
+            );
         }
         for selector in pass {
-            assert!(!found.iter().any(|(_, s)| s == selector), "{rule}: unexpected {selector} in {found:#?}");
+            assert!(
+                !found.iter().any(|(_, s)| s == selector),
+                "{rule}: unexpected {selector} in {found:#?}"
+            );
         }
     }
     let mut labels: Vec<String> = findings(&engine, port, FIXTURE, "numbered-section-labels")
@@ -131,10 +158,16 @@ fn a_side_border_on_a_status_row_or_cell_is_a_side_tab() {
         "border-left 3px stripe on a row or cell (left edge)",
         "border-left 2px stripe on a row or cell (left edge)",
     ] {
-        assert!(snippets.iter().any(|s| s.contains(expected)), "missing {expected} in {snippets:#?}");
+        assert!(
+            snippets.iter().any(|s| s.contains(expected)),
+            "missing {expected} in {snippets:#?}"
+        );
     }
     for silent in ["td.bounded", "is-void"] {
-        assert!(!snippets.iter().any(|s| s.contains(silent)), "unexpected {silent} in {snippets:#?}");
+        assert!(
+            !snippets.iter().any(|s| s.contains(silent)),
+            "unexpected {silent} in {snippets:#?}"
+        );
     }
     assert_eq!(found.len(), 8, "{snippets:#?}");
 }

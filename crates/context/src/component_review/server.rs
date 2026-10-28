@@ -88,7 +88,13 @@ pub struct Limits {
 }
 /// Exit 0 once the round has the user's submission, 4 when it closes without
 /// one (idle timeout or interrupt). service.json never outlives the server.
-pub fn serve(dir: &Path, port: u16, io: &mut Io, limits: Limits, stop: Option<&AtomicBool>) -> Result<i32, String> {
+pub fn serve(
+    dir: &Path,
+    port: u16,
+    io: &mut Io,
+    limits: Limits,
+    stop: Option<&AtomicBool>,
+) -> Result<i32, String> {
     store::read(&dir.join("current.json"))?;
     let server =
         SerialServer::bind(("127.0.0.1", port), MAX_DECISION + 1).map_err(|e| e.to_string())?;
@@ -129,7 +135,13 @@ pub fn serve(dir: &Path, port: u16, io: &mut Io, limits: Limits, stop: Option<&A
         };
         last = Instant::now();
         let method = req.request.method.clone();
-        let path = req.request.target.split('?').next().unwrap_or("").to_string();
+        let path = req
+            .request
+            .target
+            .split('?')
+            .next()
+            .unwrap_or("")
+            .to_string();
         if !authorized(
             &method,
             header(&req.request, "Host"),

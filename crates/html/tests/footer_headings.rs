@@ -9,11 +9,15 @@ use std::path::Path;
 
 fn skips(body: &str) -> Vec<String> {
     let html = format!("<!DOCTYPE html><html><head></head><body>{body}</body></html>");
-    detect_html_source(&html, Path::new("/tmp/footer-headings.html"), &DetectHtmlOptions::default())
-        .into_iter()
-        .filter(|f| f.antipattern == "skipped-heading")
-        .map(|f| f.snippet)
-        .collect()
+    detect_html_source(
+        &html,
+        Path::new("/tmp/footer-headings.html"),
+        &DetectHtmlOptions::default(),
+    )
+    .into_iter()
+    .filter(|f| f.antipattern == "skipped-heading")
+    .map(|f| f.snippet)
+    .collect()
 }
 
 #[test]

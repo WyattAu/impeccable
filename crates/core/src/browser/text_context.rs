@@ -41,10 +41,16 @@ impl ContextNode for DomNode<'_> {
         self.dom.attr(self.el, name)
     }
     fn parent(&self) -> Option<Self> {
-        self.dom.parent(self.el).map(|el| DomNode { dom: self.dom, el })
+        self.dom
+            .parent(self.el)
+            .map(|el| DomNode { dom: self.dom, el })
     }
     fn children(&self) -> Vec<Self> {
-        self.dom.children(self.el).into_iter().map(|el| DomNode { dom: self.dom, el }).collect()
+        self.dom
+            .children(self.el)
+            .into_iter()
+            .map(|el| DomNode { dom: self.dom, el })
+            .collect()
     }
     fn text(&self) -> String {
         self.dom.text_content(self.el)

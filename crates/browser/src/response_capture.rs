@@ -55,10 +55,19 @@ pub(crate) struct ResponseCapture {
 /// `from_utf8_lossy`). Other labels are not modelled, so they fail closed.
 pub fn decoded_text(raw: &[u8]) -> Vec<u8> {
     let utf16 = |b: &[u8], be: bool| {
-        let units: Vec<u16> = b.chunks(2).map(|c| match c {
-            [x, y] => if be { u16::from_be_bytes([*x, *y]) } else { u16::from_le_bytes([*x, *y]) },
-            _ => 0xFFFD,
-        }).collect();
+        let units: Vec<u16> = b
+            .chunks(2)
+            .map(|c| match c {
+                [x, y] => {
+                    if be {
+                        u16::from_be_bytes([*x, *y])
+                    } else {
+                        u16::from_le_bytes([*x, *y])
+                    }
+                }
+                _ => 0xFFFD,
+            })
+            .collect();
         String::from_utf16_lossy(&units).into_bytes()
     };
     match raw {
@@ -74,7 +83,13 @@ impl ResponseRecord {
     /// returned bytes, or as the renderer's decoded text when it returned text
     /// (the only form of a text body the page consumes).
     pub fn body_matches(&self, raw: &[u8]) -> bool {
-        self.body.as_deref().is_some_and(|b| if self.text { b == decoded_text(raw) } else { b == raw })
+        self.body.as_deref().is_some_and(|b| {
+            if self.text {
+                b == decoded_text(raw)
+            } else {
+                b == raw
+            }
+        })
     }
 }
 
@@ -183,8 +198,15 @@ impl ResponseCapture {
     }
 
     pub fn urls(&self, frame: &str, loader: &str) -> Vec<String> {
-        let mut urls: Vec<_> = self.records.iter().filter(|r|r.frame_id==frame && r.loader_id==loader).map(|r|r.url.clone()).collect();
-        urls.sort(); urls.dedup(); urls
+        let mut urls: Vec<_> = self
+            .records
+            .iter()
+            .filter(|r| r.frame_id == frame && r.loader_id == loader)
+            .map(|r| r.url.clone())
+            .collect();
+        urls.sort();
+        urls.dedup();
+        urls
     }
 
     pub fn pending(&self, urls: &[String], frame: &str, loader: &str) -> Vec<(usize, String)> {
@@ -324,18 +346,33 @@ mod tests {
     fn browser_icon_fetch_is_neither_a_dependency_nor_a_change() {
         let mut t = ResponseCapture::default();
         let sent = |id: &str, url: &str, kind: &str, initiator: &str| json!({"requestId":id,"loaderId":"current","request":{"url":url},"frameId":"main","type":kind,"initiator":{"type":initiator}});
-        t.event("Network.requestWillBeSent", &sent("current", "http://x/", "Document", "other"));
+        t.event(
+            "Network.requestWillBeSent",
+            &sent("current", "http://x/", "Document", "other"),
+        );
         let before = t.revision;
         // Chrome's tab-icon fetch, after load, on the main frame's loader.
-        t.event("Network.requestWillBeSent", &sent("9.2", "http://x/favicon.ico", "Other", "other"));
+        t.event(
+            "Network.requestWillBeSent",
+            &sent("9.2", "http://x/favicon.ico", "Other", "other"),
+        );
         t.event("Network.responseReceived", &json!({"requestId":"9.2","response":{"url":"http://x/favicon.ico","status":404,"mimeType":"text/plain"}}));
         t.event("Network.loadingFinished", &json!({"requestId":"9.2"}));
-        assert_eq!(t.revision, before, "the icon fetch must not read as the page changing");
+        assert_eq!(
+            t.revision, before,
+            "the icon fetch must not read as the page changing"
+        );
         assert_eq!(t.urls("main", "current"), vec!["http://x/"]);
         // The document's own requests keep counting, even an `Other` one.
-        t.event("Network.requestWillBeSent", &sent("9.3", "http://x/next.js", "Other", "parser"));
+        t.event(
+            "Network.requestWillBeSent",
+            &sent("9.3", "http://x/next.js", "Other", "parser"),
+        );
         assert_eq!(t.revision, before + 1);
-        assert_eq!(t.urls("main", "current"), vec!["http://x/", "http://x/next.js"]);
+        assert_eq!(
+            t.urls("main", "current"),
+            vec!["http://x/", "http://x/next.js"]
+        );
     }
     #[test]
     fn incomplete_failed_and_wrong_document_are_explicit() {
@@ -349,17 +386,15 @@ mod tests {
         let urls = vec!["inflight".into(), "failed".into(), "absent".into()];
         let e = t.evidence(&urls, "main", "current", 0);
         assert!(e.changed_during_collection);
-        assert!(
-            e.responses
-                .iter()
-                .all(|r| r.body.is_none() && r.unavailable_reason.is_some())
-        );
+        assert!(e
+            .responses
+            .iter()
+            .all(|r| r.body.is_none() && r.unavailable_reason.is_some()));
         assert_eq!(e.missing_urls, vec!["absent"]);
-        assert!(
-            t.evidence(&urls, "iframe", "current", 0)
-                .responses
-                .is_empty()
-        );
+        assert!(t
+            .evidence(&urls, "iframe", "current", 0)
+            .responses
+            .is_empty());
         assert!(t.evidence(&urls, "main", "old", 0).responses.is_empty());
         assert!(t.evidence(&urls, "main", "", 0).responses.is_empty());
     }

@@ -351,7 +351,7 @@ pub fn radial_glow_prominent_stop(
             }
             None => effective,
         };
-        if best.map_or(true, |(_, s)| score > s) {
+        if best.is_none_or(|(_, s)| score > s) {
             best = Some((*stop, score));
         }
     }
@@ -399,7 +399,7 @@ pub fn is_cream_color(rgb: Option<&Rgba>) -> bool {
         return false;
     }
     let warmth = r - b;
-    warmth >= 6.0 && warmth <= 48.0
+    (6.0..=48.0).contains(&warmth)
 }
 
 /// JS: checks.mjs#creamFromClassList. The Tailwind background token that
@@ -1145,7 +1145,10 @@ mod tests {
             ident_words("kitify-text-marquee__text text--clone"),
             vec!["kitify", "text", "marquee", "text", "text", "clone"]
         );
-        assert_eq!(ident_words("hotStuffScroller"), vec!["hotstuffscroller", "hot", "stuff", "scroller"]);
+        assert_eq!(
+            ident_words("hotStuffScroller"),
+            vec!["hotstuffscroller", "hot", "stuff", "scroller"]
+        );
         assert_eq!(ident_words("SlideShow"), vec!["slideshow", "slide", "show"]);
         assert!(ident_words("").is_empty());
         let words = &["marquee", "scroller", "slideshow", "swiper"];
@@ -1176,7 +1179,11 @@ mod tests {
             "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E\")"
         ));
         assert!(!raster_source_is_svg(false, None, "url(a.svg), url(b.png)"));
-        assert!(!raster_source_is_svg(false, None, "linear-gradient(red, blue)"));
+        assert!(!raster_source_is_svg(
+            false,
+            None,
+            "linear-gradient(red, blue)"
+        ));
     }
 
     #[test]
@@ -1196,21 +1203,42 @@ mod tests {
     /// screencursor.com: `0 18px 40px -26px` is a tight lift, not a 40px halo.
     #[test]
     fn gpt_halo_takes_off_a_negative_spread() {
-        assert_eq!(gpt_border_shadow_halo_blur_px(Some("rgba(0, 0, 0, 0.95) 0px 18px 40px -26px")), None);
-        assert_eq!(gpt_border_shadow_halo_blur_px(Some("rgba(8, 33, 25, 0.6) 0px 30px 60px -40px")), None);
+        assert_eq!(
+            gpt_border_shadow_halo_blur_px(Some("rgba(0, 0, 0, 0.95) 0px 18px 40px -26px")),
+            None
+        );
+        assert_eq!(
+            gpt_border_shadow_halo_blur_px(Some("rgba(8, 33, 25, 0.6) 0px 30px 60px -40px")),
+            None
+        );
         assert_eq!(
             gpt_border_shadow_halo_blur_px(Some("rgba(8, 33, 25, 0.6) 0px 30px 60px -12px")),
             Some(60.0)
         );
-        assert_eq!(gpt_border_shadow_halo_blur_px(Some("rgba(15, 23, 42, 0.18) 0px 0px 40px 0px")), Some(40.0));
+        assert_eq!(
+            gpt_border_shadow_halo_blur_px(Some("rgba(15, 23, 42, 0.18) 0px 0px 40px 0px")),
+            Some(40.0)
+        );
         // Over a near-black surface a black halo draws nothing; over white it does.
         let halo = Some("rgba(0, 0, 0, 0.18) 0px 0px 40px 0px");
         let black = Rgba::new(10.0, 10.0, 11.0, 1.0);
         let white = Rgba::new(255.0, 255.0, 255.0, 1.0);
-        assert_eq!(gpt_border_shadow_halo_blur_px_over(halo, Some(&black)), None);
-        assert_eq!(gpt_border_shadow_halo_blur_px_over(halo, Some(&white)), Some(40.0));
-        assert!(paint_shows_over(&Rgba::new(15.0, 126.0, 126.0, 0.35), &Rgba::new(11.0, 26.0, 26.0, 1.0)));
-        assert!(!paint_shows_over(&Rgba::new(28.0, 28.0, 31.0, 1.0), &Rgba::new(24.0, 24.0, 27.0, 1.0)));
+        assert_eq!(
+            gpt_border_shadow_halo_blur_px_over(halo, Some(&black)),
+            None
+        );
+        assert_eq!(
+            gpt_border_shadow_halo_blur_px_over(halo, Some(&white)),
+            Some(40.0)
+        );
+        assert!(paint_shows_over(
+            &Rgba::new(15.0, 126.0, 126.0, 0.35),
+            &Rgba::new(11.0, 26.0, 26.0, 1.0)
+        ));
+        assert!(!paint_shows_over(
+            &Rgba::new(28.0, 28.0, 31.0, 1.0),
+            &Rgba::new(24.0, 24.0, 27.0, 1.0)
+        ));
     }
 
     fn style(pairs: &[(&str, &str)]) -> HashMap<String, String> {

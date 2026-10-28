@@ -78,7 +78,12 @@ fn findings(engine: &BrowserEngine, port: u16, fixture: &str, rule: &str) -> Vec
         .into_iter()
         .filter(|f| f.antipattern == rule)
         .map(|f| {
-            let selector = f.extras.get("selector").and_then(|s| s.as_str()).unwrap_or("").to_string();
+            let selector = f
+                .extras
+                .get("selector")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string();
             (f.snippet, selector)
         })
         .collect()
@@ -91,17 +96,30 @@ fn overused_font_stands_down_for_a_face_that_sets_next_to_no_text() {
 
     // Thirty two-digit numbers in Inter over eight Georgia paragraphs, and a
     // closed drawer of Inter copy: about 3% of the visible characters.
-    let pass = findings(&engine, port, "overused-font-share-pass.html", "overused-font");
+    let pass = findings(
+        &engine,
+        port,
+        "overused-font-share-pass.html",
+        "overused-font",
+    );
     assert_eq!(pass, vec![], "Inter sets next to none of the visible text");
 
     // Thirty word labels in Inter: about 11%, and the element share stands.
-    let flag = findings(&engine, port, "overused-font-share-flag.html", "overused-font");
+    let flag = findings(
+        &engine,
+        port,
+        "overused-font-share-flag.html",
+        "overused-font",
+    );
     assert_eq!(flag.len(), 1, "{flag:?}");
     assert_eq!(flag[0].0, "Primary font: inter (79% of text)", "{flag:?}");
 }
 
 fn snippets(engine: &BrowserEngine, port: u16, fixture: &str, rule: &str) -> Vec<String> {
-    let mut out: Vec<String> = findings(engine, port, fixture, rule).into_iter().map(|(s, _)| s).collect();
+    let mut out: Vec<String> = findings(engine, port, fixture, rule)
+        .into_iter()
+        .map(|(s, _)| s)
+        .collect();
     out.sort();
     out
 }

@@ -229,7 +229,8 @@ pub const NON_RENDERED_TAGS: &[&str] = &[
 /// sample that scrolls is exempt as every scroll region is; one that does
 /// not (w3c.github.io's unwrapped `pre` on a phone, which widens the page)
 /// spills like any other text.
-pub const TEXT_OVERFLOW_SKIP_TAGS: &[&str] = &["textarea", "svg", "canvas", "select", "option", "marquee"];
+pub const TEXT_OVERFLOW_SKIP_TAGS: &[&str] =
+    &["textarea", "svg", "canvas", "select", "option", "marquee"];
 
 /// JS: checks.mjs#CURSOR_GLYPH_RE (`/^[_|▀-▟■▮❙❚｜]$/`).
 pub static CURSOR_GLYPH_RE: Lazy<Regex> =

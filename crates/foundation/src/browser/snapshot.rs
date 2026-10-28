@@ -421,7 +421,11 @@ pub struct Facts {
     /// with the page at the top showed once the page was scrolled to it.
     /// Absent in recordings made before the probe existed, where nothing is
     /// known and the box counts as hidden.
-    #[serde(rename = "shownOnScroll", default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(
+        rename = "shownOnScroll",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
     pub shown_on_scroll: Vec<ScrollShown>,
 }
 
@@ -1097,7 +1101,7 @@ impl Dom for SnapshotDom {
                     None => {
                         let mut u = self.unknown_props.borrow_mut();
                         let key = format!("{pseudo}{prop}");
-                        if !u.iter().any(|p| *p == key) {
+                        if !u.contains(&key) {
                             u.push(key);
                         }
                         Some(String::new())
@@ -1193,7 +1197,11 @@ impl Dom for SnapshotDom {
         Some(super::dom::merge_text_rects_into_lines(rects))
     }
     fn last_word_rects(&self, el: ElId) -> Option<[Rect; 2]> {
-        self.snap.node(el).last_word_rects.as_ref().map(|[a, b]| [rect4(a), rect4(b)])
+        self.snap
+            .node(el)
+            .last_word_rects
+            .as_ref()
+            .map(|[a, b]| [rect4(a), rect4(b)])
     }
 }
 
@@ -1404,7 +1412,8 @@ mod tests {
         );
         assert_eq!(d.running_animation_properties(2), Some(Vec::new()));
         assert_eq!(d.running_animation_properties(0), None);
-        let older = serde_json::json!({ "v": 1, "documentElement": 1, "body": 2, "els": els }).to_string();
+        let older =
+            serde_json::json!({ "v": 1, "documentElement": 1, "body": 2, "els": els }).to_string();
         let d = snap(&older);
         assert_eq!(d.running_animation_properties(3), None);
         assert_eq!(d.running_animation_properties(2), None);
@@ -1444,7 +1453,10 @@ mod tests {
             "animationPlayState",
             "animationComposition",
         ] {
-            assert!(STYLE_PROPS.contains(&prop), "{prop} missing from STYLE_PROPS");
+            assert!(
+                STYLE_PROPS.contains(&prop),
+                "{prop} missing from STYLE_PROPS"
+            );
             assert_eq!(d.style(5, prop), "", "{prop}");
         }
         assert_eq!(d.keyframe_keys("anything"), None);
@@ -1456,9 +1468,19 @@ mod tests {
     #[test]
     fn older_capture_without_containing_block_props_or_scroll_height() {
         let d = snap(SMALL);
-        for prop in ["willChange", "contain", "translate", "scale", "rotate", "perspective"] {
+        for prop in [
+            "willChange",
+            "contain",
+            "translate",
+            "scale",
+            "rotate",
+            "perspective",
+        ] {
             assert_eq!(d.style(4, prop), "", "{prop}");
-            assert!(STYLE_PROPS.contains(&prop), "{prop} missing from STYLE_PROPS");
+            assert!(
+                STYLE_PROPS.contains(&prop),
+                "{prop} missing from STYLE_PROPS"
+            );
         }
         assert!(d.scroll_height(4).is_nan());
         let json = r#"{
@@ -1493,7 +1515,7 @@ mod tests {
         assert!(!d.matches(4, "div:hover").unwrap());
         assert!(d.matches(6, "svg").unwrap());
         assert!(
-            d.matches(6, "SVG").unwrap() == false,
+            !d.matches(6, "SVG").unwrap(),
             "svg type selectors are case-sensitive"
         );
         assert!(d.matches(4, "DIV").unwrap());
@@ -1503,7 +1525,7 @@ mod tests {
         assert!(d.matches(3, "body:has(> div)").unwrap());
         assert!(d.matches(2, ":empty").unwrap());
         assert!(!d.matches(4, ":empty").unwrap());
-        assert!(d.matches(4, "div::before").unwrap() == false);
+        assert!(!d.matches(4, "div::before").unwrap());
         assert!(d.matches(4, "div:foo").is_err());
         assert!(d.query_all(None, ".x)").is_err());
         assert_eq!(
@@ -1544,11 +1566,15 @@ mod tests {
         assert!(!d.has_needs());
         assert_eq!(d.take_scroll_probes(), vec![5]);
         assert!(d.take_scroll_probes().is_empty());
-        let facts: Facts = serde_json::from_str(r#"{"hits":[],"shownOnScroll":[{"el":5,"shown":true}]}"#).unwrap();
+        let facts: Facts =
+            serde_json::from_str(r#"{"hits":[],"shownOnScroll":[{"el":5,"shown":true}]}"#).unwrap();
         d.add_facts(&facts);
         assert_eq!(d.shown_when_scrolled_to(5), Some(true));
         assert!(d.take_scroll_probes().is_empty());
-        assert_eq!(serde_json::to_string(&Facts::default()).unwrap(), r#"{"hits":[]}"#);
+        assert_eq!(
+            serde_json::to_string(&Facts::default()).unwrap(),
+            r#"{"hits":[]}"#
+        );
         let old: Facts = serde_json::from_str(r#"{"hits":[]}"#).unwrap();
         assert!(old.shown_on_scroll.is_empty());
     }
@@ -1574,7 +1600,10 @@ mod tests {
         let d = snap(PAGE);
         assert_eq!(d.image_natural_size(3), Some((0.0, 0.0)));
         assert_eq!(d.image_complete(3), Some(true));
-        assert_eq!(d.image_current_src(3).as_deref(), Some("https://a.test/gone.png"));
+        assert_eq!(
+            d.image_current_src(3).as_deref(),
+            Some("https://a.test/gone.png")
+        );
         assert_eq!(d.image_complete(4), Some(false));
         assert_eq!(d.image_current_src(4).as_deref(), Some(""));
         // Recorded before `complete` was: the size is known, the state is not.
@@ -1609,7 +1638,11 @@ mod tests {
         assert_eq!(d.video_ready_state(3), Some(4));
         assert_eq!(d.video_ready_state(4), None);
         assert_eq!(d.video_ready_state(5), None);
-        assert!(!serde_json::to_string(d.snap.node(4).media.as_ref().unwrap()).unwrap().contains("rs"));
+        assert!(
+            !serde_json::to_string(d.snap.node(4).media.as_ref().unwrap())
+                .unwrap()
+                .contains("rs")
+        );
     }
 
     /// A capture that recorded the text rects hands over the lines; one that

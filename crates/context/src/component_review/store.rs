@@ -18,7 +18,10 @@ pub fn write_bytes(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let parent = path.parent().ok_or("missing parent")?;
     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let name = path.file_name().ok_or("missing file name")?.to_string_lossy();
+    let name = path
+        .file_name()
+        .ok_or("missing file name")?
+        .to_string_lossy();
     let temp = parent.join(format!(".{name}.tmp-{}-{n}", std::process::id()));
     let result = (|| {
         let mut f = fs::File::create(&temp)?;
@@ -42,12 +45,19 @@ pub fn lock(dir: &Path) -> Result<Lock, String> {
         fs::set_permissions(dir, fs::Permissions::from_mode(0o700)).map_err(|e| e.to_string())?;
     }
     // One writer across prepare, HTTP submission and restart.
-    let f = fs::OpenOptions::new().read(true).write(true).create(true).truncate(false)
-        .open(dir.join("review.lock")).map_err(|e| e.to_string())?;
+    let f = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(dir.join("review.lock"))
+        .map_err(|e| e.to_string())?;
     for _ in 0..20 {
         match f.try_lock() {
             Ok(()) => return Ok(Lock(f)),
-            Err(fs::TryLockError::WouldBlock) => std::thread::sleep(std::time::Duration::from_millis(25)),
+            Err(fs::TryLockError::WouldBlock) => {
+                std::thread::sleep(std::time::Duration::from_millis(25))
+            }
             Err(fs::TryLockError::Error(e)) => return Err(e.to_string()),
         }
     }
@@ -192,10 +202,11 @@ fn prepare_bound(
     };
     sources_current(&json!({"project":project,"sources":sources}))?;
     if old.as_ref().is_some_and(|o| {
-        o["journey"] == journey && o["contentRevision"]
-            .as_str()
-            .unwrap_or_else(|| o["packet"]["revision"].as_str().unwrap_or(""))
-            == content_revision
+        o["journey"] == journey
+            && o["contentRevision"]
+                .as_str()
+                .unwrap_or_else(|| o["packet"]["revision"].as_str().unwrap_or(""))
+                == content_revision
     }) {
         return Ok(dir);
     }
@@ -230,7 +241,8 @@ fn prepare_bound(
     }
     let mut decisions = serde_json::Map::new();
     let previous = old
-        .as_ref().filter(|v| v["journey"] == journey)
+        .as_ref()
+        .filter(|v| v["journey"] == journey)
         .map(|v| v["draft"].clone())
         .unwrap_or(Value::Null);
     for c in packet["components"].as_array().unwrap() {
@@ -264,8 +276,11 @@ fn prepare_bound(
         // An unsubmitted intermediate capture is not a revocation. Use only the
         // latest submitted round, so an older approval cannot override later feedback.
         if previous["receipt"].is_null() {
-            let mut submitted = fs::read_dir(dir.join("revisions")).into_iter().flatten()
-                .filter_map(Result::ok).filter_map(|entry| read(&entry.path()).ok())
+            let mut submitted = fs::read_dir(dir.join("revisions"))
+                .into_iter()
+                .flatten()
+                .filter_map(Result::ok)
+                .filter_map(|entry| read(&entry.path()).ok())
                 .filter(|s| !s["receipt"].is_null() && s["journey"] == state["journey"])
                 .collect::<Vec<_>>();
             submitted.sort_by_key(|s| s["packet"]["round"].as_u64().unwrap_or(0));
@@ -275,7 +290,8 @@ fn prepare_bound(
         }
     }
     state["history"] = old
-        .as_ref().filter(|v| v["journey"] == journey)
+        .as_ref()
+        .filter(|v| v["journey"] == journey)
         .map(|previous| super::history::between(previous, &state))
         .unwrap_or(Value::Null);
     write(&dir.join(format!("revisions/{rev}.json")), &state)?;
@@ -296,13 +312,17 @@ pub fn sources_current_in(state: &Value, project: &Path) -> Result<(), String> {
         .as_object()
         .ok_or("missing pinned files")?
     {
-        let full = project
-            .join(relative(path)?)
-            .canonicalize()
-            .map_err(|e| if e.kind() == std::io::ErrorKind::NotFound { format!("review is stale: {path} disappeared") }
-                else { format!("reviewed source unreadable: {path}: {e}") })?;
+        let full = project.join(relative(path)?).canonicalize().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                format!("review is stale: {path} disappeared")
+            } else {
+                format!("reviewed source unreadable: {path}: {e}")
+            }
+        })?;
         if !full.starts_with(project)
-            || digest(&fs::read(&full).map_err(|e| format!("reviewed source unreadable: {path}: {e}"))?) != hash.as_str().unwrap_or("")
+            || digest(
+                &fs::read(&full).map_err(|e| format!("reviewed source unreadable: {path}: {e}"))?,
+            ) != hash.as_str().unwrap_or("")
         {
             return Err(format!(
                 "review is stale: {path} changed; prepare a new round"
@@ -398,17 +418,29 @@ pub fn submit(dir: &Path, body: &Value) -> Result<Value, String> {
             _ => return Err("invalid decision action".into()),
         }
     }
-    let reclassify = body.get("reclassify").map(|r| r.as_array().cloned().ok_or("reclassify must be an array")).transpose()?.unwrap_or_default();
+    let reclassify = body
+        .get("reclassify")
+        .map(|r| r.as_array().cloned().ok_or("reclassify must be an array"))
+        .transpose()?
+        .unwrap_or_default();
     if !reclassify.is_empty() && !v3 {
         return Err("reclassify belongs to the plan and asset review".into());
     }
     let mut reclassify_ids = std::collections::BTreeSet::new();
     for r in &reclassify {
         let id = string(r, "id")?;
-        let listed = packet["codeRegions"].as_array().is_some_and(|code| code.iter().any(|c| c["id"] == id));
-        if !listed || !reclassify_ids.insert(id) || !target_kind(r)
-            || r.as_object().is_some_and(|m| m.keys().any(|k| !["id", "kind", "feedback"].contains(&k.as_str())))
-            || r.get("feedback").is_some_and(|f| f.as_str().is_none_or(|f| f.len() > 8000))
+        let listed = packet["codeRegions"]
+            .as_array()
+            .is_some_and(|code| code.iter().any(|c| c["id"] == id));
+        if !listed
+            || !reclassify_ids.insert(id)
+            || !target_kind(r)
+            || r.as_object().is_some_and(|m| {
+                m.keys()
+                    .any(|k| !["id", "kind", "feedback"].contains(&k.as_str()))
+            })
+            || r.get("feedback")
+                .is_some_and(|f| f.as_str().is_none_or(|f| f.len() > 8000))
         {
             return Err("invalid reclassification: name a codeRegions id once, with kind plate, image or texture".into());
         }
@@ -432,13 +464,16 @@ pub fn submit(dir: &Path, body: &Value) -> Result<Value, String> {
     if missing.len() > 200 || !body["inventoryConfirmed"].is_boolean() {
         return Err("invalid inventory confirmation".into());
     }
-    let has_feedback = revisions > 0 || reclassified > 0 || !reclassify.is_empty() || !missing.is_empty();
+    let has_feedback =
+        revisions > 0 || reclassified > 0 || !reclassify.is_empty() || !missing.is_empty();
     if !has_feedback && (approved != components.len() || body["inventoryConfirmed"] != true) {
         return Err("approve every component and confirm inventory completeness".into());
     }
     let receipt = json!({"schemaVersion":1,"reviewer":"local-browser","visualDecision":if has_feedback{"changes-requested"}else{"approved"},"captureVerified":super::capture::verified(&state),"capture":state["capture"],"submission":body});
     state["draft"] = json!({"packetRevision":body["packetRevision"],"decisions":decisions,"missing":missing,"inventoryConfirmed":body["inventoryConfirmed"]});
-    if v3 { state["draft"]["reclassify"] = json!(reclassify); }
+    if v3 {
+        state["draft"]["reclassify"] = json!(reclassify);
+    }
     state["receipt"] = receipt.clone();
     write(&dir.join("current.json"), &state)?;
     // current.json is the authoritative atomic commit; a receipt export is not approval authority.

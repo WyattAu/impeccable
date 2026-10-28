@@ -119,7 +119,7 @@ pub fn picture_under_text(el: &StaticElement<'_>) -> bool {
         if el.doc.has_pseudo_picture(node.id()) {
             return true;
         }
-        if read_own_background_color(&node, node.style()).map_or(false, |c| c.alpha_or_one() >= 0.95)
+        if read_own_background_color(&node, node.style()).is_some_and(|c| c.alpha_or_one() >= 0.95)
         {
             return false;
         }

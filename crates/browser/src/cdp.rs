@@ -23,7 +23,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use tungstenite::client::IntoClientRequest;
 use tungstenite::protocol::WebSocketConfig;
 use tungstenite::{Message, WebSocket};
@@ -346,8 +346,14 @@ impl Browser {
     /// `Target.getTargets`: every target the browser knows, as CDP
     /// `TargetInfo` objects.
     pub fn targets(&mut self) -> CdpResult<Vec<Value>> {
-        let res = self.conn.send(None, "Target.getTargets", json!({}), PROTOCOL_TIMEOUT)?;
-        Ok(res.get("targetInfos").and_then(Value::as_array).cloned().unwrap_or_default())
+        let res = self
+            .conn
+            .send(None, "Target.getTargets", json!({}), PROTOCOL_TIMEOUT)?;
+        Ok(res
+            .get("targetInfos")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default())
     }
 
     /// Attach to a page someone else opened, without changing it: no new
@@ -773,7 +779,12 @@ impl<'a> Page<'a> {
         self.send_with_timeout(method, params, PROTOCOL_TIMEOUT)
     }
 
-    fn send_with_timeout(&mut self, method: &str, params: Value, timeout: Duration) -> CdpResult<Value> {
+    fn send_with_timeout(
+        &mut self,
+        method: &str,
+        params: Value,
+        timeout: Duration,
+    ) -> CdpResult<Value> {
         let sid = self.session_id.clone();
         let out = self.browser.conn.send(Some(&sid), method, params, timeout);
         self.pump_events();
@@ -800,9 +811,16 @@ impl<'a> Page<'a> {
     /// All requests observed for the current document, including failed/missing dependencies.
     pub fn observed_response_urls(&mut self) -> CdpResult<Vec<String>> {
         self.pump_events();
-        let capture=self.response_capture.as_ref().ok_or_else(||CdpError::new("response capture is not enabled"))?;
-        let loader=self.frames.get(&self.main_frame_id).map(|f|f.loader_id.as_str()).unwrap_or("");
-        Ok(capture.urls(&self.main_frame_id,loader))
+        let capture = self
+            .response_capture
+            .as_ref()
+            .ok_or_else(|| CdpError::new("response capture is not enabled"))?;
+        let loader = self
+            .frames
+            .get(&self.main_frame_id)
+            .map(|f| f.loader_id.as_str())
+            .unwrap_or("");
+        Ok(capture.urls(&self.main_frame_id, loader))
     }
 
     /// Retrieve observed main-document response payloads for exact URLs.
@@ -851,7 +869,10 @@ impl<'a> Page<'a> {
         // Before any page script on every document this page loads: keep the
         // built-ins the snapshot producer uses where page script cannot
         // replace them (`natives_prelude_script`).
-        self.send("Page.addScriptToEvaluateOnNewDocument", json!({ "source": natives_prelude_script() }))?;
+        self.send(
+            "Page.addScriptToEvaluateOnNewDocument",
+            json!({ "source": natives_prelude_script() }),
+        )?;
         // URL mode injects only the snapshot producer (plain JS) and runs the
         // rules natively in this process over `SnapshotDom` (triage D2; see
         // WASM-BUNDLE.md in the detector repo): no WebAssembly is compiled next
@@ -882,7 +903,11 @@ impl<'a> Page<'a> {
             return Err(CdpError::new("the page has no frame tree"));
         };
         self.handle_frame_tree(ft, None);
-        let loader = ft.pointer("/frame/loaderId").and_then(Value::as_str).unwrap_or("").to_string();
+        let loader = ft
+            .pointer("/frame/loaderId")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
         let main = self.main_frame_id.clone();
         if let Some(frame) = self.frames.get_mut(&main) {
             frame.loader_id = loader;
@@ -905,8 +930,12 @@ impl<'a> Page<'a> {
     pub fn viewport_metrics(&mut self) -> CdpResult<((f64, f64, f64, f64), (f64, f64))> {
         let res = self.send("Page.getLayoutMetrics", json!({}))?;
         let num = |v: Option<&Value>, k: &str| v.and_then(|v| v.get(k)).and_then(Value::as_f64);
-        let visual = res.get("cssVisualViewport").or_else(|| res.get("visualViewport"));
-        let layout = res.get("cssLayoutViewport").or_else(|| res.get("layoutViewport"));
+        let visual = res
+            .get("cssVisualViewport")
+            .or_else(|| res.get("visualViewport"));
+        let layout = res
+            .get("cssLayoutViewport")
+            .or_else(|| res.get("layoutViewport"));
         let missing = || CdpError::new("Page.getLayoutMetrics returned no viewport");
         Ok((
             (
@@ -915,7 +944,10 @@ impl<'a> Page<'a> {
                 num(visual, "clientWidth").ok_or_else(missing)?,
                 num(visual, "clientHeight").ok_or_else(missing)?,
             ),
-            (num(layout, "clientWidth").ok_or_else(missing)?, num(layout, "clientHeight").ok_or_else(missing)?),
+            (
+                num(layout, "clientWidth").ok_or_else(missing)?,
+                num(layout, "clientHeight").ok_or_else(missing)?,
+            ),
         ))
     }
 
@@ -1065,7 +1097,10 @@ impl<'a> Page<'a> {
                         let message = page_error_message(details);
                         let key = page_error_key(&message);
                         if !message.is_empty()
-                            && !self.page_errors.iter().any(|e| page_error_key(&e.message) == key)
+                            && !self
+                                .page_errors
+                                .iter()
+                                .any(|e| page_error_key(&e.message) == key)
                         {
                             self.page_errors.push(PageError {
                                 message,
@@ -1235,7 +1270,10 @@ impl<'a> Page<'a> {
         if !epoch_ms.is_finite() {
             return Err(CdpError::new("pinned clock must be a finite epoch"));
         }
-        self.send("Page.addScriptToEvaluateOnNewDocument", json!({ "source": pinned_clock_script(epoch_ms) }))?;
+        self.send(
+            "Page.addScriptToEvaluateOnNewDocument",
+            json!({ "source": pinned_clock_script(epoch_ms) }),
+        )?;
         Ok(())
     }
 
@@ -1472,30 +1510,51 @@ impl<'a> Page<'a> {
         self.send("CSS.enable", json!({}))?;
         let value = self.send("CSS.createStyleSheet", json!({"frameId":world.frame_id}))?;
         self.validate_world(world)?;
-        value["styleSheetId"].as_str().map(str::to_owned)
+        value["styleSheetId"]
+            .as_str()
+            .map(str::to_owned)
             .ok_or_else(|| CdpError::new("capture stylesheet unavailable"))
     }
 
-    pub fn set_capture_stylesheet(&mut self, world: &IsolatedWorld, sheet: &str, text: &str) -> CdpResult<()> {
+    pub fn set_capture_stylesheet(
+        &mut self,
+        world: &IsolatedWorld,
+        sheet: &str,
+        text: &str,
+    ) -> CdpResult<()> {
         self.validate_world(world)?;
-        if text.len() > 65536 { return Err(CdpError::new("capture stylesheet exceeds bound")); }
-        self.send("CSS.setStyleSheetText", json!({"styleSheetId":sheet,"text":text}))?;
+        if text.len() > 65536 {
+            return Err(CdpError::new("capture stylesheet exceeds bound"));
+        }
+        self.send(
+            "CSS.setStyleSheetText",
+            json!({"styleSheetId":sheet,"text":text}),
+        )?;
         self.validate_world(world)
     }
 
     /// Main-document generated boxes from native layout, indexed in querySelectorAll order.
     /// Do not infer pseudo geometry from its owner's rectangle.
-    pub fn capture_pseudo_geometry(&mut self, world: &IsolatedWorld, retained: &[Value]) -> CdpResult<Value> {
+    pub fn capture_pseudo_geometry(
+        &mut self,
+        world: &IsolatedWorld,
+        retained: &[Value],
+    ) -> CdpResult<Value> {
         self.validate_world(world)?;
         // Text-only generated boxes need no image geometry. Query candidates in
         // the isolated world before the bounded native layout lookup.
         let candidates = self.evaluate_value_in_world(world,
             "[...document.querySelectorAll('*')].flatMap((el,index)=>['before','after'].filter(p=>{const s=getComputedStyle(el,'::'+p);return s.backgroundImage!=='none'||s.content.includes('url(')}).map(pseudo=>({index,pseudo})))")?;
-        let mut candidates = candidates.as_array().ok_or_else(|| CdpError::new("pseudo candidates unavailable"))?.clone();
+        let mut candidates = candidates
+            .as_array()
+            .ok_or_else(|| CdpError::new("pseudo candidates unavailable"))?
+            .clone();
         // Suppression can remove a pseudo's only URL. Keep its identity eligible
         // for a fresh native geometry lookup; never reuse its previous box.
         for candidate in retained {
-            if !candidates.contains(candidate) { candidates.push(candidate.clone()); }
+            if !candidates.contains(candidate) {
+                candidates.push(candidate.clone());
+            }
         }
         self.native_pseudo_boxes(world, &candidates)
     }
@@ -1505,23 +1564,49 @@ impl<'a> Page<'a> {
     /// of the border quad, transforms included, in viewport pixels. A generated
     /// box with no layout box of its own reports `box: null`; one that is not
     /// generated at all is not listed.
-    pub fn native_pseudo_boxes(&mut self, world: &IsolatedWorld, candidates: &[Value]) -> CdpResult<Value> {
+    pub fn native_pseudo_boxes(
+        &mut self,
+        world: &IsolatedWorld,
+        candidates: &[Value],
+    ) -> CdpResult<Value> {
         self.validate_world(world)?;
-        if candidates.len()>256 {return Err(CdpError::new("capture pseudo image candidates exceed bound"));}
-        if candidates.is_empty() {return Ok(json!([]));}
+        if candidates.len() > 256 {
+            return Err(CdpError::new(
+                "capture pseudo image candidates exceed bound",
+            ));
+        }
+        if candidates.is_empty() {
+            return Ok(json!([]));
+        }
         let tree = self.send("DOM.getDocument", json!({"depth":-1}))?;
         let mut stack = vec![(tree["root"].clone(), String::new())];
         let mut index = 0usize;
         let mut pseudos = Vec::new();
         while let Some((node, selector)) = stack.pop() {
             let owner = index;
-            if node["nodeType"] == 1 { index += 1; }
-            if index > 5000 { return Err(CdpError::new("capture DOM exceeds bound")); }
+            if node["nodeType"] == 1 {
+                index += 1;
+            }
+            if index > 5000 {
+                return Err(CdpError::new("capture DOM exceeds bound"));
+            }
             if let Some(items) = node["pseudoElements"].as_array() {
                 for pseudo in items {
-                    if !matches!(pseudo["pseudoType"].as_str(), Some("before" | "after" | "marker")) { continue; }
-                    if !candidates.iter().any(|c|c["index"].as_u64()==Some(owner as u64)&&c["pseudo"]==pseudo["pseudoType"]) {continue;}
-                    if pseudos.len() >= 256 { return Err(CdpError::new("capture pseudo elements exceed bound")); }
+                    if !matches!(
+                        pseudo["pseudoType"].as_str(),
+                        Some("before" | "after" | "marker")
+                    ) {
+                        continue;
+                    }
+                    if !candidates.iter().any(|c| {
+                        c["index"].as_u64() == Some(owner as u64)
+                            && c["pseudo"] == pseudo["pseudoType"]
+                    }) {
+                        continue;
+                    }
+                    if pseudos.len() >= 256 {
+                        return Err(CdpError::new("capture pseudo elements exceed bound"));
+                    }
                     let layout = self.send("DOM.getBoxModel", json!({"nodeId":pseudo["nodeId"]}));
                     let bounds = layout.ok().and_then(|v| {
                         let q = v["model"]["border"].as_array()?;
@@ -1537,11 +1622,15 @@ impl<'a> Page<'a> {
                     pseudos.push(json!({"index":owner,"pseudo":format!("::{}",pseudo["pseudoType"].as_str().unwrap()),"selector":selector,"backendNodeId":pseudo["backendNodeId"],"box":bounds}));
                 }
             }
-            if let Some(children)=node["children"].as_array() {
-                let elements: Vec<_>=children.iter().filter(|n|n["nodeType"]==1).collect();
-                for (i,child) in elements.into_iter().enumerate().rev() {
-                    let path=if selector.is_empty(){":root".to_owned()}else{format!("{selector}>:nth-child({})",i+1)};
-                    stack.push((child.clone(),path));
+            if let Some(children) = node["children"].as_array() {
+                let elements: Vec<_> = children.iter().filter(|n| n["nodeType"] == 1).collect();
+                for (i, child) in elements.into_iter().enumerate().rev() {
+                    let path = if selector.is_empty() {
+                        ":root".to_owned()
+                    } else {
+                        format!("{selector}>:nth-child({})", i + 1)
+                    };
+                    stack.push((child.clone(), path));
                 }
             }
         }
@@ -1652,7 +1741,10 @@ impl<'a> Page<'a> {
 
     /// Preserve transparency when capturing isolated component paint.
     pub fn set_transparent_background(&mut self) -> CdpResult<()> {
-        self.send("Emulation.setDefaultBackgroundColorOverride", json!({"color":{"r":0,"g":0,"b":0,"a":0}}))?;
+        self.send(
+            "Emulation.setDefaultBackgroundColorOverride",
+            json!({"color":{"r":0,"g":0,"b":0,"a":0}}),
+        )?;
         Ok(())
     }
 
@@ -1693,7 +1785,11 @@ impl<'a> Page<'a> {
             (y, height)
         };
         let round = |v: f64| impeccable_core::js::math_round(v);
-        let timeout = if self.attached { ATTACHED_SCREENSHOT_TIMEOUT } else { PROTOCOL_TIMEOUT };
+        let timeout = if self.attached {
+            ATTACHED_SCREENSHOT_TIMEOUT
+        } else {
+            PROTOCOL_TIMEOUT
+        };
         let res = self.send_with_timeout(
             "Page.captureScreenshot",
             json!({
@@ -2042,7 +2138,10 @@ fn thrown_value_label(details: &Value, exception: &Value) -> String {
         };
     }
     if is_object && subtype.is_none() {
-        if let Some(rendered) = exception.get("preview").and_then(|p| render_preview(exception, p)) {
+        if let Some(rendered) = exception
+            .get("preview")
+            .and_then(|p| render_preview(exception, p))
+        {
             return rendered;
         }
     }
@@ -2100,7 +2199,11 @@ const ANONYMOUS_SCRIPT: &str = "<anonymous>";
 /// named `<anonymous>` the way V8's own stack names it. `None` when there is
 /// neither a named script nor a frame.
 pub fn page_error_source(details: &Value) -> Option<String> {
-    let names_script = |v: &Value| v.get("url").and_then(Value::as_str).is_some_and(|u| !u.is_empty());
+    let names_script = |v: &Value| {
+        v.get("url")
+            .and_then(Value::as_str)
+            .is_some_and(|u| !u.is_empty())
+    };
     let top = details.pointer("/stackTrace/callFrames/0");
     let (at, frame) = match top {
         Some(f) if names_script(f) => (f, Some(f)),
@@ -2114,13 +2217,21 @@ pub fn page_error_source(details: &Value) -> Option<String> {
         .filter(|u| !u.is_empty())
         .unwrap_or(ANONYMOUS_SCRIPT);
     // CDP positions are 0-based; stack traces and editors count from 1.
-    let position = |key: &str| at.get(key).and_then(Value::as_f64).unwrap_or(0.0).max(0.0) as u64 + 1;
+    let position =
+        |key: &str| at.get(key).and_then(Value::as_f64).unwrap_or(0.0).max(0.0) as u64 + 1;
     let url = if url.chars().count() > PAGE_ERROR_URL_MAX {
-        format!("{}...", url.chars().take(PAGE_ERROR_URL_MAX).collect::<String>())
+        format!(
+            "{}...",
+            url.chars().take(PAGE_ERROR_URL_MAX).collect::<String>()
+        )
     } else {
         url.to_string()
     };
-    let location = format!("{url}:{}:{}", position("lineNumber"), position("columnNumber"));
+    let location = format!(
+        "{url}:{}:{}",
+        position("lineNumber"),
+        position("columnNumber")
+    );
     let function = frame
         .and_then(|f| f.get("functionName"))
         .and_then(Value::as_str)
@@ -2245,7 +2356,10 @@ mod tests {
                     { "name": "message", "type": "string", "value": "config \"missing\"" }
                 ] } }
         });
-        assert_eq!(page_error_message(&object), r#"Uncaught Object {code: "E_CONFIG", message: "config \"missing\""}"#);
+        assert_eq!(
+            page_error_message(&object),
+            r#"Uncaught Object {code: "E_CONFIG", message: "config \"missing\""}"#
+        );
         let instance = json!({
             "text": "Uncaught",
             "exception": { "type": "object", "className": "ApiError", "description": "ApiError", "objectId": "2",
@@ -2255,7 +2369,10 @@ mod tests {
                     { "name": "cause", "type": "undefined" }
                 ] } }
         });
-        assert_eq!(page_error_message(&instance), "Uncaught ApiError {status: 500, body: Object, cause: undefined, ...}");
+        assert_eq!(
+            page_error_message(&instance),
+            "Uncaught ApiError {status: 500, body: Object, cause: undefined, ...}"
+        );
         // An Error names its type; a primitive reads as itself.
         let error = json!({
             "text": "Uncaught",
@@ -2269,9 +2386,17 @@ mod tests {
             page_error_message(&error),
             "Uncaught Error: Minified React error #418: Hydration failed because the initial UI does not match what was rendered on the server."
         );
-        assert_eq!(page_error_message(&json!({ "text": "Uncaught", "exception": { "type": "string", "value": "boom" } })), "Uncaught boom");
+        assert_eq!(
+            page_error_message(
+                &json!({ "text": "Uncaught", "exception": { "type": "string", "value": "boom" } })
+            ),
+            "Uncaught boom"
+        );
         // A cross-origin throw arrives with no exception object to read.
-        assert_eq!(page_error_message(&json!({ "text": "Uncaught [object Object]" })), "Uncaught [object Object]");
+        assert_eq!(
+            page_error_message(&json!({ "text": "Uncaught [object Object]" })),
+            "Uncaught [object Object]"
+        );
     }
 
     #[test]
@@ -2284,7 +2409,10 @@ mod tests {
             "exception": { "type": "object", "subtype": "error", "className": "ReferenceError", "objectId": "1",
                 "description": "ReferenceError: jQuery is not defined\n    at https://www.adm.com/en-us/products-services/services/:4811:60" }
         });
-        assert_eq!(page_error_message(&reference), "Uncaught ReferenceError: jQuery is not defined");
+        assert_eq!(
+            page_error_message(&reference),
+            "Uncaught ReferenceError: jQuery is not defined"
+        );
         let rejected = json!({
             "text": "Uncaught (in promise)",
             "exception": { "type": "object", "subtype": "error", "className": "TypeError", "objectId": "2",
@@ -2300,33 +2428,61 @@ mod tests {
             "exception": { "type": "object", "subtype": "error", "className": "Error", "objectId": "3",
                 "description": "ChunkLoadError: Loading chunk web-vitals failed.\n(error: https://www.att.com/x.js)\n    at __webpack_require__.f.j (https://www.att.com/chat/runtime.js:298:31)" }
         });
-        assert_eq!(page_error_message(&chunk), "Uncaught (in promise) ChunkLoadError: Loading chunk web-vitals failed.");
+        assert_eq!(
+            page_error_message(&chunk),
+            "Uncaught (in promise) ChunkLoadError: Loading chunk web-vitals failed."
+        );
         // A description that names no type gets the class in front; an empty
         // message is the type alone.
         let replaced_stack = json!({ "text": "Uncaught",
             "exception": { "type": "object", "subtype": "error", "className": "Error", "objectId": "4", "description": "config went missing" } });
-        assert_eq!(page_error_message(&replaced_stack), "Uncaught Error: config went missing");
+        assert_eq!(
+            page_error_message(&replaced_stack),
+            "Uncaught Error: config went missing"
+        );
         let bare = json!({ "text": "Uncaught",
             "exception": { "type": "object", "subtype": "error", "className": "AbortError", "objectId": "5", "description": "AbortError" } });
         assert_eq!(page_error_message(&bare), "Uncaught AbortError");
         // CDP's text for a throw from another origin is typed already.
         let text_only = json!({ "text": "Uncaught (in promise) TypeError: Cannot redefine property: src\nmore" });
-        assert_eq!(page_error_message(&text_only), "Uncaught (in promise) TypeError: Cannot redefine property: src");
+        assert_eq!(
+            page_error_message(&text_only),
+            "Uncaught (in promise) TypeError: Cannot redefine property: src"
+        );
         // The message after its type is cut at 160 characters, the cut base
         // applied to the untyped message, so a long React invariant keeps
         // everything it showed before.
         let long = json!({ "text": "Uncaught",
             "exception": { "type": "object", "subtype": "error", "className": "Error", "objectId": "6",
                 "description": format!("Error: {}", "x".repeat(300)) } });
-        assert_eq!(page_error_message(&long), format!("Uncaught Error: {}", "x".repeat(160)));
-        let long_text = json!({ "text": format!("Uncaught (in promise) TypeError: {}", "y".repeat(300)) });
-        assert_eq!(page_error_message(&long_text), format!("Uncaught (in promise) TypeError: {}", "y".repeat(160)));
+        assert_eq!(
+            page_error_message(&long),
+            format!("Uncaught Error: {}", "x".repeat(160))
+        );
+        let long_text =
+            json!({ "text": format!("Uncaught (in promise) TypeError: {}", "y".repeat(300)) });
+        assert_eq!(
+            page_error_message(&long_text),
+            format!("Uncaught (in promise) TypeError: {}", "y".repeat(160))
+        );
         let long_object = json!({ "text": "Uncaught", "exception": { "type": "string", "value": "z".repeat(300) } });
-        assert_eq!(page_error_message(&long_object), format!("Uncaught {}", "z".repeat(160)));
+        assert_eq!(
+            page_error_message(&long_object),
+            format!("Uncaught {}", "z".repeat(160))
+        );
         // A throw with nothing to say reports nothing, as before.
-        assert_eq!(page_error_message(&json!({ "text": "Uncaught", "exception": { "type": "string", "value": "" } })), "");
-        assert!(names_a_type("TypeError: x") && names_a_type("AbortError") && names_a_type("$Err: y"));
-        assert!(!names_a_type("config went missing") && !names_a_type("404: gone") && !names_a_type(""));
+        assert_eq!(
+            page_error_message(
+                &json!({ "text": "Uncaught", "exception": { "type": "string", "value": "" } })
+            ),
+            ""
+        );
+        assert!(
+            names_a_type("TypeError: x") && names_a_type("AbortError") && names_a_type("$Err: y")
+        );
+        assert!(
+            !names_a_type("config went missing") && !names_a_type("404: gone") && !names_a_type("")
+        );
     }
 
     #[test]
@@ -2335,7 +2491,10 @@ mod tests {
         let rejected = "Uncaught (in promise) TypeError: Cannot redefine property: src";
         assert_eq!(page_error_key(rejected), sync);
         assert_eq!(page_error_key(sync), page_error_key(rejected));
-        assert_ne!(page_error_key(sync), page_error_key("Uncaught TypeError: Cannot redefine property: href"));
+        assert_ne!(
+            page_error_key(sync),
+            page_error_key("Uncaught TypeError: Cannot redefine property: href")
+        );
         assert_eq!(page_error_key("Uncaught boom"), "Uncaught boom");
     }
 
@@ -2361,7 +2520,8 @@ mod tests {
             "exception": { "type": "object", "subtype": "error", "className": "Error", "objectId": "1",
                 "description": "Error: Minified React error #423; visit https://reactjs.org/docs/error-decoder.html?invariant=423 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.\n    at x (https://x.test/a.js:1:2)" }
         });
-        assert!(page_error_message(&details).ends_with("the entire root will switch to client rendering."));
+        assert!(page_error_message(&details)
+            .ends_with("the entire root will switch to client rendering."));
         // A number the table does not know, and text that is not an invariant,
         // stay as they were.
         for unchanged in [
@@ -2374,8 +2534,12 @@ mod tests {
             assert_eq!(decode_react_invariant(unchanged), unchanged);
         }
         // Both reports of one invariant still share a key.
-        let sync = page_error_message(&json!({ "text": "Uncaught Error: Minified React error #418; visit https://react.dev/errors/418 for the full message" }));
-        let rejected = page_error_message(&json!({ "text": "Uncaught (in promise) Error: Minified React error #418; visit https://react.dev/errors/418 for the full message" }));
+        let sync = page_error_message(
+            &json!({ "text": "Uncaught Error: Minified React error #418; visit https://react.dev/errors/418 for the full message" }),
+        );
+        let rejected = page_error_message(
+            &json!({ "text": "Uncaught (in promise) Error: Minified React error #418; visit https://react.dev/errors/418 for the full message" }),
+        );
         assert_eq!(page_error_key(&sync), page_error_key(&rejected));
     }
 
@@ -2396,26 +2560,42 @@ mod tests {
         let anonymous = json!({
             "stackTrace": { "callFrames": [{ "functionName": "", "url": "https://co-trip.jp/_next/static/chunks/fd9d.js", "lineNumber": 0, "columnNumber": 63838 }] }
         });
-        assert_eq!(page_error_source(&anonymous).as_deref(), Some("at https://co-trip.jp/_next/static/chunks/fd9d.js:1:63839"));
+        assert_eq!(
+            page_error_source(&anonymous).as_deref(),
+            Some("at https://co-trip.jp/_next/static/chunks/fd9d.js:1:63839")
+        );
         // A syntax error has no stack, only the script position.
         let syntax = json!({ "text": "Uncaught SyntaxError: Invalid or unexpected token", "url": "http://127.0.0.1/p.html", "lineNumber": 50, "columnNumber": 18 });
-        assert_eq!(page_error_source(&syntax).as_deref(), Some("at http://127.0.0.1/p.html:51:19"));
+        assert_eq!(
+            page_error_source(&syntax).as_deref(),
+            Some("at http://127.0.0.1/p.html:51:19")
+        );
         // A frame in a script with no URL (eval, `new Function`, an inline
         // script given text) names V8's `<anonymous>` script, where it used to
         // print no source at all (samsung.com `ECID`, heynoah.io `t.push`).
         let evaluated = json!({ "text": "Uncaught", "stackTrace": { "callFrames": [{ "functionName": "f", "url": "", "lineNumber": 0, "columnNumber": 0 }] } });
-        assert_eq!(page_error_source(&evaluated).as_deref(), Some("at f, <anonymous>:1:1"));
+        assert_eq!(
+            page_error_source(&evaluated).as_deref(),
+            Some("at f, <anonymous>:1:1")
+        );
         let injected = json!({ "text": "Uncaught (in promise)", "url": "", "lineNumber": 893, "columnNumber": 49,
             "stackTrace": { "callFrames": [{ "functionName": "", "url": "", "lineNumber": 893, "columnNumber": 49 }] } });
-        assert_eq!(page_error_source(&injected).as_deref(), Some("at <anonymous>:894:50"));
+        assert_eq!(
+            page_error_source(&injected).as_deref(),
+            Some("at <anonymous>:894:50")
+        );
         // A named script in the details still wins over an unnamed top frame.
         let inline = json!({ "url": "https://www.cvs.com/", "lineNumber": 2804, "columnNumber": 42,
             "stackTrace": { "callFrames": [{ "functionName": "g", "url": "", "lineNumber": 0, "columnNumber": 0 }] } });
-        assert_eq!(page_error_source(&inline).as_deref(), Some("at https://www.cvs.com/:2805:43"));
+        assert_eq!(
+            page_error_source(&inline).as_deref(),
+            Some("at https://www.cvs.com/:2805:43")
+        );
         // Nothing named and no frame: no source.
         assert_eq!(page_error_source(&json!({ "text": "Uncaught" })), None);
         let long = format!("data:text/javascript,{}", "x".repeat(400));
-        let cut = page_error_source(&json!({ "url": long, "lineNumber": 0, "columnNumber": 0 })).unwrap();
+        let cut =
+            page_error_source(&json!({ "url": long, "lineNumber": 0, "columnNumber": 0 })).unwrap();
         assert!(cut.ends_with("...:1:1"), "{cut}");
         assert_eq!(cut.chars().count(), "at ".len() + 160 + "...:1:1".len());
     }
@@ -2490,10 +2670,31 @@ pub fn natives_prelude_script() -> String {
 /// The names `browser-bundle/05-natives.js` binds, in its order. A unit test
 /// keeps the two lists equal.
 pub const NATIVE_NAMES: &[&str] = &[
-    "Map", "Set", "WeakMap", "WeakSet", "Error", "URL", "Image", "ResizeObserver", "String",
-    "Boolean", "Array", "Object", "Number", "Promise", "JSON", "Math", "Reflect", "CSS",
-    "performance", "getComputedStyle", "matchMedia", "setTimeout", "clearTimeout",
-    "requestAnimationFrame", "parseFloat",
+    "Map",
+    "Set",
+    "WeakMap",
+    "WeakSet",
+    "Error",
+    "URL",
+    "Image",
+    "ResizeObserver",
+    "String",
+    "Boolean",
+    "Array",
+    "Object",
+    "Number",
+    "Promise",
+    "JSON",
+    "Math",
+    "Reflect",
+    "CSS",
+    "performance",
+    "getComputedStyle",
+    "matchMedia",
+    "setTimeout",
+    "clearTimeout",
+    "requestAnimationFrame",
+    "parseFloat",
 ];
 
 /// `expression` inside a block whose `const`s shadow the built-ins with the
@@ -2520,13 +2721,16 @@ pub fn in_natives_scope(expression: &str) -> String {
 
 /// The page-side half of [`Page::pin_clock`].
 pub fn pinned_clock_script(epoch_ms: f64) -> String {
-    format!(r#"(()=>{{const T={epoch},P=performance.now(),N=Date;const now=()=>Math.floor(T+performance.now()-P);
+    format!(
+        r#"(()=>{{const T={epoch},P=performance.now(),N=Date;const now=()=>Math.floor(T+performance.now()-P);
 const D=new Proxy(N,{{construct(t,a,nt){{return Reflect.construct(N,a.length?a:[now()],nt)}},apply(){{return new N(now()).toString()}},get(t,k,r){{return k==="now"?now:Reflect.get(t,k,r)}}}});
 Object.defineProperty(globalThis,"Date",{{value:D,writable:true,configurable:true,enumerable:false}});
 Object.defineProperty(N.prototype,"constructor",{{value:D,writable:true,configurable:true,enumerable:false}});
 const F=Intl.DateTimeFormat.prototype,g=Object.getOwnPropertyDescriptor(F,"format").get,p=F.formatToParts;
 Object.defineProperty(F,"format",{{configurable:true,get(){{const f=g.call(this);return d=>f(d===undefined?now():d)}}}});
-F.formatToParts=function(d){{return p.call(this,d===undefined?now():d)}};}})()"#, epoch = epoch_ms.floor() as i64)
+F.formatToParts=function(d){{return p.call(this,d===undefined?now():d)}};}})()"#,
+        epoch = epoch_ms.floor() as i64
+    )
 }
 
 #[cfg(test)]
@@ -2535,21 +2739,30 @@ mod natives_tests {
 
     #[test]
     fn native_names_match_the_natives_file() {
-        let start = NATIVES_JS.rfind("const {").expect("05-natives.js ends with a destructure");
+        let start = NATIVES_JS
+            .rfind("const {")
+            .expect("05-natives.js ends with a destructure");
         let end = start + NATIVES_JS[start..].find('}').expect("closing brace");
         let names: Vec<&str> = NATIVES_JS[start + "const {".len()..end]
             .split(',')
             .map(str::trim)
             .filter(|n| !n.is_empty())
             .collect();
-        assert_eq!(names, NATIVE_NAMES, "browser-bundle/05-natives.js and NATIVE_NAMES differ");
+        assert_eq!(
+            names, NATIVE_NAMES,
+            "browser-bundle/05-natives.js and NATIVE_NAMES differ"
+        );
     }
 
     #[test]
     fn natives_scope_keeps_the_first_line_and_closes_after_a_comment() {
         let scoped = in_natives_scope("(() => 1)() // trailing");
         assert_eq!(scoped.lines().count(), 2);
-        assert!(scoped.lines().next().unwrap().ends_with("(() => 1)() // trailing"));
+        assert!(scoped
+            .lines()
+            .next()
+            .unwrap()
+            .ends_with("(() => 1)() // trailing"));
         assert_eq!(scoped.lines().last(), Some("}"));
     }
 }

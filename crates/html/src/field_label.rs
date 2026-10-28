@@ -15,10 +15,12 @@ use crate::quality::is_visually_hidden;
 use impeccable_core::browser::field_label::TEXT_LABEL_MAX_CHARS;
 use impeccable_core::js;
 
-const NOT_LABEL_TEXT_TAGS: &[&str] =
-    &["input", "select", "textarea", "button", "option", "script", "style", "template", "noscript"];
+const NOT_LABEL_TEXT_TAGS: &[&str] = &[
+    "input", "select", "textarea", "button", "option", "script", "style", "template", "noscript",
+];
 const CONTROL_TAGS: &[&str] = &["input", "select", "textarea", "button", "a"];
-const LABEL_CLIMB_STOP_TAGS: &[&str] = &["form", "fieldset", "body", "html", "td", "th", "li", "tr"];
+const LABEL_CLIMB_STOP_TAGS: &[&str] =
+    &["form", "fieldset", "body", "html", "td", "th", "li", "tr"];
 const TEXT_LABEL_MAX_CLIMB: usize = 2;
 
 /// Whether nothing the cascade declares hides `el`.
@@ -60,7 +62,8 @@ fn holds_control(el: &StaticElement<'_>) -> bool {
     let mut stack = el.children();
     while let Some(e) = stack.pop() {
         if CONTROL_TAGS.contains(&e.tag_lower().as_str())
-            || e.get_attribute("role").is_some_and(|r| matches!(js::trim(r), "button" | "link"))
+            || e.get_attribute("role")
+                .is_some_and(|r| matches!(js::trim(r), "button" | "link"))
             || e.get_attribute("contenteditable").is_some()
         {
             return true;
@@ -76,11 +79,22 @@ fn label_before(field: &StaticElement<'_>) -> bool {
     let mut cur = *field;
     for _ in 0..=TEXT_LABEL_MAX_CLIMB {
         if let Some(prev) = cur.previous_element_sibling() {
-            if prev.tag_lower() != "label" || prev.get_attribute("for").is_some_and(|f| !f.is_empty()) {
+            if prev.tag_lower() != "label"
+                || prev.get_attribute("for").is_some_and(|f| !f.is_empty())
+            {
                 return false;
             }
-            let chars = prev.text_content().split_whitespace().collect::<Vec<_>>().join(" ").chars().count();
-            return chars > 0 && chars <= TEXT_LABEL_MAX_CHARS && !holds_control(&prev) && shows_text(&prev, field);
+            let chars = prev
+                .text_content()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .chars()
+                .count();
+            return chars > 0
+                && chars <= TEXT_LABEL_MAX_CHARS
+                && !holds_control(&prev)
+                && shows_text(&prev, field);
         }
         let Some(parent) = cur.parent_element() else {
             return false;
@@ -106,14 +120,18 @@ pub fn field_has_visible_label(field: &StaticElement<'_>) -> bool {
             if e == *field {
                 continue;
             }
-            let names = !id.is_empty() && e.tag_lower() == "label" && e.get_attribute("for") == Some(id);
+            let names =
+                !id.is_empty() && e.tag_lower() == "label" && e.get_attribute("for") == Some(id);
             let pointed = !e.id_attr().is_empty() && labelledby.contains(&e.id_attr());
             if (names || pointed) && shows_text(&e, field) {
                 return true;
             }
         }
     }
-    if field.closest("label").is_some_and(|l| shows_text(&l, field)) {
+    if field
+        .closest("label")
+        .is_some_and(|l| shows_text(&l, field))
+    {
         return true;
     }
     label_before(field)

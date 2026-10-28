@@ -280,7 +280,7 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
     let port_arg = argv.iter().find(|a| a.starts_with("--port="));
     let listener = match port_arg {
         Some(a) => {
-            let raw = a.splitn(2, '=').nth(1).unwrap_or("");
+            let raw = a.split_once('=').map(|x| x.1).unwrap_or("");
             let p = impeccable_core::js::parse_int(raw, 10);
             let port = if p.is_nan() { 0u16 } else { p as u16 };
             match TcpListener::bind(("127.0.0.1", port)) {
@@ -469,7 +469,8 @@ fn stop(argv: &[String], cwd: &str, io: &mut Io) -> i32 {
     // No live config means nothing was ever injected (inject reads its target
     // files from that config), so there is no tag to remove and nothing to
     // report (#951).
-    let injectable = std::path::Path::new(&crate::paths::resolve_live_config_path(cwd, &env)).exists();
+    let injectable =
+        std::path::Path::new(&crate::paths::resolve_live_config_path(cwd, &env)).exists();
     if !keep_inject && injectable {
         // JS: execFileSync(node, [live-inject.mjs, '--remove'], { cwd })
         // with the child's stderr inherited.
@@ -482,8 +483,7 @@ fn stop(argv: &[String], cwd: &str, io: &mut Io) -> i32 {
             let line = out
                 .trim()
                 .split('\n')
-                .filter(|l| !l.is_empty())
-                .last()
+                .rfind(|l| !l.is_empty())
                 .map(String::from);
             if let Some(line) = line {
                 if let Ok(j) = serde_json::from_str::<Value>(&line) {
@@ -502,7 +502,7 @@ fn stop(argv: &[String], cwd: &str, io: &mut Io) -> i32 {
             } else if !out.trim().is_empty() {
                 out.trim().to_string()
             } else {
-                format!("Command failed: impeccable live-inject --remove")
+                "Command failed: impeccable live-inject --remove".to_string()
             };
             let first = detail.split('\n').next().unwrap_or("");
             io.err(&format!(
@@ -535,7 +535,9 @@ fn shutdown(shared: &Shared) {
         let _ = poll.tx.send(json!({ "type": "exit" }));
     }
     for (_, pending) in st.pending_agent_targets.drain(..) {
-        let _ = pending.tx.send(json!({ "ok": false, "error": "server_stopping" }));
+        let _ = pending
+            .tx
+            .send(json!({ "ok": false, "error": "server_stopping" }));
     }
     // Give response writers a moment to flush before the process exits.
     drop(st);
@@ -677,7 +679,13 @@ fn handle_connection(shared: Shared, mut stream: TcpStream, mut ticket: Ticket) 
             }
             let (cwd, env, port, roots, live_bar_hidden) = {
                 let st = lock(&shared);
-                (st.cwd.clone(), st.env.clone(), st.port, st.roots.clone(), st.hide_live_bar)
+                (
+                    st.cwd.clone(),
+                    st.env.clone(),
+                    st.port,
+                    st.roots.clone(),
+                    st.hide_live_bar,
+                )
             };
             let parts = match read_live_browser_script_parts(scripts_dir(&env, &cwd).as_deref()) {
                 Ok(p) => p,
@@ -704,7 +712,15 @@ fn handle_connection(shared: Shared, mut stream: TcpStream, mut ticket: Ticket) 
                 roots.as_ref().and_then(|r| r.context_root.as_deref()),
                 roots.as_ref().map(|r| r.repo_root.as_str()),
             );
-            let body = assemble_live_browser_script(&token_now, port, &prefix, &cwd, &parts, &project_ignores, live_bar_hidden);
+            let body = assemble_live_browser_script(
+                &token_now,
+                port,
+                &prefix,
+                &cwd,
+                &parts,
+                &project_ignores,
+                live_bar_hidden,
+            );
             respond(
                 &mut stream,
                 &cors,
@@ -896,16 +912,17 @@ fn handle_connection(shared: Shared, mut stream: TcpStream, mut ticket: Ticket) 
             let abs = jsp::resolve(&cwd, &[file_path]);
             // JS (#618): realpath both sides so a symlink under the root
             // cannot lead the read out of the workspace.
-            let (real_root, real_target) = match (std::fs::canonicalize(&cwd), std::fs::canonicalize(&abs)) {
-                (Ok(r), Ok(t)) => (
-                    r.to_string_lossy().into_owned(),
-                    t.to_string_lossy().into_owned(),
-                ),
-                _ => {
-                    respond(&mut stream, &cors, text_res(404, None, "File not found"));
-                    return;
-                }
-            };
+            let (real_root, real_target) =
+                match (std::fs::canonicalize(&cwd), std::fs::canonicalize(&abs)) {
+                    (Ok(r), Ok(t)) => (
+                        r.to_string_lossy().into_owned(),
+                        t.to_string_lossy().into_owned(),
+                    ),
+                    _ => {
+                        respond(&mut stream, &cors, text_res(404, None, "File not found"));
+                        return;
+                    }
+                };
             // Confine to the project root after symlink resolution. A bare
             // `startsWith(cwd)` string check lets a sibling dir whose name
             // extends the root name (projeto -> projeto-backup) slip
@@ -980,7 +997,9 @@ fn handle_connection(shared: Shared, mut stream: TcpStream, mut ticket: Ticket) 
         ("/agent-target-claim", "POST") => {
             handle_agent_target_claim_post(&shared, &mut stream, &cors, &req, &token_now)
         }
-        ("/live-bar", "POST") => handle_live_bar_post(&shared, &mut stream, &cors, &req, &token_now),
+        ("/live-bar", "POST") => {
+            handle_live_bar_post(&shared, &mut stream, &cors, &req, &token_now)
+        }
         _ => respond(&mut stream, &cors, text_res(404, None, "Not found")),
     }
 }
@@ -1015,11 +1034,10 @@ fn handle_annotation(
         );
         return;
     }
-    if req
+    if !req
         .header("content-type")
         .unwrap_or("")
-        .to_ascii_lowercase()
-        != "image/png"
+        .eq_ignore_ascii_case("image/png")
     {
         respond(
             stream,
@@ -2692,7 +2710,13 @@ fn validate_agent_target_request(msg: &Value) -> Option<String> {
     if !selector_ok {
         return Some("agent_target: selector is required".into());
     }
-    if msg.get("selector").and_then(Value::as_str).map(|s| s.chars().count()).unwrap_or(0) > 1000 {
+    if msg
+        .get("selector")
+        .and_then(Value::as_str)
+        .map(|s| s.chars().count())
+        .unwrap_or(0)
+        > 1000
+    {
         return Some("agent_target: selector too long".into());
     }
     let action_ok = matches!(msg.get("action"), Some(Value::String(a)) if crate::vocabulary::VISUAL_ACTIONS.contains(&a.as_str()));
@@ -2745,12 +2769,20 @@ fn agent_target_body(
     token: &str,
 ) -> Option<Map<String, Value>> {
     let Some(msg) = parse_json_body(req) else {
-        respond(stream, cors, json_res(400, json!({ "error": "Invalid JSON" })));
+        respond(
+            stream,
+            cors,
+            json_res(400, json!({ "error": "Invalid JSON" })),
+        );
         return None;
     };
     let obj = msg.as_object().cloned().unwrap_or_default();
     if obj.get("token").and_then(Value::as_str) != Some(token) {
-        respond(stream, cors, json_res(401, json!({ "error": "Unauthorized" })));
+        respond(
+            stream,
+            cors,
+            json_res(401, json!({ "error": "Unauthorized" })),
+        );
         return None;
     }
     Some(obj)
@@ -2784,16 +2816,33 @@ fn handle_agent_target_post(
         return;
     }
     let mut payload = Map::new();
-    payload.insert("selector".into(), msg.get("selector").cloned().unwrap_or(Value::Null));
-    if let Some(text) = msg.get("text").and_then(Value::as_str).filter(|t| !t.is_empty()) {
+    payload.insert(
+        "selector".into(),
+        msg.get("selector").cloned().unwrap_or(Value::Null),
+    );
+    if let Some(text) = msg
+        .get("text")
+        .and_then(Value::as_str)
+        .filter(|t| !t.is_empty())
+    {
         payload.insert("text".into(), json!(text));
     }
     if let Some(index) = msg.get("index").and_then(Value::as_i64) {
         payload.insert("index".into(), json!(index));
     }
-    payload.insert("action".into(), msg.get("action").cloned().unwrap_or(Value::Null));
-    payload.insert("count".into(), msg.get("count").cloned().unwrap_or(Value::Null));
-    if let Some(prompt) = msg.get("prompt").and_then(Value::as_str).filter(|p| !p.is_empty()) {
+    payload.insert(
+        "action".into(),
+        msg.get("action").cloned().unwrap_or(Value::Null),
+    );
+    payload.insert(
+        "count".into(),
+        msg.get("count").cloned().unwrap_or(Value::Null),
+    );
+    if let Some(prompt) = msg
+        .get("prompt")
+        .and_then(Value::as_str)
+        .filter(|p| !p.is_empty())
+    {
         payload.insert("prompt".into(), json!(prompt));
     }
     if msg.get("dryRun").and_then(Value::as_bool) == Some(true) {
@@ -2840,7 +2889,10 @@ fn handle_agent_target_result_post(
             respond(
                 stream,
                 cors,
-                json_res(400, json!({ "error": "agent_target_result: missing targetId" })),
+                json_res(
+                    400,
+                    json!({ "error": "agent_target_result: missing targetId" }),
+                ),
             );
             return;
         }
@@ -2851,7 +2903,10 @@ fn handle_agent_target_result_post(
             respond(
                 stream,
                 cors,
-                json_res(400, json!({ "error": "agent_target_result: missing clientId" })),
+                json_res(
+                    400,
+                    json!({ "error": "agent_target_result: missing clientId" }),
+                ),
             );
             return;
         }
@@ -2862,12 +2917,20 @@ fn handle_agent_target_result_post(
             result.insert(k, v);
         }
     }
-    match lock(shared).resolve_agent_target_as_holder(&target_id, &client_id, Value::Object(result)) {
-        Ok(delivered) => respond(stream, cors, json_res(200, json!({ "ok": true, "delivered": delivered }))),
+    match lock(shared).resolve_agent_target_as_holder(&target_id, &client_id, Value::Object(result))
+    {
+        Ok(delivered) => respond(
+            stream,
+            cors,
+            json_res(200, json!({ "ok": true, "delivered": delivered })),
+        ),
         Err(reason) => respond(
             stream,
             cors,
-            json_res(409, json!({ "error": "agent_target_result: not the holder", "reason": reason, "targetId": target_id })),
+            json_res(
+                409,
+                json!({ "error": "agent_target_result: not the holder", "reason": reason, "targetId": target_id }),
+            ),
         ),
     }
 }
@@ -2889,12 +2952,19 @@ fn handle_live_bar_post(
         respond(
             stream,
             cors,
-            json_res(400, json!({ "error": "live_bar: hidden must be a boolean" })),
+            json_res(
+                400,
+                json!({ "error": "live_bar: hidden must be a boolean" }),
+            ),
         );
         return;
     };
     lock(shared).set_live_bar_hidden(hidden);
-    respond(stream, cors, json_res(200, json!({ "ok": true, "hidden": hidden })));
+    respond(
+        stream,
+        cors,
+        json_res(200, json!({ "ok": true, "hidden": hidden })),
+    );
 }
 
 /// JS: handleAgentTargetClaimPost
@@ -2908,13 +2978,24 @@ fn handle_agent_target_claim_post(
     let Some(msg) = agent_target_body(stream, cors, req, token) else {
         return;
     };
-    let target_id = msg.get("targetId").and_then(Value::as_str).unwrap_or("").to_string();
-    let client_id = msg.get("clientId").and_then(Value::as_str).unwrap_or("").to_string();
+    let target_id = msg
+        .get("targetId")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let client_id = msg
+        .get("clientId")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
     if target_id.is_empty() || client_id.is_empty() {
         respond(
             stream,
             cors,
-            json_res(400, json!({ "error": "agent_target_claim: missing targetId or clientId" })),
+            json_res(
+                400,
+                json!({ "error": "agent_target_claim: missing targetId or clientId" }),
+            ),
         );
         return;
     }
@@ -2922,7 +3003,8 @@ fn handle_agent_target_claim_post(
     let state = msg.get("state").cloned().unwrap_or(Value::Null);
     let reason = msg.get("reason").cloned().unwrap_or(Value::Null);
     let result = msg.get("result").filter(|r| r.is_object()).cloned();
-    let body = lock(shared).claim_agent_target(&target_id, &client_id, eligible, state, reason, result);
+    let body =
+        lock(shared).claim_agent_target(&target_id, &client_id, eligible, state, reason, result);
     respond(stream, cors, json_res(200, body));
 }
 
@@ -2935,7 +3017,11 @@ mod content_type_tests {
     // correctly. These lock the Content-Type the two route arms emit.
     #[test]
     fn detect_js_response_declares_utf8_charset() {
-        let res = text_res(200, Some("application/javascript; charset=utf-8"), "console.log(1)");
+        let res = text_res(
+            200,
+            Some("application/javascript; charset=utf-8"),
+            "console.log(1)",
+        );
         assert!(res
             .headers
             .iter()
@@ -3009,11 +3095,20 @@ mod background_tests {
         let ws = std::env::temp_dir().join(format!("impeccable-bg-roots-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&ws);
         for (rel, body) in [
-            ("package.json", "{ \"name\": \"repro-root\", \"private\": true }\n"),
+            (
+                "package.json",
+                "{ \"name\": \"repro-root\", \"private\": true }\n",
+            ),
             ("pnpm-workspace.yaml", "packages:\n  - \"apps/*\"\n"),
-            ("apps/web/package.json", "{ \"name\": \"web\", \"private\": true }\n"),
+            (
+                "apps/web/package.json",
+                "{ \"name\": \"web\", \"private\": true }\n",
+            ),
             ("apps/web/index.html", "<!doctype html><title>web</title>\n"),
-            ("static-mock/index.html", "<!doctype html><title>mock</title>\n"),
+            (
+                "static-mock/index.html",
+                "<!doctype html><title>mock</title>\n",
+            ),
         ] {
             let abs = ws.join(rel);
             std::fs::create_dir_all(abs.parent().unwrap()).unwrap();

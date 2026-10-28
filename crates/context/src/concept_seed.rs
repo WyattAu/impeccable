@@ -56,22 +56,53 @@ pub fn code_led_mode(mode: &str) -> bool {
 pub fn mode_rules_block(env: &Env, cwd: &str, mode: &str) -> String {
     let file = mode_rules_file(mode);
     let path = crate::provider::detect(env, cwd).reference_path(file);
-    let shown = path.clone().unwrap_or_else(|| format!("reference/{}.md", file));
+    let shown = path
+        .clone()
+        .unwrap_or_else(|| format!("reference/{}.md", file));
     let sections = path
         .as_deref()
         .and_then(crate::util::safe_read)
-        .and_then(|text| Some((extract_section(&text, "Directions")?, extract_section(&text, "Comps")?)));
+        .and_then(|text| {
+            Some((
+                extract_section(&text, "Directions")?,
+                extract_section(&text, "Comps")?,
+            ))
+        });
     match sections {
-        Some((directions, comps)) => fill(t::MODE_RULES_BLOCK, &[("MODE", mode), ("PATH", &shown), ("DIRECTIONS", &directions), ("COMPS", &comps)]),
+        Some((directions, comps)) => fill(
+            t::MODE_RULES_BLOCK,
+            &[
+                ("MODE", mode),
+                ("PATH", &shown),
+                ("DIRECTIONS", &directions),
+                ("COMPS", &comps),
+            ],
+        ),
         None => fill(t::MODE_RULES_UNAVAILABLE, &[("PATH", &shown)]),
     }
 }
 
 /// The PRESENTATION block printed after every roll: new-work.md's decision
 /// round, condensed. `build_path` is the recorded default and its file.
-pub fn presentation_block(env: &Env, cwd: &str, scope: &str, reroll: usize, degraded: bool, register: Option<&str>, mode: Option<&str>, build_path: Option<&(String, String)>) -> String {
+pub fn presentation_block(
+    env: &Env,
+    cwd: &str,
+    scope: &str,
+    reroll: usize,
+    degraded: bool,
+    register: Option<&str>,
+    mode: Option<&str>,
+    build_path: Option<&(String, String)>,
+) -> String {
     let sq = crate::provider::detect(env, cwd).verb_cmd("serve-question");
-    let present = fill(if reroll > 0 { t::PRESENT_REROLL } else { t::PRESENT_FIRST }, &[("SQ", &sq)]);
+    let present = fill(
+        if reroll > 0 {
+            t::PRESENT_REROLL
+        } else {
+            t::PRESENT_FIRST
+        },
+        &[("SQ", &sq)],
+    );
     // Operate and Read surfaces build in code whatever the project records;
     // the recorded default governs Persuade and Experience.
     let mode_code = mode.filter(|m| code_led_mode(m));
@@ -89,20 +120,41 @@ pub fn presentation_block(env: &Env, cwd: &str, scope: &str, reroll: usize, degr
     let build = match (mode_code, build_path) {
         (Some(m), recorded) => {
             let recorded = match recorded {
-                Some((value, source)) if value != "code" => format!(" (the recorded default {} from {} governs Persuade and Experience surfaces)", value, source),
+                Some((value, source)) if value != "code" => format!(
+                    " (the recorded default {} from {} governs Persuade and Experience surfaces)",
+                    value, source
+                ),
                 _ => String::new(),
             };
             fill(t::BUILD_PATH_MODE, &[("MODE", m), ("RECORDED", &recorded)])
         }
-        (None, Some((value, source))) => fill(t::BUILD_PATH_RECORDED, &[("VALUE", value), ("SOURCE", source)]),
+        (None, Some((value, source))) => fill(
+            t::BUILD_PATH_RECORDED,
+            &[("VALUE", value), ("SOURCE", source)],
+        ),
         (None, None) => t::BUILD_PATH_NONE.to_string(),
     };
     // Comps generated up front come before the wait. A code-led round's comps
     // wait for the flip --wait reports, but its sketches are written right
     // after serving, before the wait; a single text card has neither.
-    let when = if scope == "direction" && single_card { t::WAIT_NOW } else if code_led { t::WAIT_AFTER_SKETCHES } else { t::WAIT_AFTER_COMPS };
+    let when = if scope == "direction" && single_card {
+        t::WAIT_NOW
+    } else if code_led {
+        t::WAIT_AFTER_SKETCHES
+    } else {
+        t::WAIT_AFTER_COMPS
+    };
     let wait = fill(t::PRESENT_WAIT, &[("SQ", &sq), ("WHEN", when)]);
-    [t::PRESENTATION_HEADER, &present, comps, &wait, &build, t::PRESENT_FALLBACK].join("\n") + "\n"
+    [
+        t::PRESENTATION_HEADER,
+        &present,
+        comps,
+        &wait,
+        &build,
+        t::PRESENT_FALLBACK,
+    ]
+    .join("\n")
+        + "\n"
 }
 
 struct ApiBudget {
@@ -112,10 +164,15 @@ struct ApiBudget {
 
 impl ApiBudget {
     fn new(env: &Env) -> ApiBudget {
-        ApiBudget { deadline: None, timeout: telemetry::api_timeout(env) }
+        ApiBudget {
+            deadline: None,
+            timeout: telemetry::api_timeout(env),
+        }
     }
     fn remaining(&mut self) -> Duration {
-        let d = *self.deadline.get_or_insert_with(|| Instant::now() + self.timeout);
+        let d = *self
+            .deadline
+            .get_or_insert_with(|| Instant::now() + self.timeout);
         d.saturating_duration_since(Instant::now())
     }
 }
@@ -125,7 +182,10 @@ fn api_base(env: &Env) -> String {
 }
 
 pub(crate) fn card_base(env: &Env) -> String {
-    env.get("IMPECCABLE_CARD_BASE").filter(|v| !v.is_empty()).cloned().unwrap_or_else(|| "https://impeccable.style/worlds/cards".to_string())
+    env.get("IMPECCABLE_CARD_BASE")
+        .filter(|v| !v.is_empty())
+        .cloned()
+        .unwrap_or_else(|| "https://impeccable.style/worlds/cards".to_string())
 }
 
 /// URLSearchParams serialization (application/x-www-form-urlencoded).
@@ -133,7 +193,9 @@ fn form_encode(s: &str) -> String {
     let mut out = String::new();
     for b in s.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'*' | b'-' | b'.' | b'_' => out.push(b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'*' | b'-' | b'.' | b'_' => {
+                out.push(b as char)
+            }
             b' ' => out.push('+'),
             _ => out.push_str(&format!("%{:02X}", b)),
         }
@@ -141,8 +203,22 @@ fn form_encode(s: &str) -> String {
     out
 }
 
-fn fetch_roll(env: &Env, cwd: &str, budget: &mut ApiBudget, scope: &str, key: &str, mode: Option<&str>, grain: Option<&str>, platform: Option<&str>, reroll: usize) -> Option<Value> {
-    let mut params = vec![("scope", scope.to_string()), ("key", key.to_string()), ("reroll", reroll.to_string())];
+fn fetch_roll(
+    env: &Env,
+    cwd: &str,
+    budget: &mut ApiBudget,
+    scope: &str,
+    key: &str,
+    mode: Option<&str>,
+    grain: Option<&str>,
+    platform: Option<&str>,
+    reroll: usize,
+) -> Option<Value> {
+    let mut params = vec![
+        ("scope", scope.to_string()),
+        ("key", key.to_string()),
+        ("reroll", reroll.to_string()),
+    ];
     if let Some(m) = mode {
         params.push(("mode", m.to_string()));
     }
@@ -152,13 +228,19 @@ fn fetch_roll(env: &Env, cwd: &str, budget: &mut ApiBudget, scope: &str, key: &s
     if let Some(p) = platform {
         params.push(("platform", p.to_string()));
     }
-    let qs: Vec<String> = params.iter().map(|(k, v)| format!("{}={}", form_encode(k), form_encode(v))).collect();
+    let qs: Vec<String> = params
+        .iter()
+        .map(|(k, v)| format!("{}={}", form_encode(k), form_encode(v)))
+        .collect();
     let url = format!("{}/roll?{}", api_base(env), qs.join("&"));
     let remaining = budget.remaining();
     if remaining.is_zero() {
         return None;
     }
-    let mut req = telemetry::agent(remaining).get(&url).set(telemetry::CLIENT_HEADER, &telemetry::client_header(env, cwd));
+    let mut req = telemetry::agent(remaining).get(&url).set(
+        telemetry::CLIENT_HEADER,
+        &telemetry::client_header(env, cwd),
+    );
     // Opted out: the roll is still the feature, so it is requested, and the
     // server is told to record nothing for it.
     if telemetry::telemetry_disabled(env, cwd) {
@@ -239,14 +321,20 @@ fn ping_chosen(env: &Env, cwd: &str, budget: &mut ApiBudget, a: &PingArgs) -> Pi
     // failed one, or one still pending past the deadline, is sent from here
     // under the same pingId, so the server can drop a double rather than
     // the report be lost.
-    let pending = round.as_ref().filter(|r| r.recorded.as_deref() == Some("pending")).map(|r| (r.reroll, r.pending_at.unwrap_or(0.0)));
+    let pending = round
+        .as_ref()
+        .filter(|r| r.recorded.as_deref() == Some("pending"))
+        .map(|r| (r.reroll, r.pending_at.unwrap_or(0.0)));
     if let (Some(k), Some((n, since))) = (key, pending) {
         {
             let deadline = since + telemetry::api_timeout(env).as_millis() as f64 + 1_000.0;
             while crate::util::now_ms() < deadline {
                 std::thread::sleep(Duration::from_millis(100));
                 round = ledger.round(k, Some(n));
-                if round.as_ref().is_none_or(|x| x.recorded.as_deref() != Some("pending")) {
+                if round
+                    .as_ref()
+                    .is_none_or(|x| x.recorded.as_deref() != Some("pending"))
+                {
                     break;
                 }
             }
@@ -303,7 +391,11 @@ fn render_challenger(env: &Env, concept: &Value, index: usize) -> String {
     let system: Vec<String> = concept
         .get("system")
         .and_then(|s| s.as_array())
-        .map(|a| a.iter().map(|r| fill(t::RENDER_CHALLENGER_RULE, &[("RULE", &value_str(r))])).collect())
+        .map(|a| {
+            a.iter()
+                .map(|r| fill(t::RENDER_CHALLENGER_RULE, &[("RULE", &value_str(r))]))
+                .collect()
+        })
         .unwrap_or_default();
     let (id, board, hero) = challenger_card(env, concept);
     fill(
@@ -326,8 +418,16 @@ fn render_challenger(env: &Env, concept: &Value, index: usize) -> String {
 fn challenger_card(env: &Env, concept: &Value) -> (String, String, String) {
     let cb = card_base(env);
     let id = vs(concept, "id");
-    let board = concept.get("cardBoard").filter(|v| crate::staleness::js_truthy(v)).map(value_str).unwrap_or_else(|| format!("{}/{}.webp", cb, id));
-    let hero = concept.get("cardHero").filter(|v| crate::staleness::js_truthy(v)).map(value_str).unwrap_or_else(|| format!("{}/{}-hero.webp", cb, id));
+    let board = concept
+        .get("cardBoard")
+        .filter(|v| crate::staleness::js_truthy(v))
+        .map(value_str)
+        .unwrap_or_else(|| format!("{}/{}.webp", cb, id));
+    let hero = concept
+        .get("cardHero")
+        .filter(|v| crate::staleness::js_truthy(v))
+        .map(value_str)
+        .unwrap_or_else(|| format!("{}/{}-hero.webp", cb, id));
     (id, board, hero)
 }
 
@@ -344,12 +444,19 @@ fn render_composition(c: &Value, index: Option<usize>) -> String {
     let grammar: Vec<String> = c
         .get("grammar")
         .and_then(|s| s.as_array())
-        .map(|a| a.iter().map(|r| fill(t::RENDER_COMPOSITION_RULE, &[("RULE", &value_str(r))])).collect())
+        .map(|a| {
+            a.iter()
+                .map(|r| fill(t::RENDER_COMPOSITION_RULE, &[("RULE", &value_str(r))]))
+                .collect()
+        })
         .unwrap_or_default();
     fill(
         t::RENDER_COMPOSITION,
         &[
-            ("COMP_INDEX_PREFIX", &index.map(|i| format!("{}. ", i + 1)).unwrap_or_default()),
+            (
+                "COMP_INDEX_PREFIX",
+                &index.map(|i| format!("{}. ", i + 1)).unwrap_or_default(),
+            ),
             ("COMPOSITION_FORM", &vs(c, "form")),
             ("COMPOSITION_ID", &vs(c, "id")),
             ("COMPOSITION_SPARK", &vs(c, "spark")),
@@ -365,13 +472,22 @@ struct Local {
 }
 
 fn load_local(catalog_dir: &str) -> Option<Local> {
-    let cat = read_concept_catalog(&jsp::join(&[catalog_dir, "concept-ingredients.json"]), &jsp::join(&[catalog_dir, "concept-reviews.json"]))?;
+    let cat = read_concept_catalog(
+        &jsp::join(&[catalog_dir, "concept-ingredients.json"]),
+        &jsp::join(&[catalog_dir, "concept-reviews.json"]),
+    )?;
     let errors = validate_concept_catalog(&cat.catalog, &cat.review_data);
     if !errors.is_empty() {
         return None;
     }
-    let comp = read_composition_catalog(&jsp::join(&[catalog_dir, "composition-ingredients.json"]), &jsp::join(&[catalog_dir, "composition-reviews.json"]))?;
-    Some(Local { concepts: cat.concepts, compositions: comp.compositions })
+    let comp = read_composition_catalog(
+        &jsp::join(&[catalog_dir, "composition-ingredients.json"]),
+        &jsp::join(&[catalog_dir, "composition-reviews.json"]),
+    )?;
+    Some(Local {
+        concepts: cat.concepts,
+        compositions: comp.compositions,
+    })
 }
 
 struct RollData {
@@ -419,21 +535,47 @@ pub(crate) struct RollMeta {
 
 /// JS: renderConceptSeed
 /// Returns the text plus the roll's `RollMeta`, for the roll record.
-fn render_concept_seed(env: &Env, cwd: &str, budget: &mut ApiBudget, a: &SeedArgs) -> Result<(String, RollMeta), String> {
+fn render_concept_seed(
+    env: &Env,
+    cwd: &str,
+    budget: &mut ApiBudget,
+    a: &SeedArgs,
+) -> Result<(String, RollMeta), String> {
     let (scope, reroll, roll, degraded, meta) = render_roll(env, cwd, budget, a)?;
     // PRESENTATION closes every roll, where a middle-truncated read still
     // reaches it, like the restated lines above it.
     let register = a.register.clone().flatten();
-    let reference = match telemetry::Ledger::new(env, cwd).for_fresh_key(&a.key, a.fresh_key).reference(&a.key) {
+    let reference = match telemetry::Ledger::new(env, cwd)
+        .for_fresh_key(&a.key, a.fresh_key)
+        .reference(&a.key)
+    {
         Some(r) => fill(t::SEED_REFERENCE, &[("REFERENCE", &r)]),
         None => t::SEED_REFERENCE_UNAVAILABLE.to_string(),
     };
-    Ok((roll + &reference + &presentation_block(env, cwd, scope, reroll, degraded, register.as_deref(), a.mode.clone().flatten().as_deref(), a.build_path.as_ref()), meta))
+    Ok((
+        roll + &reference
+            + &presentation_block(
+                env,
+                cwd,
+                scope,
+                reroll,
+                degraded,
+                register.as_deref(),
+                a.mode.clone().flatten().as_deref(),
+                a.build_path.as_ref(),
+            ),
+        meta,
+    ))
 }
 
 /// The roll itself: (scope, re-roll round, text, degraded, records).
 #[allow(clippy::type_complexity)]
-fn render_roll(env: &Env, cwd: &str, budget: &mut ApiBudget, a: &SeedArgs) -> Result<(&'static str, usize, String, bool, RollMeta), String> {
+fn render_roll(
+    env: &Env,
+    cwd: &str,
+    budget: &mut ApiBudget,
+    a: &SeedArgs,
+) -> Result<(&'static str, usize, String, bool, RollMeta), String> {
     let scope = match a.scope.as_deref() {
         Some("surface") => "surface",
         Some("direction") => "direction",
@@ -449,7 +591,9 @@ fn render_roll(env: &Env, cwd: &str, budget: &mut ApiBudget, a: &SeedArgs) -> Re
         Some(_) => return Err("concept-seed: --register must be safer or bolder".into()),
     };
     if register.is_some() && reroll < 1 {
-        return Err("concept-seed: --register steers a re-roll round; pass --reroll <n> with it".into());
+        return Err(
+            "concept-seed: --register steers a re-roll round; pass --reroll <n> with it".into(),
+        );
     }
     if register.is_some() && scope != "direction" {
         return Err("concept-seed: --register applies to direction rounds only".into());
@@ -457,31 +601,55 @@ fn render_roll(env: &Env, cwd: &str, budget: &mut ApiBudget, a: &SeedArgs) -> Re
     let mode: Option<&str> = match &a.mode {
         None => None,
         Some(Some(m)) if SEED_MODES.contains(&m.as_str()) => Some(m.as_str()),
-        Some(_) => return Err("concept-seed: --mode must be persuade, operate, read, or experience".into()),
+        Some(_) => {
+            return Err(
+                "concept-seed: --mode must be persuade, operate, read, or experience".into(),
+            )
+        }
     };
     let grain: Option<&str> = match &a.grain {
         None => None,
         Some(Some(g)) if COMPOSITION_GRAINS.contains(&g.as_str()) => Some(g.as_str()),
-        Some(_) => return Err(format!("concept-seed: --grain must be one of {}", COMPOSITION_GRAINS.join(", "))),
+        Some(_) => {
+            return Err(format!(
+                "concept-seed: --grain must be one of {}",
+                COMPOSITION_GRAINS.join(", ")
+            ))
+        }
     };
     let platform: Option<&str> = match &a.platform {
         None => None,
         Some(Some(p)) if COMPOSITION_PLATFORMS.contains(&p.as_str()) => Some(p.as_str()),
-        Some(_) => return Err(format!("concept-seed: --platform must be one of {}", COMPOSITION_PLATFORMS.join(", "))),
+        Some(_) => {
+            return Err(format!(
+                "concept-seed: --platform must be one of {}",
+                COMPOSITION_PLATFORMS.join(", ")
+            ))
+        }
     };
-    if !(a.candidate_count.is_finite() && a.candidate_count.fract() == 0.0) || a.candidate_count < 5.0 || a.candidate_count > 7.0 {
+    if !(a.candidate_count.is_finite() && a.candidate_count.fract() == 0.0)
+        || a.candidate_count < 5.0
+        || a.candidate_count > 7.0
+    {
         return Err("concept-seed: --candidate-count must be an integer from 5 to 7".into());
     }
     let candidate_count = a.candidate_count as usize;
     let key = a.key.as_str();
 
-    let index_salt = if reroll == 0 { "index".to_string() } else { format!("index:reroll-{}", reroll) };
-    let build_index = 3 + (unit(scope, &index_salt, key) * (candidate_count as f64 - 2.0)).floor() as usize;
+    let index_salt = if reroll == 0 {
+        "index".to_string()
+    } else {
+        format!("index:reroll-{}", reroll)
+    };
+    let build_index =
+        3 + (unit(scope, &index_salt, key) * (candidate_count as f64 - 2.0)).floor() as usize;
     let mut dealt: Vec<usize> = vec![build_index];
     let want = 3.min(candidate_count);
     let mut draw = 0usize;
     while scope == "surface" && dealt.len() < want {
-        let idx = 1 + (unit(scope, &format!("{}:deal-{}", index_salt, draw), key) * candidate_count as f64).floor() as usize;
+        let idx = 1
+            + (unit(scope, &format!("{}:deal-{}", index_salt, draw), key) * candidate_count as f64)
+                .floor() as usize;
         if !dealt.contains(&idx) {
             dealt.push(idx);
         }
@@ -496,15 +664,35 @@ fn render_roll(env: &Env, cwd: &str, budget: &mut ApiBudget, a: &SeedArgs) -> Re
         }
         draw += 1;
     }
-    let dealt_str = dealt.iter().map(|d| d.to_string()).collect::<Vec<_>>().join(", ");
+    let dealt_str = dealt
+        .iter()
+        .map(|d| d.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
 
     // data resolution
-    let catalog_dir = env.get("IMPECCABLE_CATALOG_DIR").filter(|v| !v.is_empty()).cloned().unwrap_or_else(|| {
-        crate::provider::detect(env, cwd).skill_dir.map(|d| jsp::join(&[&d, "scripts"])).unwrap_or_else(|| ".".to_string())
-    });
+    let catalog_dir = env
+        .get("IMPECCABLE_CATALOG_DIR")
+        .filter(|v| !v.is_empty())
+        .cloned()
+        .unwrap_or_else(|| {
+            crate::provider::detect(env, cwd)
+                .skill_dir
+                .map(|d| jsp::join(&[&d, "scripts"]))
+                .unwrap_or_else(|| ".".to_string())
+        });
     let data: Option<RollData> = if let Some(local) = load_local(&catalog_dir) {
         let sel = select_approved_challengers(scope, key, reroll, mode, &local.concepts)?;
-        let comps = select_approved_compositions(scope, key, reroll, mode, grain, platform, &local.compositions, 3);
+        let comps = select_approved_compositions(
+            scope,
+            key,
+            reroll,
+            mode,
+            grain,
+            platform,
+            &local.compositions,
+            3,
+        );
         Some(RollData {
             source: "local".into(),
             pool_revision: approved_pool_revision(&local.concepts),
@@ -516,29 +704,47 @@ fn render_roll(env: &Env, cwd: &str, budget: &mut ApiBudget, a: &SeedArgs) -> Re
             composition_match: Some(comps.match_),
         })
     } else {
-        fetch_roll(env, cwd, budget, scope, key, mode, grain, platform, reroll).map(|roll| RollData {
-            source: "api".into(),
-            pool_revision: vs(&roll, "poolRevision"),
-            hand_id: roll.get("handId").and_then(Value::as_str).map(str::to_string),
-            approved_count: vs(&roll, "approvedCount"),
-            catalog_count: vs(&roll, "catalogCount"),
-            challengers: roll.get("challengers").and_then(|c| c.as_array()).cloned().unwrap_or_default(),
-            compositions: if let Some(c) = roll.get("compositions").and_then(|c| c.as_array()) {
-                c.clone()
-            } else if let Some(s) = roll.get("stagings").and_then(|c| c.as_array()) {
-                s.clone()
-            } else if let Some(s) = roll.get("staging").filter(|v| crate::staleness::js_truthy(v)) {
-                vec![s.clone()]
-            } else {
-                vec![]
-            },
-            composition_match: None,
+        fetch_roll(env, cwd, budget, scope, key, mode, grain, platform, reroll).map(|roll| {
+            RollData {
+                source: "api".into(),
+                pool_revision: vs(&roll, "poolRevision"),
+                hand_id: roll
+                    .get("handId")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                approved_count: vs(&roll, "approvedCount"),
+                catalog_count: vs(&roll, "catalogCount"),
+                challengers: roll
+                    .get("challengers")
+                    .and_then(|c| c.as_array())
+                    .cloned()
+                    .unwrap_or_default(),
+                compositions: if let Some(c) = roll.get("compositions").and_then(|c| c.as_array()) {
+                    c.clone()
+                } else if let Some(s) = roll.get("stagings").and_then(|c| c.as_array()) {
+                    s.clone()
+                } else if let Some(s) = roll
+                    .get("staging")
+                    .filter(|v| crate::staleness::js_truthy(v))
+                {
+                    vec![s.clone()]
+                } else {
+                    vec![]
+                },
+                composition_match: None,
+            }
         })
     };
 
     let mode_flag = mode.map(|m| format!(" --mode {}", m)).unwrap_or_default();
-    let reroll_flag = if reroll > 0 { format!(" --reroll {}", reroll) } else { String::new() };
-    let register_flag = register.map(|r| format!(" --register {}", r)).unwrap_or_default();
+    let reroll_flag = if reroll > 0 {
+        format!(" --reroll {}", reroll)
+    } else {
+        String::new()
+    };
+    let register_flag = register
+        .map(|r| format!(" --register {}", r))
+        .unwrap_or_default();
     let mode_or_unscoped = mode.unwrap_or("unscoped").to_string();
     let scope_upper = scope.to_uppercase();
     let build_index_s = build_index.to_string();
@@ -555,14 +761,32 @@ fn render_roll(env: &Env, cwd: &str, budget: &mut ApiBudget, a: &SeedArgs) -> Re
         ("BUILDINDEX", &build_index_s),
         ("DEALT_INDICES", &dealt_str),
     ];
-    let promoted = if scope == "direction" { fill(t::PROMOTED_DIRECTION, &common) } else { fill(t::PROMOTED_SURFACE, &common) };
-    let challenger_instruction = if scope == "direction" { t::CHALLENGER_DIRECTION.to_string() } else { t::CHALLENGER_SURFACE.to_string() };
-    let authority = if scope == "direction" { t::AUTHORITY_DIRECTION.to_string() } else { t::AUTHORITY_SURFACE.to_string() };
+    let promoted = if scope == "direction" {
+        fill(t::PROMOTED_DIRECTION, &common)
+    } else {
+        fill(t::PROMOTED_SURFACE, &common)
+    };
+    let challenger_instruction = if scope == "direction" {
+        t::CHALLENGER_DIRECTION.to_string()
+    } else {
+        t::CHALLENGER_SURFACE.to_string()
+    };
+    let authority = if scope == "direction" {
+        t::AUTHORITY_DIRECTION.to_string()
+    } else {
+        t::AUTHORITY_SURFACE.to_string()
+    };
     // MODE RULES ride after RICHNESS (after AUTHORITY on the degraded paths,
     // which carry no RICHNESS), on every round including re-rolls.
-    let mode_block = mode.map(|m| format!("\n{}", mode_rules_block(env, cwd, m))).unwrap_or_default();
+    let mode_block = mode
+        .map(|m| format!("\n{}", mode_rules_block(env, cwd, m)))
+        .unwrap_or_default();
     let richness = format!("{}{}", t::RICHNESS, mode_block);
-    let assigned_or_dealt = if scope == "direction" { format!("ASSIGNED INDEX: {}", build_index) } else { format!("DEALT INDICES: {} (index {} leads)", dealt_str, build_index) };
+    let assigned_or_dealt = if scope == "direction" {
+        format!("ASSIGNED INDEX: {}", build_index)
+    } else {
+        format!("DEALT INDICES: {} (index {} leads)", dealt_str, build_index)
+    };
     let restated_assigned_or_dealt = if scope == "direction" {
         fill(t::RESTATED_DIRECTION, &common)
     } else {
@@ -576,9 +800,24 @@ fn render_roll(env: &Env, cwd: &str, budget: &mut ApiBudget, a: &SeedArgs) -> Re
             let mut pairs = common.clone();
             pairs.push(("DEGRADEDHEADER", &degraded_header));
             pairs.push(("AUTHORITYINSTRUCTION", &authority));
-            return Ok((scope, reroll, fill(t::DEGRADED_SAFER, &pairs), true, RollMeta { worlds: vec![], api: false, pool_revision: None, hand_id: None }));
+            return Ok((
+                scope,
+                reroll,
+                fill(t::DEGRADED_SAFER, &pairs),
+                true,
+                RollMeta {
+                    worlds: vec![],
+                    api: false,
+                    pool_revision: None,
+                    hand_id: None,
+                },
+            ));
         }
-        let degraded_register = if register == Some("bolder") { t::DEGRADED_BOLDER.to_string() } else { String::new() };
+        let degraded_register = if register == Some("bolder") {
+            t::DEGRADED_BOLDER.to_string()
+        } else {
+            String::new()
+        };
         let mut pairs = common.clone();
         pairs.push(("DEGRADEDHEADER", &degraded_header));
         pairs.push(("DEGRADEDREGISTER", &degraded_register));
@@ -586,11 +825,29 @@ fn render_roll(env: &Env, cwd: &str, budget: &mut ApiBudget, a: &SeedArgs) -> Re
         pairs.push(("PROMOTEDINSTRUCTION", &promoted));
         pairs.push(("AUTHORITYINSTRUCTION", &authority));
         pairs.push(("RESTATED_ASSIGNED_OR_DEALT", &restated_assigned_or_dealt));
-        return Ok((scope, reroll, fill(t::DEGRADED_BODY, &pairs), true, RollMeta { worlds: vec![], api: false, pool_revision: None, hand_id: None }));
+        return Ok((
+            scope,
+            reroll,
+            fill(t::DEGRADED_BODY, &pairs),
+            true,
+            RollMeta {
+                worlds: vec![],
+                api: false,
+                pool_revision: None,
+                hand_id: None,
+            },
+        ));
     };
 
-    let compositions_enabled = env.get("IMPECCABLE_COMPOSITIONS").map(|v| v == "1").unwrap_or(false);
-    let compositions: Vec<Value> = if compositions_enabled { data.compositions.clone() } else { vec![] };
+    let compositions_enabled = env
+        .get("IMPECCABLE_COMPOSITIONS")
+        .map(|v| v == "1")
+        .unwrap_or(false);
+    let compositions: Vec<Value> = if compositions_enabled {
+        data.compositions.clone()
+    } else {
+        vec![]
+    };
     let grain_note = match &data.composition_match {
         Some(m) if m.grain.is_some() => {
             let g = m.grain.clone().unwrap();
@@ -598,9 +855,25 @@ fn render_roll(env: &Env, cwd: &str, budget: &mut ApiBudget, a: &SeedArgs) -> Re
             if m.grain_available == Some(0) {
                 fill(t::GRAIN_NONE_AVAIL, &[("MATCH_GRAIN", &g)])
             } else if m.at_grain == Some(0) {
-                fill(t::GRAIN_NONE_AT, &[("MATCH_GRAIN", &g), ("MATCH_GRAINAVAILABLE", &m.grain_available.unwrap_or(0).to_string())])
+                fill(
+                    t::GRAIN_NONE_AT,
+                    &[
+                        ("MATCH_GRAIN", &g),
+                        (
+                            "MATCH_GRAINAVAILABLE",
+                            &m.grain_available.unwrap_or(0).to_string(),
+                        ),
+                    ],
+                )
             } else if m.at_grain.unwrap_or(0) < compositions.len() {
-                fill(t::GRAIN_PARTIAL, &[("MATCH_ATGRAIN", &m.at_grain.unwrap_or(0).to_string()), ("COMPOSITIONS_LENGTH", &comp_len), ("MATCH_GRAIN", &g)])
+                fill(
+                    t::GRAIN_PARTIAL,
+                    &[
+                        ("MATCH_ATGRAIN", &m.at_grain.unwrap_or(0).to_string()),
+                        ("COMPOSITIONS_LENGTH", &comp_len),
+                        ("MATCH_GRAIN", &g),
+                    ],
+                )
             } else {
                 String::new()
             }
@@ -613,31 +886,72 @@ fn render_roll(env: &Env, cwd: &str, budget: &mut ApiBudget, a: &SeedArgs) -> Re
         } else {
             "COMPOSITION CHALLENGERS (identity-free; dress them in the committed visual identity before judging):"
         };
-        let rendered: Vec<String> = compositions.iter().enumerate().map(|(i, c)| render_composition(c, Some(i))).collect();
-        fill(t::COMPOSITION_BLOCK, &[("COMPOSITION_HEADER", header), ("COMPOSITIONS_RENDERED", &rendered.join("\n")), ("GRAINNOTE", &grain_note)])
+        let rendered: Vec<String> = compositions
+            .iter()
+            .enumerate()
+            .map(|(i, c)| render_composition(c, Some(i)))
+            .collect();
+        fill(
+            t::COMPOSITION_BLOCK,
+            &[
+                ("COMPOSITION_HEADER", header),
+                ("COMPOSITIONS_RENDERED", &rendered.join("\n")),
+                ("GRAINNOTE", &grain_note),
+            ],
+        )
     } else {
         String::new()
     };
     let reroll_block = if reroll > 0 {
-        let tag = register.map(|r| format!(" ({} REGISTER, user-requested)", r.to_uppercase())).unwrap_or_default();
-        let derive = if register.is_some() { "" } else { t::REROLL_DERIVE_TEXT };
-        fill(t::REROLL_BLOCK, &[("REROLL", &reroll.to_string()), ("REROLL_REGISTER_TAG", &tag), ("REROLL_DERIVE", derive)])
+        let tag = register
+            .map(|r| format!(" ({} REGISTER, user-requested)", r.to_uppercase()))
+            .unwrap_or_default();
+        let derive = if register.is_some() {
+            ""
+        } else {
+            t::REROLL_DERIVE_TEXT
+        };
+        fill(
+            t::REROLL_BLOCK,
+            &[
+                ("REROLL", &reroll.to_string()),
+                ("REROLL_REGISTER_TAG", &tag),
+                ("REROLL_DERIVE", derive),
+            ],
+        )
     } else {
         String::new()
     };
     let telemetry_block = if data.source == "api" {
         let mut pairs = common.clone();
-        pairs.push(("TELEMETRY_CHOICE", if scope == "direction" { t::TELEMETRY_CHOICE_DIRECTION } else { t::TELEMETRY_CHOICE_SURFACE }));
+        pairs.push((
+            "TELEMETRY_CHOICE",
+            if scope == "direction" {
+                t::TELEMETRY_CHOICE_DIRECTION
+            } else {
+                t::TELEMETRY_CHOICE_SURFACE
+            },
+        ));
         fill(t::TELEMETRY_BLOCK, &pairs)
     } else {
         String::new()
     };
     let assigned_block = match register {
-        None => fill(t::ASSIGNED_BLOCK, &[("ASSIGNED_OR_DEALT", &assigned_or_dealt), ("PROMOTEDINSTRUCTION", &promoted)]),
+        None => fill(
+            t::ASSIGNED_BLOCK,
+            &[
+                ("ASSIGNED_OR_DEALT", &assigned_or_dealt),
+                ("PROMOTEDINSTRUCTION", &promoted),
+            ],
+        ),
         Some("safer") => t::SAFER_BLOCK.to_string(),
         _ => t::BOLDER_BLOCK.to_string(),
     };
-    let round_challenger_instruction = if register == Some("bolder") { t::BOLDER_CHALLENGER.to_string() } else { challenger_instruction };
+    let round_challenger_instruction = if register == Some("bolder") {
+        t::BOLDER_CHALLENGER.to_string()
+    } else {
+        challenger_instruction
+    };
     // The safer register spends its hand unseen, so it prints no challenger
     // and records no world.
     let mut worlds: Vec<Value> = Vec::new();
@@ -648,7 +962,12 @@ fn render_roll(env: &Env, cwd: &str, budget: &mut ApiBudget, a: &SeedArgs) -> Re
             let (id, board, hero) = challenger_card(env, c);
             worlds.push(serde_json::json!({ "id": id, "board": board, "hero": hero }));
         }
-        let rendered: Vec<String> = data.challengers.iter().enumerate().map(|(i, c)| render_challenger(env, c, i)).collect();
+        let rendered: Vec<String> = data
+            .challengers
+            .iter()
+            .enumerate()
+            .map(|(i, c)| render_challenger(env, c, i))
+            .collect();
         fill(
             t::CHALLENGER_SECTION,
             &[
@@ -675,18 +994,33 @@ fn render_roll(env: &Env, cwd: &str, budget: &mut ApiBudget, a: &SeedArgs) -> Re
     pairs.push(("TELEMETRYBLOCK", &telemetry_block));
     pairs.push(("RESTATED", &restated));
     let api = data.source == "api";
-    let pool_revision = Some(data.pool_revision.clone()).filter(|p| api && telemetry::valid_pool_revision(p));
-    let hand_id = data.hand_id.clone().filter(|h| api && telemetry::valid_hand_id(h));
-    Ok((scope, reroll, fill(t::MAIN, &pairs), false, RollMeta { worlds, api, pool_revision, hand_id }))
+    let pool_revision =
+        Some(data.pool_revision.clone()).filter(|p| api && telemetry::valid_pool_revision(p));
+    let hand_id = data
+        .hand_id
+        .clone()
+        .filter(|h| api && telemetry::valid_hand_id(h));
+    Ok((
+        scope,
+        reroll,
+        fill(t::MAIN, &pairs),
+        false,
+        RollMeta {
+            worlds,
+            api,
+            pool_revision,
+            hand_id,
+        },
+    ))
 }
-
 
 pub fn run(args: &[String], io: &mut Io) -> i32 {
     let cwd = io.cwd.to_string_lossy().into_owned();
     let env = io.env.clone();
     let idx = |name: &str| args.iter().position(|a| a == name);
     // args[idx+1] may be undefined -> None
-    let val = |name: &str| -> Option<Option<String>> { idx(name).map(|i| args.get(i + 1).cloned()) };
+    let val =
+        |name: &str| -> Option<Option<String>> { idx(name).map(|i| args.get(i + 1).cloned()) };
     let mut budget = ApiBudget::new(&env);
     // `--check-seed <reference>`: whether this machine rolled that seed, so a
     // reviewer can corroborate a brief's FORM line against the local ledger.
@@ -716,14 +1050,34 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
     let kind = val("--kind");
     if chosen.is_some() || kind.is_some() || idx("--option").is_some() {
         let flat = |v: Option<Option<String>>| -> Option<String> { v.flatten() };
-        let (chosen, from, scope, mode, kind, register) = (flat(chosen), flat(val("--from")), flat(val("--scope")), flat(val("--mode")), flat(kind), flat(val("--register")));
+        let (chosen, from, scope, mode, kind, register) = (
+            flat(chosen),
+            flat(val("--from")),
+            flat(val("--scope")),
+            flat(val("--mode")),
+            flat(kind),
+            flat(val("--register")),
+        );
         // `--reroll <n>`: the round the choice resolved on, 0 to 8; anything
         // else is ignored rather than sent.
-        let reroll = flat(val("--reroll")).map(|s| crate::critique_storage::js_number(&s)).filter(|n| n.is_finite() && n.fract() == 0.0 && *n >= 0.0 && *n <= telemetry::MAX_REROLL as f64).map(|n| n as usize);
-        let option = flat(val("--option")).map(|s| crate::critique_storage::js_number(&s)).filter(|n| n.is_finite() && n.fract() == 0.0 && *n >= 0.0 && *n <= telemetry::MAX_OPTION as f64).map(|n| n as usize);
+        let reroll = flat(val("--reroll"))
+            .map(|s| crate::critique_storage::js_number(&s))
+            .filter(|n| {
+                n.is_finite() && n.fract() == 0.0 && *n >= 0.0 && *n <= telemetry::MAX_REROLL as f64
+            })
+            .map(|n| n as usize);
+        let option = flat(val("--option"))
+            .map(|s| crate::critique_storage::js_number(&s))
+            .filter(|n| {
+                n.is_finite() && n.fract() == 0.0 && *n >= 0.0 && *n <= telemetry::MAX_OPTION as f64
+            })
+            .map(|n| n as usize);
         // A seed reference resolves to its key; one this machine never
         // recorded sends nothing, since the ping needs the key the roll used.
-        let from = match from.as_deref().map(|f| telemetry::Ledger::new(&env, &cwd).resolve(f)) {
+        let from = match from
+            .as_deref()
+            .map(|f| telemetry::Ledger::new(&env, &cwd).resolve(f))
+        {
             Some(Err(_)) => {
                 io.out("choice ping skipped\n");
                 return 0;
@@ -731,7 +1085,16 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             Some(Ok(k)) => Some(k),
             None => None,
         };
-        let args = PingArgs { chosen_id: chosen.as_deref(), key: from.as_deref(), scope: scope.as_deref(), mode: mode.as_deref(), kind: kind.as_deref(), register: register.as_deref(), reroll, option };
+        let args = PingArgs {
+            chosen_id: chosen.as_deref(),
+            key: from.as_deref(),
+            scope: scope.as_deref(),
+            mode: mode.as_deref(),
+            kind: kind.as_deref(),
+            register: register.as_deref(),
+            reroll,
+            option,
+        };
         io.out(match ping_chosen(&env, &cwd, &mut budget, &args) {
             PingOutcome::Sent => "choice recorded\n",
             PingOutcome::Skipped => "choice ping skipped\n",
@@ -744,11 +1107,19 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
         io.out("NO_PRODUCT_MD: the dice stay in the cup until product truth exists. Complete the init ask round and write PRODUCT.md first (reference/init.md), then re-run this exact command. Challengers fuse their form with facts from PRODUCT.md; without it every direction is ungrounded.\n");
         return 1;
     }
-    let num = |v: Option<Option<String>>| -> Option<f64> { v.map(|x| x.map(|s| crate::critique_storage::js_number(&s)).unwrap_or(f64::NAN)) };
+    let num = |v: Option<Option<String>>| -> Option<f64> {
+        v.map(|x| {
+            x.map(|s| crate::critique_storage::js_number(&s))
+                .unwrap_or(f64::NAN)
+        })
+    };
     let supplied = match val("--from") {
         Some(Some(k)) => Some(k),
         Some(None) => Some("undefined".to_string()),
-        None => env.get("IMPECCABLE_CONCEPT_SEED").filter(|v| !v.is_empty()).cloned(),
+        None => env
+            .get("IMPECCABLE_CONCEPT_SEED")
+            .filter(|v| !v.is_empty())
+            .cloned(),
     };
     let fresh_key = supplied.is_none();
     let given = supplied.unwrap_or_else(impeccable_common::seed::new_key);
@@ -791,13 +1162,42 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             // reference), none of the ping's fields.
             let tracked = meta.api && !telemetry::telemetry_disabled(&env, &cwd);
             ledger.record_key(&seed.key);
-            let api = tracked.then(|| crate::serve_question::ApiRoll { mode: mode.as_deref(), register: register.as_deref(), pool_revision: meta.pool_revision.as_deref(), hand_id: meta.hand_id.as_deref() });
-            crate::serve_question::record_roll(&cwd, scope, ledger.reference(&seed.key).as_deref(), seed.reroll as usize, &meta.worlds, api.as_ref());
+            let api = tracked.then_some(crate::serve_question::ApiRoll {
+                mode: mode.as_deref(),
+                register: register.as_deref(),
+                pool_revision: meta.pool_revision.as_deref(),
+                hand_id: meta.hand_id.as_deref(),
+            });
+            crate::serve_question::record_roll(
+                &cwd,
+                scope,
+                ledger.reference(&seed.key).as_deref(),
+                seed.reroll as usize,
+                &meta.worlds,
+                api.as_ref(),
+            );
             // An API-dealt round also enters the seed ledger, which outlives
             // the roll record, for the choice ping that follows the round.
             if tracked {
-                let dealt = meta.worlds.iter().filter_map(|w| w.get("id").and_then(Value::as_str)).map(str::to_string).collect();
-                ledger.record_round(&seed.key, &telemetry::SeedRound { scope: scope.to_string(), reroll: seed.reroll as usize, mode, register, pool_revision: meta.pool_revision.clone(), hand_id: meta.hand_id.clone(), dealt, ..Default::default() });
+                let dealt = meta
+                    .worlds
+                    .iter()
+                    .filter_map(|w| w.get("id").and_then(Value::as_str))
+                    .map(str::to_string)
+                    .collect();
+                ledger.record_round(
+                    &seed.key,
+                    &telemetry::SeedRound {
+                        scope: scope.to_string(),
+                        reroll: seed.reroll as usize,
+                        mode,
+                        register,
+                        pool_revision: meta.pool_revision.clone(),
+                        hand_id: meta.hand_id.clone(),
+                        dealt,
+                        ..Default::default()
+                    },
+                );
             }
             if let Some(notice) = crate::serve_question::tracked_runtime_notice(&cwd) {
                 io.out(&notice);
@@ -820,11 +1220,15 @@ mod tests {
 
     /// The ledger the test runs see: the same pinned salt.
     fn tl(p: &std::path::Path) -> telemetry::Ledger {
-        telemetry::Ledger::new(&Env::from([("IMPECCABLE_SEED_SALT".into(), "test-salt".into())]), &p.to_string_lossy())
+        telemetry::Ledger::new(
+            &Env::from([("IMPECCABLE_SEED_SALT".into(), "test-salt".into())]),
+            &p.to_string_lossy(),
+        )
     }
 
     fn temp_dir(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("impeccable-seed-{}-{}", name, std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("impeccable-seed-{}-{}", name, std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -835,7 +1239,11 @@ mod tests {
         let root = temp_dir(name);
         let proj = root.join("proj");
         std::fs::create_dir_all(&proj).unwrap();
-        std::fs::write(proj.join("PRODUCT.md"), "# Product\n\n## Users\n\nPeople.\n").unwrap();
+        std::fs::write(
+            proj.join("PRODUCT.md"),
+            "# Product\n\n## Users\n\nPeople.\n",
+        )
+        .unwrap();
         let skill = root.join("skill");
         std::fs::create_dir_all(skill.join("reference")).unwrap();
         for (file, body) in files {
@@ -844,15 +1252,27 @@ mod tests {
         (proj, skill)
     }
 
-    fn seed(proj: &std::path::Path, skill: &std::path::Path, catalog: bool, args: &[&str]) -> (i32, String) {
+    fn seed(
+        proj: &std::path::Path,
+        skill: &std::path::Path,
+        catalog: bool,
+        args: &[&str],
+    ) -> (i32, String) {
         let catalog_dir = if catalog {
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/concept-catalog")
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../tests/fixtures/concept-catalog")
         } else {
             proj.join("no-such-catalog")
         };
         let env = Env::from([
-            ("IMPECCABLE_SKILL_DIR".into(), skill.to_string_lossy().into_owned()),
-            ("IMPECCABLE_CATALOG_DIR".into(), catalog_dir.to_string_lossy().into_owned()),
+            (
+                "IMPECCABLE_SKILL_DIR".into(),
+                skill.to_string_lossy().into_owned(),
+            ),
+            (
+                "IMPECCABLE_CATALOG_DIR".into(),
+                catalog_dir.to_string_lossy().into_owned(),
+            ),
             ("IMPECCABLE_API_URL".into(), "http://127.0.0.1:9/api".into()),
             ("IMPECCABLE_API_TIMEOUT".into(), "300".into()),
             ("IMPECCABLE_NO_TELEMETRY".into(), "1".into()),
@@ -869,22 +1289,43 @@ mod tests {
 
     #[test]
     fn extracts_both_sections_verbatim_and_trimmed() {
-        assert_eq!(extract_section(MODE_FILE, "Directions").unwrap(), "- Keep standard navigation.\n\n  Indented continuation.");
-        assert_eq!(extract_section(MODE_FILE, "Comps").unwrap(), "- Show a working state.\n### Sub heading stays");
+        assert_eq!(
+            extract_section(MODE_FILE, "Directions").unwrap(),
+            "- Keep standard navigation.\n\n  Indented continuation."
+        );
+        assert_eq!(
+            extract_section(MODE_FILE, "Comps").unwrap(),
+            "- Show a working state.\n### Sub heading stays"
+        );
     }
 
     #[test]
     fn missing_or_empty_section_is_none() {
-        assert_eq!(extract_section("# T\n\n## Directions\n\nx\n", "Comps"), None);
-        assert_eq!(extract_section("# T\n\n## Directions\n\n\n## Comps\ny\n", "Directions"), None);
-        assert_eq!(extract_section("# T\n\n### Directions\nx\n", "Directions"), None);
+        assert_eq!(
+            extract_section("# T\n\n## Directions\n\nx\n", "Comps"),
+            None
+        );
+        assert_eq!(
+            extract_section("# T\n\n## Directions\n\n\n## Comps\ny\n", "Directions"),
+            None
+        );
+        assert_eq!(
+            extract_section("# T\n\n### Directions\nx\n", "Directions"),
+            None
+        );
     }
 
     #[test]
     fn crlf_files_extract_like_lf() {
         let crlf = MODE_FILE.replace('\n', "\r\n");
-        assert_eq!(extract_section(&crlf, "Directions"), extract_section(MODE_FILE, "Directions"));
-        assert_eq!(extract_section(&crlf, "Comps"), extract_section(MODE_FILE, "Comps"));
+        assert_eq!(
+            extract_section(&crlf, "Directions"),
+            extract_section(MODE_FILE, "Directions")
+        );
+        assert_eq!(
+            extract_section(&crlf, "Comps"),
+            extract_section(MODE_FILE, "Comps")
+        );
     }
 
     #[test]
@@ -898,45 +1339,83 @@ mod tests {
     #[test]
     fn block_for_each_mode_names_its_file_and_bodies() {
         let files = [
-            ("mode-persuade", "# P\n\n## Directions\nP directions.\n\n## Comps\nP comps.\n"),
+            (
+                "mode-persuade",
+                "# P\n\n## Directions\nP directions.\n\n## Comps\nP comps.\n",
+            ),
             ("mode-operate", MODE_FILE),
-            ("mode-read", "# R\r\n\r\n## Directions\r\nR directions.\r\n## Comps\r\nR comps.\r\n"),
+            (
+                "mode-read",
+                "# R\r\n\r\n## Directions\r\nR directions.\r\n## Comps\r\nR comps.\r\n",
+            ),
         ];
         let (proj, skill) = fixture("each-mode", &files);
         let skill_s = skill.to_string_lossy().replace('\\', "/");
         for (mode, file, dir, comps) in [
             ("persuade", "mode-persuade", "P directions.", "P comps."),
             ("experience", "mode-persuade", "P directions.", "P comps."),
-            ("operate", "mode-operate", "- Keep standard navigation.\n\n  Indented continuation.", "- Show a working state.\n### Sub heading stays"),
+            (
+                "operate",
+                "mode-operate",
+                "- Keep standard navigation.\n\n  Indented continuation.",
+                "- Show a working state.\n### Sub heading stays",
+            ),
             ("read", "mode-read", "R directions.", "R comps."),
         ] {
-            let (code, out) = seed(&proj, &skill, true, &["--scope", "direction", "--mode", mode, "--from", "k1"]);
+            let (code, out) = seed(
+                &proj,
+                &skill,
+                true,
+                &["--scope", "direction", "--mode", mode, "--from", "k1"],
+            );
             assert_eq!(code, 0, "{out}");
             let block = format!(
                 "\nMODE RULES ({}, from {}/reference/{}.md). They govern this surface's directions and every comp you write or judge for it, the decision comps included; where shared guidance conflicts, these win.\nDIRECTIONS\n{}\nCOMPS\n{}\nA user- or brief-pinned decision beats the roll, always.\n",
                 mode, skill_s, file, dir, comps
             );
             assert!(out.contains(&block), "{mode}: {out}");
-            assert!(out.contains("behavior.\nMODE RULES ("), "block follows RICHNESS: {out}");
+            assert!(
+                out.contains("behavior.\nMODE RULES ("),
+                "block follows RICHNESS: {out}"
+            );
         }
     }
 
     #[test]
     fn no_mode_prints_no_block_and_richness_is_mode_neutral() {
         let (proj, skill) = fixture("no-mode", &[("mode-persuade", MODE_FILE)]);
-        let (code, out) = seed(&proj, &skill, true, &["--scope", "direction", "--from", "k1"]);
+        let (code, out) = seed(
+            &proj,
+            &skill,
+            true,
+            &["--scope", "direction", "--from", "k1"],
+        );
         assert_eq!(code, 0, "{out}");
         assert!(!out.contains("MODE RULES"), "{out}");
-        assert!(!out.contains("Persuade") && !out.contains("Operate or Read"), "{out}");
-        assert!(out.contains("Keep a literal carrier only when it\nbecomes functional."), "{out}");
+        assert!(
+            !out.contains("Persuade") && !out.contains("Operate or Read"),
+            "{out}"
+        );
+        assert!(
+            out.contains("Keep a literal carrier only when it\nbecomes functional."),
+            "{out}"
+        );
     }
 
     #[test]
     fn missing_file_or_section_prints_the_fallback_and_still_rolls() {
-        let (proj, skill) = fixture("missing", &[("mode-operate", "# O\n\n## Directions\nonly directions\n")]);
+        let (proj, skill) = fixture(
+            "missing",
+            &[("mode-operate", "# O\n\n## Directions\nonly directions\n")],
+        );
         let skill_s = skill.to_string_lossy().replace('\\', "/");
         for (mode, file) in [("operate", "mode-operate"), ("read", "mode-read")] {
-            let (code, out) = seed(&proj, &skill, true, &["--scope", "surface", "--mode", mode, "--from", "k1"]);
+            let (code, out) = seed(
+                &proj,
+                &skill,
+                true,
+                &["--scope", "surface", "--mode", mode, "--from", "k1"],
+            );
             assert_eq!(code, 0, "{out}");
             assert!(out.contains(&format!("\nMODE RULES unavailable: read {}/reference/{}.md before writing directions or comps.\n", skill_s, file)), "{out}");
             assert!(!out.contains("DIRECTIONS\n"), "{out}");
@@ -946,18 +1425,67 @@ mod tests {
     #[test]
     fn rerolls_and_degraded_rolls_carry_the_block() {
         let (proj, skill) = fixture("reroll", &[("mode-persuade", MODE_FILE)]);
-        let (_, out) = seed(&proj, &skill, true, &["--scope", "direction", "--mode", "persuade", "--from", "k1", "--reroll", "2", "--register", "bolder"]);
+        let (_, out) = seed(
+            &proj,
+            &skill,
+            true,
+            &[
+                "--scope",
+                "direction",
+                "--mode",
+                "persuade",
+                "--from",
+                "k1",
+                "--reroll",
+                "2",
+                "--register",
+                "bolder",
+            ],
+        );
         assert!(out.contains("MODE RULES (persuade, from "), "{out}");
-        let (_, out) = seed(&proj, &skill, false, &["--scope", "direction", "--mode", "experience", "--from", "k1"]);
+        let (_, out) = seed(
+            &proj,
+            &skill,
+            false,
+            &[
+                "--scope",
+                "direction",
+                "--mode",
+                "experience",
+                "--from",
+                "k1",
+            ],
+        );
         assert!(out.contains("source: degraded"), "{out}");
-        assert!(out.contains("selected independently.\nMODE RULES (experience, from "), "block follows AUTHORITY: {out}");
-        let (_, out) = seed(&proj, &skill, false, &["--scope", "direction", "--mode", "persuade", "--from", "k1", "--reroll", "1", "--register", "safer"]);
+        assert!(
+            out.contains("selected independently.\nMODE RULES (experience, from "),
+            "block follows AUTHORITY: {out}"
+        );
+        let (_, out) = seed(
+            &proj,
+            &skill,
+            false,
+            &[
+                "--scope",
+                "direction",
+                "--mode",
+                "persuade",
+                "--from",
+                "k1",
+                "--reroll",
+                "1",
+                "--register",
+                "safer",
+            ],
+        );
         assert!(out.contains("MODE RULES (persuade, from "), "{out}");
     }
 
     /// The PRESENTATION block: everything from its header to the end.
     fn presentation(out: &str) -> &str {
-        let at = out.find("PRESENTATION (").unwrap_or_else(|| panic!("no PRESENTATION block: {out}"));
+        let at = out
+            .find("PRESENTATION (")
+            .unwrap_or_else(|| panic!("no PRESENTATION block: {out}"));
         &out[at..]
     }
 
@@ -966,7 +1494,12 @@ mod tests {
     #[test]
     fn direction_roll_ends_with_the_presentation_block() {
         let (proj, skill) = fixture("present-direction", &[("mode-persuade", MODE_FILE)]);
-        let (code, out) = seed(&proj, &skill, true, &["--scope", "direction", "--mode", "persuade", "--from", "k1"]);
+        let (code, out) = seed(
+            &proj,
+            &skill,
+            true,
+            &["--scope", "direction", "--mode", "persuade", "--from", "k1"],
+        );
         assert_eq!(code, 0, "{out}");
         let block = presentation(&out);
         let reference = tl(&proj).reference("k1").unwrap();
@@ -978,11 +1511,23 @@ mod tests {
         assert!(lines[2].contains("(a.png gets a.png.json)"), "{block}");
         // The wait follows comp generation, never precedes it.
         assert!(lines[3].starts_with("- After the last comp or sketch lands (at once when this round makes none), hold `impeccable serve-question --wait --key <key>`. If your shell hands back a session before --wait exits, keep polling that session until it exits; rerun --wait only after it exits 3"), "{block}");
-        assert!(lines[4].starts_with("- Build path: none recorded"), "{block}");
-        assert!(lines[4].contains("\"buildPath\": {\"value\": \"comp\", \"toggle\": true}"), "{block}");
+        assert!(
+            lines[4].starts_with("- Build path: none recorded"),
+            "{block}"
+        );
+        assert!(
+            lines[4].contains("\"buildPath\": {\"value\": \"comp\", \"toggle\": true}"),
+            "{block}"
+        );
         assert!(lines[5].starts_with("- The structured question tool is the fallback, never the first channel: take it when --start exits 2, when --wait exits 4"), "{block}");
-        assert!(lines[5].contains("cannot hold a blocking --wait at all"), "{block}");
-        assert!(lines[5].contains("asks nothing about the build path"), "{block}");
+        assert!(
+            lines[5].contains("cannot hold a blocking --wait at all"),
+            "{block}"
+        );
+        assert!(
+            lines[5].contains("asks nothing about the build path"),
+            "{block}"
+        );
         assert!(!block.contains('\u{2014}'), "no em dashes: {block}");
         assert!(out.ends_with('\n'));
     }
@@ -992,7 +1537,12 @@ mod tests {
         // Persuade: the comp-led surface wording. Operate and Read surface rounds are code-led
         // (operate_and_read_surfaces_are_code_led_whatever_is_recorded).
         let (proj, skill) = fixture("present-surface", &[("mode-persuade", MODE_FILE)]);
-        let (code, out) = seed(&proj, &skill, true, &["--scope", "surface", "--mode", "persuade", "--from", "k1"]);
+        let (code, out) = seed(
+            &proj,
+            &skill,
+            true,
+            &["--scope", "surface", "--mode", "persuade", "--from", "k1"],
+        );
         assert_eq!(code, 0, "{out}");
         let block = presentation(&out);
         assert!(block.contains(PRESENT_FIRST_LINE), "{block}");
@@ -1005,10 +1555,41 @@ mod tests {
     fn rerolls_deliver_through_update_on_the_same_key() {
         let (proj, skill) = fixture("present-reroll", &[("mode-persuade", MODE_FILE)]);
         for args in [
-            &["--scope", "direction", "--mode", "persuade", "--from", "k1", "--reroll", "1"][..],
-            &["--scope", "direction", "--mode", "persuade", "--from", "k1", "--reroll", "2", "--register", "bolder"][..],
-            &["--scope", "direction", "--from", "k1", "--reroll", "1", "--register", "safer"][..],
-            &["--scope", "surface", "--mode", "persuade", "--from", "k1", "--reroll", "1"][..],
+            &[
+                "--scope",
+                "direction",
+                "--mode",
+                "persuade",
+                "--from",
+                "k1",
+                "--reroll",
+                "1",
+            ][..],
+            &[
+                "--scope",
+                "direction",
+                "--mode",
+                "persuade",
+                "--from",
+                "k1",
+                "--reroll",
+                "2",
+                "--register",
+                "bolder",
+            ][..],
+            &[
+                "--scope",
+                "direction",
+                "--from",
+                "k1",
+                "--reroll",
+                "1",
+                "--register",
+                "safer",
+            ][..],
+            &[
+                "--scope", "surface", "--mode", "persuade", "--from", "k1", "--reroll", "1",
+            ][..],
         ] {
             let (code, out) = seed(&proj, &skill, true, args);
             assert_eq!(code, 0, "{out}");
@@ -1021,43 +1602,112 @@ mod tests {
     #[test]
     fn degraded_rolls_present_on_the_page_too() {
         let (proj, skill) = fixture("present-degraded", &[("mode-persuade", MODE_FILE)]);
-        let (_, out) = seed(&proj, &skill, false, &["--scope", "direction", "--mode", "persuade", "--from", "k1"]);
+        let (_, out) = seed(
+            &proj,
+            &skill,
+            false,
+            &["--scope", "direction", "--mode", "persuade", "--from", "k1"],
+        );
         assert!(out.contains("source: degraded"), "{out}");
         let block = presentation(&out);
         assert!(block.contains(PRESENT_FIRST_LINE), "{block}");
         assert!(block.contains("- This degraded hand goes on the page as a single text-only card with re-roll; it declares no comp."), "{block}");
         assert!(block.contains("- Right after serving, with no comp to generate first, hold `impeccable serve-question --wait --key <key>`."), "{block}");
         // Degraded safer keeps its lineup: the full-hand comp line, not one card.
-        let (_, out) = seed(&proj, &skill, false, &["--scope", "direction", "--from", "k1", "--reroll", "1", "--register", "safer"]);
+        let (_, out) = seed(
+            &proj,
+            &skill,
+            false,
+            &[
+                "--scope",
+                "direction",
+                "--from",
+                "k1",
+                "--reroll",
+                "1",
+                "--register",
+                "safer",
+            ],
+        );
         let block = presentation(&out);
         assert!(block.contains("- Re-roll round:"), "{block}");
         assert!(!block.contains("single text-only card"), "{block}");
         assert!(block.contains("every card declares a comp"), "{block}");
-        let (_, out) = seed(&proj, &skill, false, &["--scope", "direction", "--from", "k1", "--reroll", "1", "--register", "bolder"]);
-        assert!(presentation(&out).contains("single text-only card"), "{out}");
-        let (_, out) = seed(&proj, &skill, false, &["--scope", "surface", "--mode", "persuade", "--from", "k1"]);
-        assert!(presentation(&out).contains("each dealt card declares a comp"), "{out}");
+        let (_, out) = seed(
+            &proj,
+            &skill,
+            false,
+            &[
+                "--scope",
+                "direction",
+                "--from",
+                "k1",
+                "--reroll",
+                "1",
+                "--register",
+                "bolder",
+            ],
+        );
+        assert!(
+            presentation(&out).contains("single text-only card"),
+            "{out}"
+        );
+        let (_, out) = seed(
+            &proj,
+            &skill,
+            false,
+            &["--scope", "surface", "--mode", "persuade", "--from", "k1"],
+        );
+        assert!(
+            presentation(&out).contains("each dealt card declares a comp"),
+            "{out}"
+        );
     }
 
     #[test]
     fn operate_and_read_surfaces_are_code_led_whatever_is_recorded() {
-        let (proj, skill) = fixture("present-mode-code-led", &[("mode-operate", MODE_FILE), ("mode-read", MODE_FILE), ("mode-persuade", MODE_FILE)]);
+        let (proj, skill) = fixture(
+            "present-mode-code-led",
+            &[
+                ("mode-operate", MODE_FILE),
+                ("mode-read", MODE_FILE),
+                ("mode-persuade", MODE_FILE),
+            ],
+        );
         let dir = proj.join(".impeccable");
         std::fs::create_dir_all(&dir).unwrap();
-        let roll = |scope: &str, mode: &str| seed(&proj, &skill, true, &["--scope", scope, "--mode", mode, "--from", "k1"]).1;
+        let roll = |scope: &str, mode: &str| {
+            seed(
+                &proj,
+                &skill,
+                true,
+                &["--scope", scope, "--mode", mode, "--from", "k1"],
+            )
+            .1
+        };
 
         // Nothing recorded: Operate and Read are code-led, Persuade and Experience keep the comp default.
         for mode in ["operate", "read"] {
             let out = roll("direction", mode);
             let block = presentation(&out);
             assert!(block.contains(&format!("- Build path: code-led. A surface in {mode} mode builds in code whatever the project records. With image generation, put \"buildPath\": {{\"value\": \"code\", \"toggle\": true}} in the payload")), "{block}");
-            assert!(block.contains("never offer to record a flip made on this surface"), "{block}");
+            assert!(
+                block.contains("never offer to record a flip made on this surface"),
+                "{block}"
+            );
             assert!(block.contains("- Code-led round: every card but the declined challengers carries an HTML sketch"), "{block}");
             assert!(block.contains("- After the last sketch lands, hold `impeccable serve-question --wait --key <key>`."), "{block}");
-            assert!(presentation(&roll("surface", mode)).contains("- Code-led round: each dealt card carries an HTML sketch"), "{mode}");
+            assert!(
+                presentation(&roll("surface", mode))
+                    .contains("- Code-led round: each dealt card carries an HTML sketch"),
+                "{mode}"
+            );
         }
         for mode in ["persuade", "experience"] {
-            assert!(presentation(&roll("direction", mode)).contains("- Build path: none recorded"), "{mode}");
+            assert!(
+                presentation(&roll("direction", mode)).contains("- Build path: none recorded"),
+                "{mode}"
+            );
         }
 
         // A recorded comp default still governs Persuade, and is named, not followed, on Operate and Read.
@@ -1065,9 +1715,16 @@ mod tests {
         let out = roll("direction", "operate");
         let block = presentation(&out);
         assert!(block.contains("- Build path: code-led. A surface in operate mode builds in code whatever the project records (the recorded default comp from .impeccable/config.json governs Persuade and Experience surfaces)."), "{block}");
-        assert!(block.contains("\"buildPath\": {\"value\": \"code\", \"toggle\": true}"), "{block}");
-        assert!(!block.contains("Serve first, then generate each comp in reading order"), "{block}");
-        assert!(presentation(&roll("direction", "persuade")).contains("- Build path: recorded default comp (from .impeccable/config.json)."));
+        assert!(
+            block.contains("\"buildPath\": {\"value\": \"code\", \"toggle\": true}"),
+            "{block}"
+        );
+        assert!(
+            !block.contains("Serve first, then generate each comp in reading order"),
+            "{block}"
+        );
+        assert!(presentation(&roll("direction", "persuade"))
+            .contains("- Build path: recorded default comp (from .impeccable/config.json)."));
 
         // A recorded code default reads the same on Operate, with nothing extra to name.
         std::fs::write(dir.join("config.json"), r#"{"buildPath": "code"}"#).unwrap();
@@ -1079,37 +1736,75 @@ mod tests {
         let (proj, skill) = fixture("present-build-path", &[("mode-persuade", MODE_FILE)]);
         let dir = proj.join(".impeccable");
         std::fs::create_dir_all(&dir).unwrap();
-        let roll = |scope: &str| seed(&proj, &skill, true, &["--scope", scope, "--mode", "persuade", "--from", "k1"]).1;
+        let roll = |scope: &str| {
+            seed(
+                &proj,
+                &skill,
+                true,
+                &["--scope", scope, "--mode", "persuade", "--from", "k1"],
+            )
+            .1
+        };
 
         std::fs::write(dir.join("config.json"), r#"{"buildPath": "code"}"#).unwrap();
         let out = roll("direction");
         let block = presentation(&out);
         assert!(block.contains("- Build path: recorded default code (from .impeccable/config.json). With image generation, put \"buildPath\": {\"value\": \"code\", \"toggle\": true} in the payload; without it there is no toggle and the build is code-led. Never ask the user about the build path."), "{block}");
-        assert!(block.contains("- Code-led round: every card but the declined challengers carries an HTML sketch"), "{block}");
-        assert!(block.contains("only when --wait prints BUILD PATH FLIPPED"), "{block}");
+        assert!(
+            block.contains(
+                "- Code-led round: every card but the declined challengers carries an HTML sketch"
+            ),
+            "{block}"
+        );
+        assert!(
+            block.contains("only when --wait prints BUILD PATH FLIPPED"),
+            "{block}"
+        );
         assert!(block.contains("- After the last sketch lands, hold `impeccable serve-question --wait --key <key>`."), "{block}");
         let out = roll("surface");
-        assert!(presentation(&out).contains("- Code-led round: each dealt card carries an HTML sketch"), "{out}");
+        assert!(
+            presentation(&out).contains("- Code-led round: each dealt card carries an HTML sketch"),
+            "{out}"
+        );
 
         // The machine-local file wins over the committed one.
         std::fs::write(dir.join("config.local.json"), r#"{"buildPath": "comp"}"#).unwrap();
         let out = roll("direction");
         let block = presentation(&out);
-        assert!(block.contains("- Build path: recorded default comp (from .impeccable/config.local.json)."), "{block}");
-        assert!(block.contains("\"buildPath\": {\"value\": \"comp\", \"toggle\": true}"), "{block}");
-        assert!(block.contains("Serve first, then generate each comp in reading order"), "{block}");
+        assert!(
+            block.contains(
+                "- Build path: recorded default comp (from .impeccable/config.local.json)."
+            ),
+            "{block}"
+        );
+        assert!(
+            block.contains("\"buildPath\": {\"value\": \"comp\", \"toggle\": true}"),
+            "{block}"
+        );
+        assert!(
+            block.contains("Serve first, then generate each comp in reading order"),
+            "{block}"
+        );
 
         // Only exact comp / code count; anything else reads as unrecorded.
         std::fs::remove_file(dir.join("config.local.json")).unwrap();
         std::fs::write(dir.join("config.json"), r#"{"buildPath": "comp-first"}"#).unwrap();
         let out = roll("direction");
-        assert!(presentation(&out).contains("- Build path: none recorded"), "{out}");
+        assert!(
+            presentation(&out).contains("- Build path: none recorded"),
+            "{out}"
+        );
     }
 
     #[test]
     fn telemetry_pings_print_no_presentation() {
         let (proj, skill) = fixture("present-ping", &[]);
-        let (_, out) = seed(&proj, &skill, true, &["--kind", "assigned", "--from", "k1", "--scope", "direction"]);
+        let (_, out) = seed(
+            &proj,
+            &skill,
+            true,
+            &["--kind", "assigned", "--from", "k1", "--scope", "direction"],
+        );
         assert!(!out.contains("PRESENTATION"), "{out}");
     }
 
@@ -1117,39 +1812,105 @@ mod tests {
     fn every_roll_records_its_scope_for_serve_question() {
         let (proj, skill) = fixture("roll-record", &[]);
         let record = proj.join(".impeccable/questions/roll.json");
-        let read = || serde_json::from_str::<Value>(&std::fs::read_to_string(&record).unwrap()).unwrap();
+        let read =
+            || serde_json::from_str::<Value>(&std::fs::read_to_string(&record).unwrap()).unwrap();
         // Invalid arguments and telemetry pings are not rolls.
         let (code, _) = seed(&proj, &skill, true, &["--scope", "world", "--from", "k1"]);
         assert_eq!(code, 1);
-        seed(&proj, &skill, true, &["--chosen", "x", "--kind", "assigned", "--from", "k1", "--scope", "surface"]);
+        seed(
+            &proj,
+            &skill,
+            true,
+            &[
+                "--chosen", "x", "--kind", "assigned", "--from", "k1", "--scope", "surface",
+            ],
+        );
         assert!(!record.exists());
         // A surface roll, then a direction re-roll replacing it.
-        let (code, _) = seed(&proj, &skill, true, &["--scope", "surface", "--mode", "operate", "--from", "k1"]);
+        let (code, _) = seed(
+            &proj,
+            &skill,
+            true,
+            &["--scope", "surface", "--mode", "operate", "--from", "k1"],
+        );
         assert_eq!(code, 0);
         let r = read();
         // The record names the roll by its seed reference, never its key, and holds no time.
         let k1 = tl(&proj).reference("k1").unwrap();
-        assert_eq!((r["scope"].as_str(), r["seed"].as_str(), r["reroll"].as_u64()), (Some("surface"), Some(k1.as_str()), Some(0)));
+        assert_eq!(
+            (
+                r["scope"].as_str(),
+                r["seed"].as_str(),
+                r["reroll"].as_u64()
+            ),
+            (Some("surface"), Some(k1.as_str()), Some(0))
+        );
         assert!(r.get("key").is_none() && r.get("at").is_none(), "{r}");
         // The record names every challenger the roll printed, with the same
         // board and hero URLs as its QUALITY BAR line.
-        let (_, out) = seed(&proj, &skill, true, &["--scope", "surface", "--mode", "operate", "--from", "k1"]);
+        let (_, out) = seed(
+            &proj,
+            &skill,
+            true,
+            &["--scope", "surface", "--mode", "operate", "--from", "k1"],
+        );
         let worlds = read()["worlds"].as_array().cloned().unwrap();
-        assert_eq!(worlds.len(), out.matches("     SOURCE ID: ").count().min(out.matches("     QUALITY BAR: ").count()));
+        assert_eq!(
+            worlds.len(),
+            out.matches("     SOURCE ID: ")
+                .count()
+                .min(out.matches("     QUALITY BAR: ").count())
+        );
         assert!(!worlds.is_empty());
         for w in &worlds {
-            let (id, board, hero) = (w["id"].as_str().unwrap(), w["board"].as_str().unwrap(), w["hero"].as_str().unwrap());
-            assert!(out.contains(&format!("     SOURCE ID: {id}\n")), "{id}: {out}");
-            assert!(out.contains(&format!("     QUALITY BAR: board {board} · hero {hero}")), "{id}: {out}");
+            let (id, board, hero) = (
+                w["id"].as_str().unwrap(),
+                w["board"].as_str().unwrap(),
+                w["hero"].as_str().unwrap(),
+            );
+            assert!(
+                out.contains(&format!("     SOURCE ID: {id}\n")),
+                "{id}: {out}"
+            );
+            assert!(
+                out.contains(&format!("     QUALITY BAR: board {board} · hero {hero}")),
+                "{id}: {out}"
+            );
         }
         // The safer register prints no challenger, so it records no world.
-        seed(&proj, &skill, true, &["--scope", "direction", "--from", "k1", "--reroll", "1", "--register", "safer"]);
+        seed(
+            &proj,
+            &skill,
+            true,
+            &[
+                "--scope",
+                "direction",
+                "--from",
+                "k1",
+                "--reroll",
+                "1",
+                "--register",
+                "safer",
+            ],
+        );
         assert!(read().get("worlds").is_none(), "{}", read());
-        let (code, _) = seed(&proj, &skill, false, &["--scope", "direction", "--from", "k2", "--reroll", "1"]);
+        let (code, _) = seed(
+            &proj,
+            &skill,
+            false,
+            &["--scope", "direction", "--from", "k2", "--reroll", "1"],
+        );
         assert_eq!(code, 0);
         let r = read();
         let k2 = tl(&proj).reference("k2").unwrap();
-        assert_eq!((r["scope"].as_str(), r["seed"].as_str(), r["reroll"].as_u64()), (Some("direction"), Some(k2.as_str()), Some(1)));
+        assert_eq!(
+            (
+                r["scope"].as_str(),
+                r["seed"].as_str(),
+                r["reroll"].as_u64()
+            ),
+            (Some("direction"), Some(k2.as_str()), Some(1))
+        );
         // A degraded roll dealt no world: the record keeps its old shape.
         assert!(r.get("worlds").is_none(), "{r}");
     }
@@ -1160,16 +1921,35 @@ mod tests {
     type Seen = std::sync::Arc<std::sync::Mutex<Vec<(String, String, String, String, String)>>>;
     fn roll_api() -> (String, Seen) {
         let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
-        let base = format!("http://127.0.0.1:{}/api", server.server_addr().to_ip().unwrap().port());
+        let base = format!(
+            "http://127.0.0.1:{}/api",
+            server.server_addr().to_ip().unwrap().port()
+        );
         let seen: Seen = Default::default();
         let log = seen.clone();
         std::thread::spawn(move || {
             for mut req in server.incoming_requests() {
-                let header = req.headers().iter().find(|h| h.field.equiv("X-Impeccable-Client")).map(|h| h.value.as_str().to_string()).unwrap_or_default();
+                let header = req
+                    .headers()
+                    .iter()
+                    .find(|h| h.field.equiv("X-Impeccable-Client"))
+                    .map(|h| h.value.as_str().to_string())
+                    .unwrap_or_default();
                 let mut body = String::new();
                 let _ = std::io::Read::read_to_string(req.as_reader(), &mut body);
-                let off = req.headers().iter().find(|h| h.field.equiv("X-Impeccable-Telemetry")).map(|h| h.value.as_str().to_string()).unwrap_or_default();
-                log.lock().unwrap().push((req.method().as_str().to_string(), req.url().to_string(), header, body, off));
+                let off = req
+                    .headers()
+                    .iter()
+                    .find(|h| h.field.equiv("X-Impeccable-Telemetry"))
+                    .map(|h| h.value.as_str().to_string())
+                    .unwrap_or_default();
+                log.lock().unwrap().push((
+                    req.method().as_str().to_string(),
+                    req.url().to_string(),
+                    header,
+                    body,
+                    off,
+                ));
                 let roll = serde_json::json!({
                     "poolRevision": "0123456789ab", "handId": "00112233445566778899aabbccddeeff", "approvedCount": 2, "catalogCount": 3,
                     "challengers": [
@@ -1177,22 +1957,43 @@ mod tests {
                         { "id": "microfiche-reader", "form": "Microfiche", "spark": "s", "system": ["r"], "webLeverage": "w" }
                     ]
                 });
-                let text = if req.url().starts_with("/api/roll") { roll.to_string() } else { "{}".to_string() };
+                let text = if req.url().starts_with("/api/roll") {
+                    roll.to_string()
+                } else {
+                    "{}".to_string()
+                };
                 let _ = req.respond(tiny_http::Response::from_string(text));
             }
         });
         (base, seen)
     }
 
-    fn seed_api(proj: &std::path::Path, skill: &std::path::Path, base: &str, args: &[&str]) -> String {
+    fn seed_api(
+        proj: &std::path::Path,
+        skill: &std::path::Path,
+        base: &str,
+        args: &[&str],
+    ) -> String {
         let env = Env::from([
-            ("IMPECCABLE_SKILL_DIR".into(), skill.to_string_lossy().into_owned()),
-            ("IMPECCABLE_CATALOG_DIR".into(), proj.join("no-such-catalog").to_string_lossy().into_owned()),
+            (
+                "IMPECCABLE_SKILL_DIR".into(),
+                skill.to_string_lossy().into_owned(),
+            ),
+            (
+                "IMPECCABLE_CATALOG_DIR".into(),
+                proj.join("no-such-catalog").to_string_lossy().into_owned(),
+            ),
             ("IMPECCABLE_API_URL".into(), base.to_string()),
             ("IMPECCABLE_API_TIMEOUT".into(), "3000".into()),
             ("IMPECCABLE_TELEMETRY_CHANNEL".into(), "test".into()),
-            ("HOME".into(), proj.join("home").to_string_lossy().into_owned()),
-            ("USERPROFILE".into(), proj.join("home").to_string_lossy().into_owned()),
+            (
+                "HOME".into(),
+                proj.join("home").to_string_lossy().into_owned(),
+            ),
+            (
+                "USERPROFILE".into(),
+                proj.join("home").to_string_lossy().into_owned(),
+            ),
             ("IMPECCABLE_SEED_SALT".into(), "test-salt".into()),
             ("IMPECCABLE_NO_STALENESS_CHECK".into(), "1".into()),
             ("IMPECCABLE_SELF".into(), "impeccable".into()),
@@ -1207,7 +2008,12 @@ mod tests {
     /// The bodies posted to /api/chosen, each round's random pingId masked.
     fn chosen_bodies(seen: &Seen) -> Vec<String> {
         let ping = regex::Regex::new(r#","pingId":"[0-9a-f]{32}""#).unwrap();
-        seen.lock().unwrap().iter().filter(|r| r.0 == "POST").map(|r| ping.replace(&r.3, r#","pingId":"<PING>""#).into_owned()).collect()
+        seen.lock()
+            .unwrap()
+            .iter()
+            .filter(|r| r.0 == "POST")
+            .map(|r| ping.replace(&r.3, r#","pingId":"<PING>""#).into_owned())
+            .collect()
     }
 
     #[test]
@@ -1215,12 +2021,29 @@ mod tests {
         let (proj, skill) = fixture("api-roll", &[("mode-persuade", MODE_FILE)]);
         let (base, seen) = roll_api();
         let engine = format!("impeccable/{}+engine test", env!("CARGO_PKG_VERSION"));
-        let out = seed_api(&proj, &skill, &base, &["--scope", "direction", "--mode", "persuade", "--from", "k1"]);
-        assert!(out.contains("source: api; approved pool: 0123456789ab"), "{out}");
-        assert!(out.contains("--from k1 --scope direction --mode persuade plus what the user did:\n"), "round 0 carries no --reroll: {out}");
+        let out = seed_api(
+            &proj,
+            &skill,
+            &base,
+            &["--scope", "direction", "--mode", "persuade", "--from", "k1"],
+        );
+        assert!(
+            out.contains("source: api; approved pool: 0123456789ab"),
+            "{out}"
+        );
+        assert!(
+            out.contains("--from k1 --scope direction --mode persuade plus what the user did:\n"),
+            "round 0 carries no --reroll: {out}"
+        );
         let roll = seen.lock().unwrap()[0].clone();
-        assert_eq!((roll.0.as_str(), roll.2.as_str(), roll.4.as_str()), ("GET", engine.as_str(), ""));
-        let record: Value = serde_json::from_str(&std::fs::read_to_string(proj.join(".impeccable/questions/roll.json")).unwrap()).unwrap();
+        assert_eq!(
+            (roll.0.as_str(), roll.2.as_str(), roll.4.as_str()),
+            ("GET", engine.as_str(), "")
+        );
+        let record: Value = serde_json::from_str(
+            &std::fs::read_to_string(proj.join(".impeccable/questions/roll.json")).unwrap(),
+        )
+        .unwrap();
         assert_eq!(record["poolRevision"], "0123456789ab");
         assert_eq!(record["source"], "api");
         assert_eq!(record["mode"], "persuade");
@@ -1229,56 +2052,246 @@ mod tests {
         assert_eq!(round.pool_revision.as_deref(), Some("0123456789ab"));
 
         // A re-roll's TELEMETRY line names its round.
-        let out = seed_api(&proj, &skill, &base, &["--scope", "direction", "--mode", "persuade", "--from", "k1", "--reroll", "2"]);
-        assert!(out.contains("--from k1 --scope direction --mode persuade --reroll 2 plus what the user did:\n"), "{out}");
+        let out = seed_api(
+            &proj,
+            &skill,
+            &base,
+            &[
+                "--scope",
+                "direction",
+                "--mode",
+                "persuade",
+                "--from",
+                "k1",
+                "--reroll",
+                "2",
+            ],
+        );
+        assert!(
+            out.contains(
+                "--from k1 --scope direction --mode persuade --reroll 2 plus what the user did:\n"
+            ),
+            "{out}"
+        );
     }
 
     #[test]
     fn agent_pings_fill_the_round_from_the_ledger_and_send_only_dealt_ids() {
         let (proj, skill) = fixture("api-ping", &[("mode-persuade", MODE_FILE)]);
         let (base, seen) = roll_api();
-        seed_api(&proj, &skill, &base, &["--scope", "direction", "--mode", "persuade", "--from", "k1"]);
-        seed_api(&proj, &skill, &base, &["--scope", "direction", "--mode", "persuade", "--from", "k1", "--reroll", "1"]);
+        seed_api(
+            &proj,
+            &skill,
+            &base,
+            &["--scope", "direction", "--mode", "persuade", "--from", "k1"],
+        );
+        seed_api(
+            &proj,
+            &skill,
+            &base,
+            &[
+                "--scope",
+                "direction",
+                "--mode",
+                "persuade",
+                "--from",
+                "k1",
+                "--reroll",
+                "1",
+            ],
+        );
         // No --reroll: the latest round. An agent-invented id is dropped and the kind still goes.
-        let out = seed_api(&proj, &skill, &base, &["--kind", "challenger", "--chosen", "challenger-teletext", "--from", "k1", "--scope", "direction", "--mode", "persuade"]);
+        let out = seed_api(
+            &proj,
+            &skill,
+            &base,
+            &[
+                "--kind",
+                "challenger",
+                "--chosen",
+                "challenger-teletext",
+                "--from",
+                "k1",
+                "--scope",
+                "direction",
+                "--mode",
+                "persuade",
+            ],
+        );
         assert_eq!(out, "choice recorded\n");
-        assert_eq!(chosen_bodies(&seen).last().unwrap(), r#"{"key":"k1","scope":"direction","mode":"persuade","kind":"challenger","reroll":1,"poolRevision":"0123456789ab","handId":"00112233445566778899aabbccddeeff","pingId":"<PING>","source":"agent"}"#);
-        let post = seen.lock().unwrap().iter().rfind(|r| r.0 == "POST").cloned().unwrap();
-        assert_eq!((post.1.as_str(), post.2.as_str()), ("/api/chosen", format!("impeccable/{}+engine test", env!("CARGO_PKG_VERSION")).as_str()));
+        assert_eq!(
+            chosen_bodies(&seen).last().unwrap(),
+            r#"{"key":"k1","scope":"direction","mode":"persuade","kind":"challenger","reroll":1,"poolRevision":"0123456789ab","handId":"00112233445566778899aabbccddeeff","pingId":"<PING>","source":"agent"}"#
+        );
+        let post = seen
+            .lock()
+            .unwrap()
+            .iter()
+            .rfind(|r| r.0 == "POST")
+            .cloned()
+            .unwrap();
+        assert_eq!(
+            (post.1.as_str(), post.2.as_str()),
+            (
+                "/api/chosen",
+                format!("impeccable/{}+engine test", env!("CARGO_PKG_VERSION")).as_str()
+            )
+        );
         // The same round again: already sent.
-        let out = seed_api(&proj, &skill, &base, &["--kind", "assigned", "--from", "k1", "--scope", "direction", "--reroll", "1"]);
+        let out = seed_api(
+            &proj,
+            &skill,
+            &base,
+            &[
+                "--kind",
+                "assigned",
+                "--from",
+                "k1",
+                "--scope",
+                "direction",
+                "--reroll",
+                "1",
+            ],
+        );
         assert_eq!(out, "choice already recorded\n");
         // Round 0 by --reroll: a dealt catalog id passes.
-        let out = seed_api(&proj, &skill, &base, &["--kind", "challenger", "--chosen", "microfiche-reader", "--from", "k1", "--scope", "direction", "--reroll", "0"]);
+        let out = seed_api(
+            &proj,
+            &skill,
+            &base,
+            &[
+                "--kind",
+                "challenger",
+                "--chosen",
+                "microfiche-reader",
+                "--from",
+                "k1",
+                "--scope",
+                "direction",
+                "--reroll",
+                "0",
+            ],
+        );
         assert_eq!(out, "choice recorded\n");
-        assert_eq!(chosen_bodies(&seen).last().unwrap(), r#"{"chosenId":"microfiche-reader","key":"k1","scope":"direction","kind":"challenger","reroll":0,"poolRevision":"0123456789ab","handId":"00112233445566778899aabbccddeeff","pingId":"<PING>","source":"agent"}"#);
+        assert_eq!(
+            chosen_bodies(&seen).last().unwrap(),
+            r#"{"chosenId":"microfiche-reader","key":"k1","scope":"direction","kind":"challenger","reroll":0,"poolRevision":"0123456789ab","handId":"00112233445566778899aabbccddeeff","pingId":"<PING>","source":"agent"}"#
+        );
         // No ledger for the key: sent as given, with the --reroll round.
         let n = chosen_bodies(&seen).len();
-        let out = seed_api(&proj, &skill, &base, &["--kind", "challenger", "--chosen", "own-grounded-3", "--from", "k9", "--scope", "direction", "--reroll", "3"]);
+        let out = seed_api(
+            &proj,
+            &skill,
+            &base,
+            &[
+                "--kind",
+                "challenger",
+                "--chosen",
+                "own-grounded-3",
+                "--from",
+                "k9",
+                "--scope",
+                "direction",
+                "--reroll",
+                "3",
+            ],
+        );
         assert_eq!(out, "choice recorded\n");
-        assert_eq!(chosen_bodies(&seen)[n], r#"{"chosenId":"own-grounded-3","key":"k9","scope":"direction","kind":"challenger","reroll":3,"source":"agent"}"#);
+        assert_eq!(
+            chosen_bodies(&seen)[n],
+            r#"{"chosenId":"own-grounded-3","key":"k9","scope":"direction","kind":"challenger","reroll":3,"source":"agent"}"#
+        );
         // An out-of-range --reroll is ignored rather than sent.
-        seed_api(&proj, &skill, &base, &["--kind", "pick", "--from", "k8", "--scope", "direction", "--reroll", "12"]);
-        assert_eq!(chosen_bodies(&seen).last().unwrap(), r#"{"key":"k8","scope":"direction","kind":"pick","reroll":0,"source":"agent"}"#);
+        seed_api(
+            &proj,
+            &skill,
+            &base,
+            &[
+                "--kind",
+                "pick",
+                "--from",
+                "k8",
+                "--scope",
+                "direction",
+                "--reroll",
+                "12",
+            ],
+        );
+        assert_eq!(
+            chosen_bodies(&seen).last().unwrap(),
+            r#"{"key":"k8","scope":"direction","kind":"pick","reroll":0,"source":"agent"}"#
+        );
     }
 
     #[test]
     fn agent_pings_report_rejected_hands_and_cards_by_position() {
         let (proj, skill) = fixture("api-ping-reroll", &[("mode-persuade", MODE_FILE)]);
         let (base, seen) = roll_api();
-        seed_api(&proj, &skill, &base, &["--scope", "surface", "--mode", "operate", "--from", "s1"]);
+        seed_api(
+            &proj,
+            &skill,
+            &base,
+            &["--scope", "surface", "--mode", "operate", "--from", "s1"],
+        );
         // A surface round's dealt structure other than the lead goes by position.
-        let out = seed_api(&proj, &skill, &base, &["--option", "2", "--from", "s1", "--scope", "surface", "--mode", "operate"]);
+        let out = seed_api(
+            &proj,
+            &skill,
+            &base,
+            &[
+                "--option", "2", "--from", "s1", "--scope", "surface", "--mode", "operate",
+            ],
+        );
         assert_eq!(out, "choice recorded\n");
-        assert_eq!(chosen_bodies(&seen).last().unwrap(), r#"{"key":"s1","scope":"surface","mode":"operate","option":2,"reroll":0,"poolRevision":"0123456789ab","handId":"00112233445566778899aabbccddeeff","pingId":"<PING>","source":"agent"}"#);
+        assert_eq!(
+            chosen_bodies(&seen).last().unwrap(),
+            r#"{"key":"s1","scope":"surface","mode":"operate","option":2,"reroll":0,"poolRevision":"0123456789ab","handId":"00112233445566778899aabbccddeeff","pingId":"<PING>","source":"agent"}"#
+        );
         // A rejected hand: kind reroll, the steer as register, never a card id.
-        seed_api(&proj, &skill, &base, &["--scope", "direction", "--from", "d1"]);
-        let out = seed_api(&proj, &skill, &base, &["--kind", "reroll", "--chosen", "teletext-service", "--register", "bolder", "--from", "d1", "--scope", "direction"]);
+        seed_api(
+            &proj,
+            &skill,
+            &base,
+            &["--scope", "direction", "--from", "d1"],
+        );
+        let out = seed_api(
+            &proj,
+            &skill,
+            &base,
+            &[
+                "--kind",
+                "reroll",
+                "--chosen",
+                "teletext-service",
+                "--register",
+                "bolder",
+                "--from",
+                "d1",
+                "--scope",
+                "direction",
+            ],
+        );
         assert_eq!(out, "choice recorded\n");
-        assert_eq!(chosen_bodies(&seen).last().unwrap(), r#"{"key":"d1","scope":"direction","kind":"reroll","register":"bolder","reroll":0,"poolRevision":"0123456789ab","handId":"00112233445566778899aabbccddeeff","pingId":"<PING>","source":"agent"}"#);
-        assert_eq!(seed_api(&proj, &skill, &base, &["--kind", "assigned", "--from", "d1", "--scope", "direction"]), "choice already recorded\n");
+        assert_eq!(
+            chosen_bodies(&seen).last().unwrap(),
+            r#"{"key":"d1","scope":"direction","kind":"reroll","register":"bolder","reroll":0,"poolRevision":"0123456789ab","handId":"00112233445566778899aabbccddeeff","pingId":"<PING>","source":"agent"}"#
+        );
+        assert_eq!(
+            seed_api(
+                &proj,
+                &skill,
+                &base,
+                &["--kind", "assigned", "--from", "d1", "--scope", "direction"]
+            ),
+            "choice already recorded\n"
+        );
         // The surface TELEMETRY line names the position flag and the re-roll report.
-        let out = seed_api(&proj, &skill, &base, &["--scope", "surface", "--mode", "operate", "--from", "s2"]);
+        let out = seed_api(
+            &proj,
+            &skill,
+            &base,
+            &["--scope", "surface", "--mode", "operate", "--from", "s2"],
+        );
         assert!(out.contains("--option <n>"), "{out}");
         assert!(out.contains("--kind reroll"), "{out}");
     }
@@ -1287,31 +2300,112 @@ mod tests {
     fn a_seed_reference_stands_for_its_key_on_the_machine_that_rolled_it() {
         let (proj, skill) = fixture("seed-reference", &[("mode-persuade", MODE_FILE)]);
         let (base, seen) = roll_api();
-        let first = seed_api(&proj, &skill, &base, &["--scope", "direction", "--mode", "persuade", "--from", "3f9a1c2e"]);
+        let first = seed_api(
+            &proj,
+            &skill,
+            &base,
+            &[
+                "--scope",
+                "direction",
+                "--mode",
+                "persuade",
+                "--from",
+                "3f9a1c2e",
+            ],
+        );
         let reference = tl(&proj).reference("3f9a1c2e").unwrap();
-        assert!(first.contains(&format!("SEED REFERENCE: {reference}.")), "{first}");
+        assert!(
+            first.contains(&format!("SEED REFERENCE: {reference}.")),
+            "{first}"
+        );
         // The reference reproduces the same deal and asks the API with the real key.
-        let again = seed_api(&proj, &skill, &base, &["--scope", "direction", "--mode", "persuade", "--from", &reference]);
+        let again = seed_api(
+            &proj,
+            &skill,
+            &base,
+            &[
+                "--scope",
+                "direction",
+                "--mode",
+                "persuade",
+                "--from",
+                &reference,
+            ],
+        );
         assert_eq!(again, first);
-        assert!(seen.lock().unwrap().iter().filter(|r| r.0 == "GET").all(|r| r.1.contains("key=3f9a1c2e")), "{:?}", seen.lock().unwrap());
+        assert!(
+            seen.lock()
+                .unwrap()
+                .iter()
+                .filter(|r| r.0 == "GET")
+                .all(|r| r.1.contains("key=3f9a1c2e")),
+            "{:?}",
+            seen.lock().unwrap()
+        );
         // The ping by reference carries the key.
-        assert_eq!(seed_api(&proj, &skill, &base, &["--kind", "assigned", "--from", &reference, "--scope", "direction"]), "choice recorded\n");
-        assert!(chosen_bodies(&seen).last().unwrap().contains(r#""key":"3f9a1c2e""#));
+        assert_eq!(
+            seed_api(
+                &proj,
+                &skill,
+                &base,
+                &[
+                    "--kind",
+                    "assigned",
+                    "--from",
+                    &reference,
+                    "--scope",
+                    "direction"
+                ]
+            ),
+            "choice recorded\n"
+        );
+        assert!(chosen_bodies(&seen)
+            .last()
+            .unwrap()
+            .contains(r#""key":"3f9a1c2e""#));
         // A reference rolled elsewhere is refused with the way out, never rolled as a key.
         let env = Env::from([
-            ("IMPECCABLE_SKILL_DIR".into(), skill.to_string_lossy().into_owned()),
+            (
+                "IMPECCABLE_SKILL_DIR".into(),
+                skill.to_string_lossy().into_owned(),
+            ),
             ("IMPECCABLE_NO_STALENESS_CHECK".into(), "1".into()),
             ("IMPECCABLE_SEED_SALT".into(), "test-salt".into()),
-            ("HOME".into(), proj.join("home").to_string_lossy().into_owned()),
+            (
+                "HOME".into(),
+                proj.join("home").to_string_lossy().into_owned(),
+            ),
         ]);
         let (mut io, cap) = Io::captured("", proj.clone(), env);
         let unknown = tl(&proj).reference("elsewhere").unwrap();
-        let argv: Vec<String> = ["--scope", "direction", "--from", unknown.as_str()].iter().map(|s| s.to_string()).collect();
+        let argv: Vec<String> = ["--scope", "direction", "--from", unknown.as_str()]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         assert_eq!(run(&argv, &mut io), 1);
         let err = String::from_utf8(cap.stderr.borrow().clone()).unwrap();
-        assert!(err.contains("is a seed reference this machine has no record of") && err.contains("pass the original key with --from"), "{err}");
+        assert!(
+            err.contains("is a seed reference this machine has no record of")
+                && err.contains("pass the original key with --from"),
+            "{err}"
+        );
         let n = chosen_bodies(&seen).len();
-        assert_eq!(seed_api(&proj, &skill, &base, &["--kind", "assigned", "--from", &unknown, "--scope", "direction"]), "choice ping skipped\n");
+        assert_eq!(
+            seed_api(
+                &proj,
+                &skill,
+                &base,
+                &[
+                    "--kind",
+                    "assigned",
+                    "--from",
+                    &unknown,
+                    "--scope",
+                    "direction"
+                ]
+            ),
+            "choice ping skipped\n"
+        );
         assert_eq!(chosen_bodies(&seen).len(), n);
     }
 
@@ -1321,22 +2415,59 @@ mod tests {
         let (base, seen) = roll_api();
         let home = proj.join("home");
         std::fs::create_dir_all(home.join(".impeccable")).unwrap();
-        std::fs::write(home.join(".impeccable/config.json"), r#"{"telemetry": false}"#).unwrap();
-        let out = seed_api(&proj, &skill, &base, &["--scope", "direction", "--from", "k1"]);
-        assert!(out.contains("source: api;"), "the roll still happens: {out}");
+        std::fs::write(
+            home.join(".impeccable/config.json"),
+            r#"{"telemetry": false}"#,
+        )
+        .unwrap();
+        let out = seed_api(
+            &proj,
+            &skill,
+            &base,
+            &["--scope", "direction", "--from", "k1"],
+        );
+        assert!(
+            out.contains("source: api;"),
+            "the roll still happens: {out}"
+        );
         let roll = seen.lock().unwrap()[0].clone();
         assert_eq!(roll.0, "GET");
         assert_eq!(roll.4, "off", "the server is told not to record it");
         // No telemetry fields are written, only the key behind the reference.
-        let record: Value = serde_json::from_str(&std::fs::read_to_string(proj.join(".impeccable/questions/roll.json")).unwrap()).unwrap();
-        assert!(record.get("poolRevision").is_none() && record.get("source").is_none(), "{record}");
+        let record: Value = serde_json::from_str(
+            &std::fs::read_to_string(proj.join(".impeccable/questions/roll.json")).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            record.get("poolRevision").is_none() && record.get("source").is_none(),
+            "{record}"
+        );
         assert_eq!(tl(&proj).round("k1", None), None);
-        assert_eq!(tl(&proj).resolve(&tl(&proj).reference("k1").unwrap()).unwrap(), "k1");
-        assert_eq!(seed_api(&proj, &skill, &base, &["--kind", "assigned", "--from", "k1", "--scope", "direction"]), "choice ping skipped\n");
+        assert_eq!(
+            tl(&proj)
+                .resolve(&tl(&proj).reference("k1").unwrap())
+                .unwrap(),
+            "k1"
+        );
+        assert_eq!(
+            seed_api(
+                &proj,
+                &skill,
+                &base,
+                &["--kind", "assigned", "--from", "k1", "--scope", "direction"]
+            ),
+            "choice ping skipped\n"
+        );
         assert!(chosen_bodies(&seen).is_empty());
         // DO_NOT_TRACK=0 is not an opt-out.
         std::fs::remove_file(home.join(".impeccable/config.json")).unwrap();
-        assert!(!telemetry::telemetry_disabled(&Env::from([("DO_NOT_TRACK".into(), "0".into()), ("HOME".into(), home.to_string_lossy().into_owned())]), &proj.to_string_lossy()));
+        assert!(!telemetry::telemetry_disabled(
+            &Env::from([
+                ("DO_NOT_TRACK".into(), "0".into()),
+                ("HOME".into(), home.to_string_lossy().into_owned())
+            ]),
+            &proj.to_string_lossy()
+        ));
     }
 
     #[test]
@@ -1346,8 +2477,17 @@ mod tests {
         std::fs::create_dir_all(home.join(".impeccable")).unwrap();
         std::fs::write(home.join(".impeccable/seed-salt"), "corrupt\n").unwrap();
         let env = Env::from([
-            ("IMPECCABLE_SKILL_DIR".into(), skill.to_string_lossy().into_owned()),
-            ("IMPECCABLE_CATALOG_DIR".into(), std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/concept-catalog").to_string_lossy().into_owned()),
+            (
+                "IMPECCABLE_SKILL_DIR".into(),
+                skill.to_string_lossy().into_owned(),
+            ),
+            (
+                "IMPECCABLE_CATALOG_DIR".into(),
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../tests/fixtures/concept-catalog")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
             ("IMPECCABLE_API_URL".into(), "http://127.0.0.1:9/api".into()),
             ("IMPECCABLE_NO_TELEMETRY".into(), "1".into()),
             ("IMPECCABLE_NO_STALENESS_CHECK".into(), "1".into()),
@@ -1355,19 +2495,39 @@ mod tests {
             ("USERPROFILE".into(), home.to_string_lossy().into_owned()),
         ]);
         let (mut io, cap) = Io::captured("", proj.clone(), env);
-        let argv: Vec<String> = ["--scope", "direction", "--from", "k1"].iter().map(|s| s.to_string()).collect();
+        let argv: Vec<String> = ["--scope", "direction", "--from", "k1"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         assert_eq!(run(&argv, &mut io), 0);
         let out = String::from_utf8(cap.stdout.borrow().clone()).unwrap();
-        assert!(out.contains("SEED REFERENCE: unavailable on this machine") && out.contains("`seed: none (unavailable)`") && !out.contains("SEED REFERENCE: seed:"), "{out}");
-        let record: Value = serde_json::from_str(&std::fs::read_to_string(proj.join(".impeccable/questions/roll.json")).unwrap()).unwrap();
-        assert!(record.get("seed").is_none() && record.get("key").is_none(), "{record}");
+        assert!(
+            out.contains("SEED REFERENCE: unavailable on this machine")
+                && out.contains("`seed: none (unavailable)`")
+                && !out.contains("SEED REFERENCE: seed:"),
+            "{out}"
+        );
+        let record: Value = serde_json::from_str(
+            &std::fs::read_to_string(proj.join(".impeccable/questions/roll.json")).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            record.get("seed").is_none() && record.get("key").is_none(),
+            "{record}"
+        );
     }
 
     #[test]
     fn check_seed_corroborates_a_reference_against_this_machine() {
         let (proj, skill) = fixture("check-seed", &[("mode-persuade", MODE_FILE)]);
         let check = |v: &str| {
-            let env = Env::from([("IMPECCABLE_SEED_SALT".into(), "test-salt".into()), ("HOME".into(), proj.join("home").to_string_lossy().into_owned())]);
+            let env = Env::from([
+                ("IMPECCABLE_SEED_SALT".into(), "test-salt".into()),
+                (
+                    "HOME".into(),
+                    proj.join("home").to_string_lossy().into_owned(),
+                ),
+            ]);
             let (mut io, cap) = Io::captured("", proj.clone(), env);
             let code = run(&["--check-seed".to_string(), v.to_string()], &mut io);
             let out = String::from_utf8(cap.stdout.borrow().clone()).unwrap();
@@ -1375,11 +2535,22 @@ mod tests {
         };
         let reference = tl(&proj).reference("k1").unwrap();
         assert_eq!(check(&reference).0, 1, "not rolled yet");
-        seed(&proj, &skill, true, &["--scope", "direction", "--from", "k1"]);
+        seed(
+            &proj,
+            &skill,
+            true,
+            &["--scope", "direction", "--from", "k1"],
+        );
         let (code, out) = check(&reference);
         assert_eq!((code, out.starts_with("SEED KNOWN")), (0, true), "{out}");
-        assert!(check("k1").1.starts_with("SEED UNKNOWN: not a seed reference"));
-        assert_eq!(check("none").0, 1, "a salt exists here, so none means skipped");
+        assert!(check("k1")
+            .1
+            .starts_with("SEED UNKNOWN: not a seed reference"));
+        assert_eq!(
+            check("none").0,
+            1,
+            "a salt exists here, so none means skipped"
+        );
     }
 
     #[test]
@@ -1397,14 +2568,35 @@ mod tests {
             StrayProjectSalt,
         }
         let table = [
-            ("project then home appears", Home::Blocked, Switch::HomeSaltAppears, Home::Writable),
-            ("home then stray project", Home::Writable, Switch::StrayProjectSalt, Home::Writable),
+            (
+                "project then home appears",
+                Home::Blocked,
+                Switch::HomeSaltAppears,
+                Home::Writable,
+            ),
+            (
+                "home then stray project",
+                Home::Writable,
+                Switch::StrayProjectSalt,
+                Home::Writable,
+            ),
             ("home only", Home::Writable, Switch::Nothing, Home::Writable),
-            ("project only", Home::Blocked, Switch::Nothing, Home::Blocked),
-            ("home becomes unusable", Home::Writable, Switch::Nothing, Home::Blocked),
+            (
+                "project only",
+                Home::Blocked,
+                Switch::Nothing,
+                Home::Blocked,
+            ),
+            (
+                "home becomes unusable",
+                Home::Writable,
+                Switch::Nothing,
+                Home::Blocked,
+            ),
         ];
         for (i, (name, before, switch, after)) in table.into_iter().enumerate() {
-            let (proj, skill) = fixture(&format!("salt-table-{i}"), &[("mode-persuade", MODE_FILE)]);
+            let (proj, skill) =
+                fixture(&format!("salt-table-{i}"), &[("mode-persuade", MODE_FILE)]);
             let (base, seen) = roll_api();
             // A home that cannot hold a directory stands in for a sandbox's read-only one.
             let blocked = proj.join("blocked-home");
@@ -1418,8 +2610,14 @@ mod tests {
             let env_for = |h: Home| {
                 let h = home_of(h).to_string_lossy().into_owned();
                 Env::from([
-                    ("IMPECCABLE_SKILL_DIR".into(), skill.to_string_lossy().into_owned()),
-                    ("IMPECCABLE_CATALOG_DIR".into(), proj.join("no-such-catalog").to_string_lossy().into_owned()),
+                    (
+                        "IMPECCABLE_SKILL_DIR".into(),
+                        skill.to_string_lossy().into_owned(),
+                    ),
+                    (
+                        "IMPECCABLE_CATALOG_DIR".into(),
+                        proj.join("no-such-catalog").to_string_lossy().into_owned(),
+                    ),
                     ("IMPECCABLE_API_URL".into(), base.clone()),
                     ("IMPECCABLE_API_TIMEOUT".into(), "3000".into()),
                     ("IMPECCABLE_NO_STALENESS_CHECK".into(), "1".into()),
@@ -1436,8 +2634,15 @@ mod tests {
                 (code, out)
             };
             let reference_in = |out: &str| -> String {
-                let line = out.lines().find(|l| l.starts_with("SEED REFERENCE: ")).unwrap_or_else(|| panic!("{name}: no reference line: {out}"));
-                line.trim_start_matches("SEED REFERENCE: ").split('.').next().unwrap().to_string()
+                let line = out
+                    .lines()
+                    .find(|l| l.starts_with("SEED REFERENCE: "))
+                    .unwrap_or_else(|| panic!("{name}: no reference line: {out}"));
+                line.trim_start_matches("SEED REFERENCE: ")
+                    .split('.')
+                    .next()
+                    .unwrap()
+                    .to_string()
             };
             let (code, out0) = call(before, &["--scope", "direction", "--from", "k1"]);
             assert_eq!(code, 0, "{name}");
@@ -1447,32 +2652,107 @@ mod tests {
                 Switch::Nothing => {}
                 Switch::HomeSaltAppears => {
                     std::fs::create_dir_all(writable.join(".impeccable")).unwrap();
-                    std::fs::write(writable.join(".impeccable/seed-salt"), "0123456789abcdef0123456789abcdef\n").unwrap();
+                    std::fs::write(
+                        writable.join(".impeccable/seed-salt"),
+                        "0123456789abcdef0123456789abcdef\n",
+                    )
+                    .unwrap();
                 }
                 Switch::StrayProjectSalt => {
-                    std::fs::write(proj.join(".impeccable/questions/seed-salt"), "fedcba9876543210fedcba9876543210\n").unwrap();
+                    std::fs::write(
+                        proj.join(".impeccable/questions/seed-salt"),
+                        "fedcba9876543210fedcba9876543210\n",
+                    )
+                    .unwrap();
                 }
             }
-            let (code, out1) = call(after, &["--scope", "direction", "--from", "k1", "--reroll", "1"]);
+            let (code, out1) = call(
+                after,
+                &["--scope", "direction", "--from", "k1", "--reroll", "1"],
+            );
             assert_eq!(code, 0, "{name}");
             assert_eq!(reference_in(&out1), ref0, "{name}: one reference per key");
-            let ledgers: Vec<String> = std::fs::read_dir(proj.join(".impeccable/questions/seeds")).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.ends_with(".json")).collect();
-            assert_eq!(ledgers, vec![format!("{}.json", ref0.trim_start_matches("seed:"))], "{name}: one ledger, named by the reference");
+            let ledgers: Vec<String> = std::fs::read_dir(proj.join(".impeccable/questions/seeds"))
+                .unwrap()
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .filter(|n| n.ends_with(".json"))
+                .collect();
+            assert_eq!(
+                ledgers,
+                vec![format!("{}.json", ref0.trim_start_matches("seed:"))],
+                "{name}: one ledger, named by the reference"
+            );
             // The reference resolves: --check-seed, and --from reproduces round 1.
             let (code, out) = call(after, &["--check-seed", &ref0]);
             assert_eq!(code, 0, "{name}: {out}");
-            let (code, again) = call(after, &["--scope", "direction", "--from", &ref0, "--reroll", "1"]);
-            assert_eq!((code, again == out1), (0, true), "{name}: --from by reference reproduces the deal");
+            let (code, again) = call(
+                after,
+                &["--scope", "direction", "--from", &ref0, "--reroll", "1"],
+            );
+            assert_eq!(
+                (code, again == out1),
+                (0, true),
+                "{name}: --from by reference reproduces the deal"
+            );
             // The page claims and confirms round 1, and the agent's rerun is a no-op.
             let l = telemetry::Ledger::new(&env_for(after), &proj.to_string_lossy());
-            let claimed = l.claim("k1", 1).unwrap_or_else(|| panic!("{name}: the page's claim"));
+            let claimed = l
+                .claim("k1", 1)
+                .unwrap_or_else(|| panic!("{name}: the page's claim"));
             l.confirm("k1", 1, "picker", claimed.ping_id.as_deref());
-            assert_eq!(call(after, &["--kind", "assigned", "--from", &ref0, "--scope", "direction", "--reroll", "1"]).1, "choice already recorded\n", "{name}");
+            assert_eq!(
+                call(
+                    after,
+                    &[
+                        "--kind",
+                        "assigned",
+                        "--from",
+                        &ref0,
+                        "--scope",
+                        "direction",
+                        "--reroll",
+                        "1"
+                    ]
+                )
+                .1,
+                "choice already recorded\n",
+                "{name}"
+            );
             // Round 0's report goes out from the agent with that round's own pingId.
-            let r0 = l.round("k1", Some(0)).unwrap_or_else(|| panic!("{name}: round 0"));
-            assert_eq!(call(after, &["--kind", "assigned", "--from", "k1", "--scope", "direction", "--reroll", "0"]).1, "choice recorded\n", "{name}");
-            let body = seen.lock().unwrap().iter().rfind(|r| r.0 == "POST").unwrap().3.clone();
-            assert!(body.contains(&format!(r#""pingId":"{}""#, r0.ping_id.unwrap())), "{name}: {body}");
+            let r0 = l
+                .round("k1", Some(0))
+                .unwrap_or_else(|| panic!("{name}: round 0"));
+            assert_eq!(
+                call(
+                    after,
+                    &[
+                        "--kind",
+                        "assigned",
+                        "--from",
+                        "k1",
+                        "--scope",
+                        "direction",
+                        "--reroll",
+                        "0"
+                    ]
+                )
+                .1,
+                "choice recorded\n",
+                "{name}"
+            );
+            let body = seen
+                .lock()
+                .unwrap()
+                .iter()
+                .rfind(|r| r.0 == "POST")
+                .unwrap()
+                .3
+                .clone();
+            assert!(
+                body.contains(&format!(r#""pingId":"{}""#, r0.ping_id.unwrap())),
+                "{name}: {body}"
+            );
         }
     }
 
@@ -1481,11 +2761,33 @@ mod tests {
         let (proj, skill) = fixture("fresh-key", &[("mode-persuade", MODE_FILE)]);
         let (code, out) = seed(&proj, &skill, true, &["--scope", "direction"]);
         assert_eq!(code, 0, "{out}");
-        let reference = out.lines().find_map(|l| l.strip_prefix("SEED REFERENCE: ")).unwrap().split('.').next().unwrap().to_string();
-        let ledgers: Vec<String> = std::fs::read_dir(proj.join(".impeccable/questions/seeds")).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.ends_with(".json")).collect();
-        assert_eq!(ledgers, vec![format!("{}.json", reference.trim_start_matches("seed:"))]);
+        let reference = out
+            .lines()
+            .find_map(|l| l.strip_prefix("SEED REFERENCE: "))
+            .unwrap()
+            .split('.')
+            .next()
+            .unwrap()
+            .to_string();
+        let ledgers: Vec<String> = std::fs::read_dir(proj.join(".impeccable/questions/seeds"))
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".json"))
+            .collect();
+        assert_eq!(
+            ledgers,
+            vec![format!("{}.json", reference.trim_start_matches("seed:"))]
+        );
         let key = tl(&proj).resolve(&reference).unwrap();
-        assert!(key.len() == 32 && key.bytes().all(|b| b.is_ascii_hexdigit()), "{key}");
-        assert_eq!(tl(&proj).reference(&key).unwrap(), reference, "the searched path agrees with the fresh one");
+        assert!(
+            key.len() == 32 && key.bytes().all(|b| b.is_ascii_hexdigit()),
+            "{key}"
+        );
+        assert_eq!(
+            tl(&proj).reference(&key).unwrap(),
+            reference,
+            "the searched path agrees with the fresh one"
+        );
     }
 }

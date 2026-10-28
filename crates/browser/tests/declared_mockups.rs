@@ -74,15 +74,26 @@ fn scan(fixture: &str) -> Option<Vec<(String, String, String, String)>> {
     let engine = BrowserEngine::new(env);
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/{fixture}");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     Some(
         findings
             .iter()
             .map(|f| {
-                let selector =
-                    f.extras.get("selector").and_then(|s| s.as_str()).unwrap_or("").to_string();
+                let selector = f
+                    .extras
+                    .get("selector")
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 assert_eq!(f.advisory == Some(true), f.severity == "advisory", "{f:?}");
-                (f.antipattern.clone(), f.snippet.clone(), selector, f.severity.clone())
+                (
+                    f.antipattern.clone(),
+                    f.snippet.clone(),
+                    selector,
+                    f.severity.clone(),
+                )
             })
             .collect(),
     )
@@ -101,7 +112,9 @@ fn on<'a>(findings: &'a [Row], rule: &str, class: &str) -> Vec<&'a str> {
 
 #[test]
 fn declared_mockups_report_nothing() {
-    let Some(f) = scan("declared-mockups.html") else { return };
+    let Some(f) = scan("declared-mockups.html") else {
+        return;
+    };
     for id in ["#pass-hidden", "#pass-inert"] {
         for rule in ["low-contrast", "nested-cards"] {
             assert!(on(&f, rule, id).is_empty(), "{rule} {id}: {f:#?}");
@@ -109,7 +122,10 @@ fn declared_mockups_report_nothing() {
     }
     for rule in ["tiny-text", "undersized-ui-text"] {
         assert!(on(&f, rule, "#pass-inert").is_empty(), "{rule}: {f:#?}");
-        assert!(!on(&f, rule, "#fail-live").is_empty(), "{rule} in the live demo: {f:#?}");
+        assert!(
+            !on(&f, rule, "#fail-live").is_empty(),
+            "{rule} in the live demo: {f:#?}"
+        );
     }
     // The pixel pass takes no candidate in a declared mockup, inert or
     // aria-hidden: pale labels over a raster ground report nothing.
@@ -129,11 +145,22 @@ fn declared_mockups_report_nothing() {
 
 #[test]
 fn guarded_hidden_boxes_keep_their_findings() {
-    let Some(f) = scan("declared-mockups.html") else { return };
+    let Some(f) = scan("declared-mockups.html") else {
+        return;
+    };
     // (nested-cards never reads a dialog's first card as nested, hidden or
     // not, so the dialog row is held to low-contrast alone.)
-    for id in ["#fail-live-inner", "#fail-copy-inner", "#fail-two-runs-inner", "#fail-unrendered-runs-inner"] {
-        assert_eq!(on(&f, "nested-cards", id), ["warning"], "nested-cards {id}: {f:#?}");
+    for id in [
+        "#fail-live-inner",
+        "#fail-copy-inner",
+        "#fail-two-runs-inner",
+        "#fail-unrendered-runs-inner",
+    ] {
+        assert_eq!(
+            on(&f, "nested-cards", id),
+            ["warning"],
+            "nested-cards {id}: {f:#?}"
+        );
     }
     for id in [
         "#fail-live",
@@ -156,17 +183,29 @@ fn guarded_hidden_boxes_keep_their_findings() {
         "label:nth-of-type",
     ] {
         let sev = on(&f, "low-contrast", id);
-        assert!(!sev.is_empty() && sev.iter().all(|s| *s == "warning"), "low-contrast {id}: {f:#?}");
+        assert!(
+            !sev.is_empty() && sev.iter().all(|s| *s == "warning"),
+            "low-contrast {id}: {f:#?}"
+        );
     }
 }
 
 #[test]
 fn a_labelled_screenshot_is_advisory() {
-    let Some(f) = scan("declared-mockups.html") else { return };
-    assert_eq!(on(&f, "nested-cards", "#adv-screenshot-inner"), ["advisory"], "{f:#?}");
+    let Some(f) = scan("declared-mockups.html") else {
+        return;
+    };
+    assert_eq!(
+        on(&f, "nested-cards", "#adv-screenshot-inner"),
+        ["advisory"],
+        "{f:#?}"
+    );
     // From the element pass and from the pixels alike.
     for id in ["#adv-screenshot", "#adv-pixel-shot"] {
         let sev = on(&f, "low-contrast", id);
-        assert!(!sev.is_empty() && sev.iter().all(|s| *s == "advisory"), "{id}: {f:#?}");
+        assert!(
+            !sev.is_empty() && sev.iter().all(|s| *s == "advisory"),
+            "{id}: {f:#?}"
+        );
     }
 }

@@ -134,7 +134,8 @@ pub fn align_build(comp: &Image, build: &Image, align: &str) -> Image {
         return r::resize(build, comp.width as f64, comp.height as f64);
     }
     if align == "cover" {
-        let s = (comp.width as f64 / build.width as f64).max(comp.height as f64 / build.height as f64);
+        let s =
+            (comp.width as f64 / build.width as f64).max(comp.height as f64 / build.height as f64);
         let scaled = r::resize(build, build.width as f64 * s, build.height as f64 * s);
         return r::crop(
             &scaled,
@@ -181,7 +182,13 @@ pub fn best_shift(comp: &Image, build: &Image, work_width: usize) -> Shift {
     let mut best_dx = 0i64;
     let mut best_dy = 0i64;
     let mut best_score = m::ssim_shifted(&a, &b, 0, 0, 8);
-    let steps = [-max_shift, -max_shift / 2.0, 0.0, max_shift / 2.0, max_shift];
+    let steps = [
+        -max_shift,
+        -max_shift / 2.0,
+        0.0,
+        max_shift / 2.0,
+        max_shift,
+    ];
     for &dy in &steps {
         for &dx in &steps {
             let sc = m::ssim_shifted(&a, &b, round(dx) as i64, round(dy) as i64, 8);
@@ -275,8 +282,22 @@ pub fn resolve_regions(comp: &Image, spec: Option<&Value>) -> Vec<RegionBox> {
     }
     if regions.len() < 2 {
         return vec![
-            RegionBox { id: "top".into(), x: 0.0, y: 0.0, w: 1.0, h: 0.5, kind: Some("band".into()) },
-            RegionBox { id: "bottom".into(), x: 0.0, y: 0.5, w: 1.0, h: 0.5, kind: Some("band".into()) },
+            RegionBox {
+                id: "top".into(),
+                x: 0.0,
+                y: 0.0,
+                w: 1.0,
+                h: 0.5,
+                kind: Some("band".into()),
+            },
+            RegionBox {
+                id: "bottom".into(),
+                x: 0.0,
+                y: 0.5,
+                w: 1.0,
+                h: 0.5,
+                kind: Some("band".into()),
+            },
         ];
     }
     regions
@@ -285,12 +306,21 @@ pub fn resolve_regions(comp: &Image, spec: Option<&Value>) -> Vec<RegionBox> {
 /// JS: regionCrop(img, r).
 fn region_crop(img: &Image, rr: &RegionBox) -> Image {
     // Sampling support must not add neighbouring elements to a declared region.
-    let bounds = r::clamp_rect(img, rr.x * img.width as f64, rr.y * img.height as f64,
-        rr.w * img.width as f64, rr.h * img.height as f64);
+    let bounds = r::clamp_rect(
+        img,
+        rr.x * img.width as f64,
+        rr.y * img.height as f64,
+        rr.w * img.width as f64,
+        rr.h * img.height as f64,
+    );
     // A subpixel box still samples an actual pixel, including at the far edge.
-    r::crop(img, bounds.x.min(img.width.saturating_sub(1)) as f64,
+    r::crop(
+        img,
+        bounds.x.min(img.width.saturating_sub(1)) as f64,
         bounds.y.min(img.height.saturating_sub(1)) as f64,
-        bounds.w.max(1) as f64, bounds.h.max(1) as f64)
+        bounds.w.max(1) as f64,
+        bounds.h.max(1) as f64,
+    )
 }
 
 fn ink_box_json(b: &Option<InkBox>) -> Value {
@@ -458,9 +488,27 @@ fn render_side_by_side(comp: &Image, build: &Image, label: &str, score: &Score) 
     );
     r::blit(&mut out, &a, pad, pad + 24.0);
     r::blit(&mut out, &b, pad + a.width as f64 + gap, pad + 24.0);
-    r::draw_label(&mut out, "COMP", pad, pad - 4.0, [255.0, 255.0, 255.0, 255.0], [0.0, 0.0, 0.0, 220.0], 2.0, 4.0);
+    r::draw_label(
+        &mut out,
+        "COMP",
+        pad,
+        pad - 4.0,
+        [255.0, 255.0, 255.0, 255.0],
+        [0.0, 0.0, 0.0, 220.0],
+        2.0,
+        4.0,
+    );
     let build_label = format!("BUILD {}", label.to_uppercase()).trim().to_string();
-    r::draw_label(&mut out, &build_label, pad + a.width as f64 + gap, pad - 4.0, [255.0, 255.0, 255.0, 255.0], [0.0, 0.0, 0.0, 220.0], 2.0, 4.0);
+    r::draw_label(
+        &mut out,
+        &build_label,
+        pad + a.width as f64 + gap,
+        pad - 4.0,
+        [255.0, 255.0, 255.0, 255.0],
+        [0.0, 0.0, 0.0, 220.0],
+        2.0,
+        4.0,
+    );
     let s = format!(
         "OVERALL {}%  STRUCT {}%  COLOR {}%  DETAIL {}%  BANDS {}%",
         to_fixed(score.overall * 100.0, 0),
@@ -471,7 +519,16 @@ fn render_side_by_side(comp: &Image, build: &Image, label: &str, score: &Score) 
     );
     let bg = heat_label(verdict_for(score, None));
     let oh = out.height as f64;
-    r::draw_label(&mut out, &s, pad, oh - pad + 8.0, [255.0, 255.0, 255.0, 255.0], bg, 2.0, 4.0);
+    r::draw_label(
+        &mut out,
+        &s,
+        pad,
+        oh - pad + 8.0,
+        [255.0, 255.0, 255.0, 255.0],
+        bg,
+        2.0,
+        4.0,
+    );
     out
 }
 
@@ -479,7 +536,11 @@ fn render_side_by_side(comp: &Image, build: &Image, label: &str, score: &Score) 
 fn render_heatmap(comp: &Image, build: &Image) -> Image {
     let map = m::diff_map(comp, build, 384);
     let base = r::resize(build, map.width as f64, map.height as f64);
-    let mut out = Image { width: base.width, height: base.height, data: base.data.clone() };
+    let mut out = Image {
+        width: base.width,
+        height: base.height,
+        data: base.data.clone(),
+    };
     for i in 0..map.data.len() {
         let d = map.data[i] as f64;
         let p = i * 4;
@@ -495,12 +556,28 @@ fn render_heatmap(comp: &Image, build: &Image) -> Image {
         out.data[p + 2] = (out.data[p + 2] as f64 * (1.0 - alpha) + 40.0 * alpha) as u8;
     }
     let mut scaled = r::resize(&out, comp.width as f64, comp.height as f64);
-    r::draw_label(&mut scaled, "DIFF: RED = DIFFERS FROM COMP", 12.0, 12.0, [255.0, 255.0, 255.0, 255.0], [0.0, 0.0, 0.0, 220.0], 2.0, 4.0);
+    r::draw_label(
+        &mut scaled,
+        "DIFF: RED = DIFFERS FROM COMP",
+        12.0,
+        12.0,
+        [255.0, 255.0, 255.0, 255.0],
+        [0.0, 0.0, 0.0, 220.0],
+        2.0,
+        4.0,
+    );
     scaled
 }
 
 /// JS: renderRegionPair(compCrop, buildCrop, id, score).
-fn render_region_pair(comp_crop: &Image, build_crop: &Image, id: &str, score: &Score, verdict: &str, gate_region: Option<&Value>) -> Image {
+fn render_region_pair(
+    comp_crop: &Image,
+    build_crop: &Image,
+    id: &str,
+    score: &Score,
+    verdict: &str,
+    gate_region: Option<&Value>,
+) -> Image {
     let gap = 16f64;
     let pad = 12f64;
     let max_w = 700f64;
@@ -514,15 +591,32 @@ fn render_region_pair(comp_crop: &Image, build_crop: &Image, id: &str, score: &S
     r::blit(&mut out, &a, pad, pad + 30.0);
     r::blit(&mut out, &b, pad + a.width as f64 + gap, pad + 30.0);
     let v = verdict;
-    let gate_label = gate_region.map(|region| match region.get("blocking").and_then(Value::as_bool) {
-        Some(true) => " / BLOCKING",
-        Some(false) => " / NONBLOCKING",
-        None => " / CHECK GATE",
-    }).unwrap_or("");
-    r::draw_label(&mut out, &format!("{}  COMP", id.to_uppercase()), pad, pad, [255.0, 255.0, 255.0, 255.0], [0.0, 0.0, 0.0, 220.0], 2.0, 4.0);
+    let gate_label = gate_region
+        .map(
+            |region| match region.get("blocking").and_then(Value::as_bool) {
+                Some(true) => " / BLOCKING",
+                Some(false) => " / NONBLOCKING",
+                None => " / CHECK GATE",
+            },
+        )
+        .unwrap_or("");
     r::draw_label(
         &mut out,
-        &format!("BUILD  {} {}%{gate_label}", v.to_uppercase(), to_fixed(score.overall * 100.0, 0)),
+        &format!("{}  COMP", id.to_uppercase()),
+        pad,
+        pad,
+        [255.0, 255.0, 255.0, 255.0],
+        [0.0, 0.0, 0.0, 220.0],
+        2.0,
+        4.0,
+    );
+    r::draw_label(
+        &mut out,
+        &format!(
+            "BUILD  {} {}%{gate_label}",
+            v.to_uppercase(),
+            to_fixed(score.overall * 100.0, 0)
+        ),
         pad + a.width as f64 + gap,
         pad,
         [255.0, 255.0, 255.0, 255.0],
@@ -542,7 +636,11 @@ fn write_png(path: &Path, img: &Image) -> Result<(), String> {
 }
 
 /// JS: writeArtifacts(result, comp, outDir).
-pub fn write_artifacts(result: &CompareResult, comp: &Image, out_dir: &Path) -> Result<Value, String> {
+pub fn write_artifacts(
+    result: &CompareResult,
+    comp: &Image,
+    out_dir: &Path,
+) -> Result<Value, String> {
     std::fs::create_dir_all(out_dir.join("regions")).map_err(|e| e.to_string())?;
     let side = render_side_by_side(comp, &result.aligned, &result.label, &result.whole);
     let side_path = out_dir.join("side-by-side.png");
@@ -558,13 +656,24 @@ pub fn write_artifacts(result: &CompareResult, comp: &Image, out_dir: &Path) -> 
 }
 
 /// Refresh labels after gate interpretation, without rerunning measurements.
-pub fn write_region_artifacts(result: &CompareResult, out_dir: &Path, gate_regions: Option<&[Value]>) -> Result<Vec<Value>, String> {
+pub fn write_region_artifacts(
+    result: &CompareResult,
+    out_dir: &Path,
+    gate_regions: Option<&[Value]>,
+) -> Result<Vec<Value>, String> {
     let mut region_files: Vec<Value> = Vec::new();
     for rg in &result.regions {
         let file = out_dir.join("regions").join(format!("{}.png", rg.id));
-        let gate_region = gate_regions.and_then(|regions| regions.iter().find(|r| r.get("id").and_then(Value::as_str) == Some(rg.id.as_str())));
-        write_png(&file, &render_region_pair(&rg.a, &rg.b, &rg.id, &rg.score, &rg.verdict, gate_region))
-            .map_err(|e| format!("{}: {e}", file.display()))?;
+        let gate_region = gate_regions.and_then(|regions| {
+            regions
+                .iter()
+                .find(|r| r.get("id").and_then(Value::as_str) == Some(rg.id.as_str()))
+        });
+        write_png(
+            &file,
+            &render_region_pair(&rg.a, &rg.b, &rg.id, &rg.score, &rg.verdict, gate_region),
+        )
+        .map_err(|e| format!("{}: {e}", file.display()))?;
         region_files.push(json!(path_str(&file)));
     }
     Ok(region_files)
@@ -590,7 +699,11 @@ fn summarize(report: &Value) -> String {
     let sc = |k: &str| scores.get(k).and_then(Value::as_f64).unwrap_or(0.0);
     lines.push(format!(
         "COMP-DIFF {}overall {}% ({}) structure {}% color {}% detail {}% bands {}%",
-        if !label.is_empty() { format!("[{label}] ") } else { String::new() },
+        if !label.is_empty() {
+            format!("[{label}] ")
+        } else {
+            String::new()
+        },
         pct(overall),
         verdict,
         pct(sc("structure")),
@@ -598,8 +711,16 @@ fn summarize(report: &Value) -> String {
         pct(sc("detail")),
         pct(sc("bands"))
     ));
-    let comp_pal = report.pointer("/palette/comp").and_then(Value::as_array).cloned().unwrap_or_default();
-    let build_pal = report.pointer("/palette/build").and_then(Value::as_array).cloned().unwrap_or_default();
+    let comp_pal = report
+        .pointer("/palette/comp")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let build_pal = report
+        .pointer("/palette/build")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     let pal_str = |arr: &[Value]| {
         arr.iter()
             .take(5)
@@ -613,7 +734,11 @@ fn summarize(report: &Value) -> String {
     };
     lines.push(format!("PALETTE comp {}", pal_str(&comp_pal)));
     lines.push(format!("PALETTE build {}", pal_str(&build_pal)));
-    let regions = report.get("regions").and_then(Value::as_array).cloned().unwrap_or_default();
+    let regions = report
+        .get("regions")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     for rg in &regions {
         let id = rg.get("id").and_then(Value::as_str).unwrap_or("");
         let rverdict = rg.get("verdict").and_then(Value::as_str).unwrap_or("");
@@ -628,15 +753,26 @@ fn summarize(report: &Value) -> String {
             pad_start(&to_fixed(rsc("structure") * 100.0, 0), 3),
             pad_start(&to_fixed(rsc("color") * 100.0, 0), 3),
             pad_start(&to_fixed(rsc("detail") * 100.0, 0), 3),
-            if added > 0.25 { "  +invented detail" } else { "" }
+            if added > 0.25 {
+                "  +invented detail"
+            } else {
+                ""
+            }
         ));
     }
     if let Some(files) = report.get("files").filter(|f| !f.is_null()) {
-        let side = files.get("sideBySide").and_then(Value::as_str).unwrap_or("");
+        let side = files
+            .get("sideBySide")
+            .and_then(Value::as_str)
+            .unwrap_or("");
         let heat = files.get("heatmap").and_then(Value::as_str).unwrap_or("");
         lines.push(format!("FILES side-by-side {side}"));
         lines.push(format!("FILES heatmap {heat}"));
-        let rf = files.get("regionFiles").and_then(Value::as_array).cloned().unwrap_or_default();
+        let rf = files
+            .get("regionFiles")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
         let dir_of = rf
             .first()
             .and_then(Value::as_str)
@@ -652,8 +788,14 @@ fn summarize(report: &Value) -> String {
     }
     let mut worst = regions.clone();
     worst.sort_by(|a, b| {
-        let av = a.pointer("/score/overall").and_then(Value::as_f64).unwrap_or(0.0);
-        let bv = b.pointer("/score/overall").and_then(Value::as_f64).unwrap_or(0.0);
+        let av = a
+            .pointer("/score/overall")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0);
+        let bv = b
+            .pointer("/score/overall")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0);
         av.partial_cmp(&bv).unwrap()
     });
     let worst: Vec<String> = worst
@@ -662,7 +804,10 @@ fn summarize(report: &Value) -> String {
         .map(|r| {
             let id = r.get("id").and_then(Value::as_str).unwrap_or("");
             let v = r.get("verdict").and_then(Value::as_str).unwrap_or("");
-            let o = r.pointer("/score/overall").and_then(Value::as_f64).unwrap_or(0.0);
+            let o = r
+                .pointer("/score/overall")
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0);
             format!("{id} ({v}, {}%)", to_fixed(o * 100.0, 0))
         })
         .collect();
@@ -732,7 +877,11 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
     // Measuring against the build's comp: refuse while it differs from the
     // approved pixels, so a reading never comes from an edited reference.
     let s = crate::build_phase::self_cmd(io);
-    let refusal = match spec.as_ref().filter(|sp| sp["comp"].as_str().is_some_and(|c| crate::approved_comp::same_file(io, c, comp_path))) {
+    let refusal = match spec.as_ref().filter(|sp| {
+        sp["comp"]
+            .as_str()
+            .is_some_and(|c| crate::approved_comp::same_file(io, c, comp_path))
+    }) {
         Some(sp) => crate::approved_comp::issue_at(io, sp, spec_path.unwrap_or(""), &s),
         None => crate::approved_comp::issue_for_comp(io, comp_path, &s),
     };
@@ -741,7 +890,10 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
         return 2;
     }
     let default_out = {
-        let d = Path::new(build_path).parent().map(|p| p.to_path_buf()).unwrap_or_default();
+        let d = Path::new(build_path)
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_default();
         d.join("diff").to_string_lossy().replace('\\', "/")
     };
     let out_dir = arg_or(argv, "out-dir", &default_out).to_string();
@@ -758,7 +910,12 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
     } else {
         match write_artifacts(&result, &comp, &resolve(io, &out_dir)) {
             Ok(files) => Some(files),
-            Err(e) => { io.err(&format!("comp-diff: cannot persist comparison artifacts: {e}\n")); return 1; }
+            Err(e) => {
+                io.err(&format!(
+                    "comp-diff: cannot persist comparison artifacts: {e}\n"
+                ));
+                return 1;
+            }
         }
     };
     let meta = json!({
@@ -773,7 +930,8 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
     if files.is_some() {
         let rp = resolve(io, &out_dir).join("report.json");
         if let Err(e) = std::fs::write(&rp, util::json_pretty(&report)) {
-            io.err(&format!("comp-diff: cannot persist report: {e}\n")); return 1;
+            io.err(&format!("comp-diff: cannot persist report: {e}\n"));
+            return 1;
         }
     }
     if flag(argv, "json") {
@@ -804,11 +962,18 @@ mod region_isolation_regression {
         let a = r::create_image(10, 10, [220, 10, 20, 255]);
         let b = r::create_image(10, 10, [10, 30, 210, 255]);
         for (x, y) in [(0.2, 0.2), (0.99, 0.99)] {
-            let rr = RegionBox { id: "tiny".into(), x, y, w:0.001, h:0.001, kind:None };
+            let rr = RegionBox {
+                id: "tiny".into(),
+                x,
+                y,
+                w: 0.001,
+                h: 0.001,
+                kind: None,
+            };
             let ac = region_crop(&a, &rr);
             let bc = region_crop(&b, &rr);
-            assert_eq!(&ac.data[..4], &[220,10,20,255]);
-            assert_eq!(&bc.data[..4], &[10,30,210,255]);
+            assert_eq!(&ac.data[..4], &[220, 10, 20, 255]);
+            assert_eq!(&bc.data[..4], &[10, 30, 210, 255]);
             assert_ne!(ac.data, bc.data);
         }
     }
@@ -816,15 +981,26 @@ mod region_isolation_regression {
     fn small_region_does_not_sample_neighbours() {
         let a = r::create_image(256, 128, [240, 220, 190, 255]);
         let mut b = a.clone();
-        for y in 40..53 { for x in 60..180 {
-            let p = (y * 256 + x) * 4;
-            b.data[p..p+4].copy_from_slice(&[20,20,20,255]);
-        }}
-        let rr = RegionBox { id: "toolbar".into(), x:60.0/256.0, y:53.0/128.0,
-            w:120.0/256.0, h:22.0/128.0, kind:Some("chrome".into()) };
+        for y in 40..53 {
+            for x in 60..180 {
+                let p = (y * 256 + x) * 4;
+                b.data[p..p + 4].copy_from_slice(&[20, 20, 20, 255]);
+            }
+        }
+        let rr = RegionBox {
+            id: "toolbar".into(),
+            x: 60.0 / 256.0,
+            y: 53.0 / 128.0,
+            w: 120.0 / 256.0,
+            h: 22.0 / 128.0,
+            kind: Some("chrome".into()),
+        };
         let ac = region_crop(&a, &rr);
         let bc = region_crop(&b, &rr);
         assert_eq!(ac.height, 22, "crop must honor the declared box");
-        assert_eq!(ac.data, bc.data, "neighbours cannot change the target pixels");
+        assert_eq!(
+            ac.data, bc.data,
+            "neighbours cannot change the target pixels"
+        );
     }
 }

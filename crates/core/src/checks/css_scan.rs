@@ -5,13 +5,13 @@
 
 use crate::checks::rules::{
     extract_shadow_lengths, find_shadow_color, glow_is_perceptible, is_radius_property,
-    DeclaredCorners, ANY, B, D, NOMINAL_CARD_WIDTH_PX,
+    DeclaredCorners, NOMINAL_CARD_WIDTH_PX,
 };
 use crate::color::{
     color_to_hex, has_chroma, parse_any_color, relative_luminance, split_top_level_commas, Rgba,
 };
 
-use crate::js::{self, ci, math_max, math_min, number_to_string, parse_float, WS, WS_CHARS};
+use crate::js::{self, math_max, math_min, number_to_string, parse_float};
 
 use crate::js_ext_a::{
     advance_utf16, is_word_byte, last_index_of_byte, split_commas_outside_parens, split_ws,
@@ -27,7 +27,8 @@ pub use impeccable_foundation::css::scan::*;
 
 macro_rules! re {
     ($name:ident, $pat:expr) => {
-        static $name: Lazy<Regex> = Lazy::new(|| Regex::new(&$pat).expect(stringify!($name)));
+        static $name: Lazy<Regex> =
+            Lazy::new(|| Regex::new(r"^([0-9.]+)%$").expect(stringify!($name)));
     };
 }
 
@@ -408,7 +409,7 @@ pub fn scan_css_text_for_radial_halo_with(
             let px_stop = stops.iter().any(|s| {
                 PX_STOP_RE
                     .captures(s)
-                    .map_or(false, |pm| parse_float(&pm[1]).abs() <= 24.0)
+                    .is_some_and(|pm| parse_float(&pm[1]).abs() <= 24.0)
             });
             if px_stop {
                 continue;
@@ -677,7 +678,10 @@ fn get_or<'a>(decls: &'a DeclMap, a: &str, b: &str) -> &'a str {
     }
 }
 
-re!(STRIPE_URL_FN_RE, format!(r#"{}\((?:"[^"]*"|'[^']*'|[^)]*)\)"#, ci("url")));
+re!(
+    STRIPE_URL_FN_RE,
+    format!(r#"{}\((?:"[^"]*"|'[^']*'|[^)]*)\)"#, ci("url"))
+);
 
 /// Whether a stripe's background value paints an image and names no colour
 /// beside it: a `url()` layer, and no other token that parses as a colour.
@@ -722,8 +726,8 @@ pub fn scan_css_text_for_pseudo_stripe(raw_content: &str) -> Vec<PatternFinding>
             get_or(&decls, "height", "block-size"),
             &custom_props,
         ));
-        let vertical_candidate = width_px.map_or(false, |w| w >= 3.0 && w <= 12.0);
-        let horizontal_candidate = height_px.map_or(false, |h| h >= 3.0 && h <= 12.0)
+        let vertical_candidate = width_px.is_some_and(|w| (3.0..=12.0).contains(&w));
+        let horizontal_candidate = height_px.is_some_and(|h| (3.0..=12.0).contains(&h))
             && !selector_has_tag(
                 selector,
                 &["a", "button", "summary", "tr", "td", "th", "table", "li"],
@@ -919,7 +923,7 @@ pub fn scan_css_text_for_inset_stripe(content: &str) -> Vec<PatternFinding> {
             get_or(&decls, "width", "inline-size"),
             &custom_props,
         ));
-        if declared_width.map_or(false, |w| w <= 40.0) {
+        if declared_width.is_some_and(|w| w <= 40.0) {
             continue;
         }
         let value = resolve_var_refs(shadow, &custom_props);
@@ -958,8 +962,8 @@ pub fn scan_css_text_for_inset_stripe(content: &str) -> Vec<PatternFinding> {
             }
             let ax = x.abs();
             let ay = y.abs();
-            let is_stripe =
-                (ax >= 3.0 && ax <= 12.0 && ay == 0.0) || (ay >= 3.0 && ay <= 12.0 && ax == 0.0);
+            let is_stripe = ((3.0..=12.0).contains(&ax) && ay == 0.0)
+                || ((3.0..=12.0).contains(&ay) && ax == 0.0);
             if !is_stripe {
                 continue;
             }
@@ -1003,7 +1007,10 @@ pub fn scan_css_text_for_inset_stripe(content: &str) -> Vec<PatternFinding> {
 // a computed style when it has elements in hand and against the host rule's
 // own declarations when it has only text.
 
-re!(STRIPE_EDGE_RE, r"\((left|right|top|bottom)(?:: 0)?\)$".to_string());
+re!(
+    STRIPE_EDGE_RE,
+    r"\((left|right|top|bottom)(?:: 0)?\)$".to_string()
+);
 
 /// The side a CSS-text `side-tab` stripe sits on, as a `[Top, Right, Bottom,
 /// Left]` index, read off the snippet both scans end with: `(left: 0)` /
@@ -1699,7 +1706,11 @@ impl<'a> CssHostIndex<'a> {
     /// text engine twin: whether a stripe from this text sits on
     /// a box known square, so the finding drops. Anything but a
     /// `side-tab` stripe is never known square.
-    pub fn side_stripe_known_square(&self, finding: &PatternFinding, sheet: &DeclaredCorners) -> bool {
+    pub fn side_stripe_known_square(
+        &self,
+        finding: &PatternFinding,
+        sheet: &DeclaredCorners,
+    ) -> bool {
         let Some(side) = side_stripe_index(finding) else {
             return false;
         };
@@ -1926,13 +1937,13 @@ fn selector_could_apply(
         }
         if let Some(class) = token.strip_prefix('.') {
             let class = class.replace('\\', "");
-            if !classes.iter().any(|c| *c == class) {
+            if !classes.contains(&class) {
                 return false;
             }
-        } else if token.starts_with(|c: char| c.is_ascii_alphabetic()) {
-            if tag.is_some_and(|t| !t.eq_ignore_ascii_case(&token)) {
-                return false;
-            }
+        } else if token.starts_with(|c: char| c.is_ascii_alphabetic())
+            && tag.is_some_and(|t| !t.eq_ignore_ascii_case(&token))
+        {
+            return false;
         }
     }
     true
@@ -1996,7 +2007,11 @@ pub(crate) fn split_top_level(s: &str, is_sep: impl Fn(char) -> bool) -> Vec<&st
                 depth -= 1;
                 if depth < 0 {
                     parts.push(&s[start..i]);
-                    return parts.into_iter().map(js::trim).filter(|p| !p.is_empty()).collect();
+                    return parts
+                        .into_iter()
+                        .map(js::trim)
+                        .filter(|p| !p.is_empty())
+                        .collect();
                 }
             }
             _ if depth == 0 && is_sep(c) => {
@@ -2007,13 +2022,21 @@ pub(crate) fn split_top_level(s: &str, is_sep: impl Fn(char) -> bool) -> Vec<&st
         }
     }
     parts.push(&s[start..]);
-    parts.into_iter().map(js::trim).filter(|p| !p.is_empty()).collect()
+    parts
+        .into_iter()
+        .map(js::trim)
+        .filter(|p| !p.is_empty())
+        .collect()
 }
 
 /// One polygon coordinate as a comparable key: whitespace dropped, and a
 /// zero in any unit read as `0`.
 fn polygon_coordinate_key(token: &str) -> String {
-    let key: String = token.chars().filter(|c| !c.is_whitespace()).collect::<String>().to_ascii_lowercase();
+    let key: String = token
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect::<String>()
+        .to_ascii_lowercase();
     let unit_start = key.find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-' || c == '+'));
     let number = &key[..unit_start.unwrap_or(key.len())];
     if !number.is_empty() && number.parse::<f64>().is_ok_and(|v| v == 0.0) {
@@ -2032,7 +2055,10 @@ fn polygon_is_rectilinear(body: &str) -> bool {
     let mut vertices: Vec<(String, String)> = Vec::new();
     for (i, point) in split_top_level(body, |c| c == ',').into_iter().enumerate() {
         let coords = split_top_level(point, char::is_whitespace);
-        if i == 0 && coords.len() == 1 && matches!(js::to_lower_case(coords[0]).as_str(), "nonzero" | "evenodd") {
+        if i == 0
+            && coords.len() == 1
+            && matches!(js::to_lower_case(coords[0]).as_str(), "nonzero" | "evenodd")
+        {
             continue;
         }
         let [x, y] = coords.as_slice() else {
@@ -2053,14 +2079,23 @@ fn polygon_is_rectilinear(body: &str) -> bool {
 /// length or percentage (`96%`, `4px`, `0`). A `calc()` or a variable is not.
 fn polygon_coordinate_number(token: &str) -> Option<(f64, String)> {
     let t = js::trim(token).to_ascii_lowercase();
-    let unit_start = t.find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-' || c == '+')).unwrap_or(t.len());
+    let unit_start = t
+        .find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-' || c == '+'))
+        .unwrap_or(t.len());
     let value: f64 = t[..unit_start].parse().ok()?;
     let unit = &t[unit_start..];
     if !unit.chars().all(|c| c.is_ascii_alphabetic() || c == '%') {
         return None;
     }
     // A zero is a zero in any unit.
-    Some((value, if value == 0.0 { String::new() } else { unit.to_string() }))
+    Some((
+        value,
+        if value == 0.0 {
+            String::new()
+        } else {
+            unit.to_string()
+        },
+    ))
 }
 
 /// Whether a `polygon()` body is a zigzag edge: its vertices take two to
@@ -2073,13 +2108,17 @@ fn polygon_is_zigzag(body: &str) -> bool {
     let mut ys: Vec<(f64, String)> = Vec::new();
     for (i, point) in split_top_level(body, |c| c == ',').into_iter().enumerate() {
         let coords = split_top_level(point, char::is_whitespace);
-        if i == 0 && coords.len() == 1 && matches!(js::to_lower_case(coords[0]).as_str(), "nonzero" | "evenodd") {
+        if i == 0
+            && coords.len() == 1
+            && matches!(js::to_lower_case(coords[0]).as_str(), "nonzero" | "evenodd")
+        {
             continue;
         }
         let [x, y] = coords.as_slice() else {
             return false;
         };
-        let (Some(x), Some(y)) = (polygon_coordinate_number(x), polygon_coordinate_number(y)) else {
+        let (Some(x), Some(y)) = (polygon_coordinate_number(x), polygon_coordinate_number(y))
+        else {
             return false;
         };
         xs.push(x);
@@ -2114,7 +2153,9 @@ fn polygon_is_zigzag(body: &str) -> bool {
     let xv: Vec<f64> = xs.iter().map(|(n, _)| *n).collect();
     let yv: Vec<f64> = ys.iter().map(|(n, _)| *n).collect();
     ((2..=4).contains(&dx.len()) && even_steps(&dy) && teeth_alternate(&yv, dy[1] - dy[0], &xv))
-        || ((2..=4).contains(&dy.len()) && even_steps(&dx) && teeth_alternate(&xv, dx[1] - dx[0], &yv))
+        || ((2..=4).contains(&dy.len())
+            && even_steps(&dx)
+            && teeth_alternate(&xv, dx[1] - dx[0], &yv))
 }
 
 /// Whether the vertices that advance one step at a time along `along` swing
@@ -2147,7 +2188,10 @@ fn teeth_alternate(along: &[f64], step: f64, across: &[f64]) -> bool {
     swings >= 3
 }
 
-re!(PATH_TOKEN_RE, r"[A-Za-z]|[-+]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][-+]?[0-9]+)?".to_string());
+re!(
+    PATH_TOKEN_RE,
+    r"[A-Za-z]|[-+]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][-+]?[0-9]+)?".to_string()
+);
 
 /// Whether a `path()` body draws a rounded rectangle: every straight
 /// segment (`L`, `H`, `V`, a closing `Z`) runs along an edge of the box the
@@ -2166,7 +2210,12 @@ fn path_is_rounded_rectangle(body: &str) -> bool {
     // The fill rule, where one leads, is a keyword before the first comma;
     // the path data after it holds commas of its own.
     let data = match data.find(',') {
-        Some(i) if matches!(data[..i].trim().to_ascii_lowercase().as_str(), "nonzero" | "evenodd") => {
+        Some(i)
+            if matches!(
+                data[..i].trim().to_ascii_lowercase().as_str(),
+                "nonzero" | "evenodd"
+            ) =>
+        {
             data[i + 1..].to_string()
         }
         _ => data,
@@ -2228,7 +2277,8 @@ fn path_is_rounded_rectangle(body: &str) -> bool {
             _ => (base.0 + args[arity - 2], base.1 + args[arity - 1]),
         };
         let at = |k: usize| (base.0 + args[k], base.1 + args[k + 1]);
-        let reflect = |c: Option<(f64, f64)>| c.map_or(cur, |c| (2.0 * cur.0 - c.0, 2.0 * cur.1 - c.1));
+        let reflect =
+            |c: Option<(f64, f64)>| c.map_or(cur, |c| (2.0 * cur.0 - c.0, 2.0 * cur.1 - c.1));
         let (mut cubic, mut quad) = (None, None);
         match command.to_ascii_uppercase() {
             'C' => {
@@ -2243,15 +2293,33 @@ fn path_is_rounded_rectangle(body: &str) -> bool {
             }
             'Q' => {
                 let c = at(0);
-                points.extend(sample_cubic(cur, lerp(cur, c, 2.0 / 3.0), lerp(end, c, 2.0 / 3.0), end));
+                points.extend(sample_cubic(
+                    cur,
+                    lerp(cur, c, 2.0 / 3.0),
+                    lerp(end, c, 2.0 / 3.0),
+                    end,
+                ));
                 quad = Some(c);
             }
             'T' => {
                 let c = reflect(last_quad);
-                points.extend(sample_cubic(cur, lerp(cur, c, 2.0 / 3.0), lerp(end, c, 2.0 / 3.0), end));
+                points.extend(sample_cubic(
+                    cur,
+                    lerp(cur, c, 2.0 / 3.0),
+                    lerp(end, c, 2.0 / 3.0),
+                    end,
+                ));
                 quad = Some(c);
             }
-            'A' => points.extend(sample_arc(cur, args[0], args[1], args[2], args[3] != 0.0, args[4] != 0.0, end)),
+            'A' => points.extend(sample_arc(
+                cur,
+                args[0],
+                args[1],
+                args[2],
+                args[3] != 0.0,
+                args[4] != 0.0,
+                end,
+            )),
             _ => {}
         }
         last_cubic = cubic;
@@ -2272,7 +2340,11 @@ fn path_is_rounded_rectangle(body: &str) -> bool {
         points.push(cur);
     }
     // A zero-length side still marks the edge it sits on.
-    let lines: Vec<_> = segments.iter().filter(|s| s.2).map(|s| (s.0, s.1)).collect();
+    let lines: Vec<_> = segments
+        .iter()
+        .filter(|s| s.2)
+        .map(|s| (s.0, s.1))
+        .collect();
     if lines.len() < 4 || points.is_empty() {
         return false;
     }
@@ -2308,13 +2380,23 @@ fn path_is_rounded_rectangle(body: &str) -> bool {
     // left or right). A wave along an edge starts and ends on the same one.
     let on_edges = |p: (f64, f64)| -> Vec<usize> {
         let mut e = Vec::new();
-        if near(p.1, min_y) { e.push(0) }
-        if near(p.0, max_x) { e.push(1) }
-        if near(p.1, max_y) { e.push(2) }
-        if near(p.0, min_x) { e.push(3) }
+        if near(p.1, min_y) {
+            e.push(0)
+        }
+        if near(p.0, max_x) {
+            e.push(1)
+        }
+        if near(p.1, max_y) {
+            e.push(2)
+        }
+        if near(p.0, min_x) {
+            e.push(3)
+        }
         e
     };
-    let Some(first_line) = segments.iter().position(|s| s.2) else { return false };
+    let Some(first_line) = segments.iter().position(|s| s.2) else {
+        return false;
+    };
     let n = segments.len();
     let mut run: Option<((f64, f64), (f64, f64))> = None;
     for k in 1..=n {
@@ -2349,7 +2431,10 @@ fn sample_cubic(p0: (f64, f64), p1: (f64, f64), p2: (f64, f64), p3: (f64, f64)) 
             let t = k as f64 / CURVE_SAMPLES as f64;
             let u = 1.0 - t;
             let (a, b, c, d) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
-            (a * p0.0 + b * p1.0 + c * p2.0 + d * p3.0, a * p0.1 + b * p1.1 + c * p2.1 + d * p3.1)
+            (
+                a * p0.0 + b * p1.0 + c * p2.0 + d * p3.0,
+                a * p0.1 + b * p1.1 + c * p2.1 + d * p3.1,
+            )
         })
         .collect()
 }
@@ -2380,7 +2465,11 @@ fn sample_arc(
     }
     let num = rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1;
     let den = rx * rx * y1 * y1 + ry * ry * x1 * x1;
-    let mut coef = if den == 0.0 { 0.0 } else { (num / den).max(0.0).sqrt() };
+    let mut coef = if den == 0.0 {
+        0.0
+    } else {
+        (num / den).max(0.0).sqrt()
+    };
     if large == sweep {
         coef = -coef;
     }
@@ -2449,7 +2538,10 @@ pub(crate) fn organic_polygon_vertices(body: &str) -> Option<usize> {
 pub fn scan_css_text_for_organic_clip_path(style_text: &str) -> Vec<PatternFinding> {
     let mut findings: Vec<PatternFinding> = Vec::new();
     let push = |findings: &mut Vec<PatternFinding>, f: PatternFinding| {
-        if !findings.iter().any(|g| g.snippet == f.snippet && g.selector == f.selector) {
+        if !findings
+            .iter()
+            .any(|g| g.snippet == f.snippet && g.selector == f.selector)
+        {
             findings.push(f);
         }
     };
@@ -2465,28 +2557,34 @@ pub fn scan_css_text_for_organic_clip_path(style_text: &str) -> Vec<PatternFindi
             if curves < 3 || path_is_rounded_rectangle(body) {
                 continue;
             }
-            push(&mut findings, PatternFinding {
-                id: "organic-clip-path".to_string(),
-                snippet: format!("clip-path: path() with {curves} curve segments"),
-                selector: enclosing_css_selector(style_text, index),
-                index: None,
-                severity: None,
-            });
+            push(
+                &mut findings,
+                PatternFinding {
+                    id: "organic-clip-path".to_string(),
+                    snippet: format!("clip-path: path() with {curves} curve segments"),
+                    selector: enclosing_css_selector(style_text, index),
+                    index: None,
+                    severity: None,
+                },
+            );
             continue;
         }
         let Some(vertices) = organic_polygon_vertices(body) else {
             continue;
         };
-        push(&mut findings, PatternFinding {
-            id: "organic-clip-path".to_string(),
-            snippet: format!(
-                "clip-path: polygon() with {} vertices approximating an organic contour",
-                vertices
-            ),
-            selector: enclosing_css_selector(style_text, index),
-            index: None,
-            severity: None,
-        });
+        push(
+            &mut findings,
+            PatternFinding {
+                id: "organic-clip-path".to_string(),
+                snippet: format!(
+                    "clip-path: polygon() with {} vertices approximating an organic contour",
+                    vertices
+                ),
+                selector: enclosing_css_selector(style_text, index),
+                index: None,
+                severity: None,
+            },
+        );
     }
     findings
 }
@@ -2715,8 +2813,13 @@ re!(
 /// scale factor between nothing and full size.
 fn scale_factors_within_unit(list: &str) -> bool {
     let mut any = false;
-    for part in list.split(|c: char| c == ',' || is_js_ws(c)).filter(|p| !p.is_empty()) {
-        let Ok(v) = part.parse::<f64>() else { return false };
+    for part in list
+        .split(|c: char| c == ',' || is_js_ws(c))
+        .filter(|p| !p.is_empty())
+    {
+        let Ok(v) = part.parse::<f64>() else {
+            return false;
+        };
         if !(0.0..=1.0).contains(&v) {
             return false;
         }
@@ -2737,9 +2840,15 @@ pub fn transform_only_scales(value: &str) -> bool {
     let mut rest = value;
     let mut any = false;
     while !rest.is_empty() {
-        let Some(m) = SCALE_FN_RE.captures(rest) else { return false };
+        let Some(m) = SCALE_FN_RE.captures(rest) else {
+            return false;
+        };
         let factors = &m[1];
-        if factors.split(|c: char| c == ',' || is_js_ws(c)).filter(|p| !p.is_empty()).any(|p| p.parse::<f64>().is_err()) {
+        if factors
+            .split(|c: char| c == ',' || is_js_ws(c))
+            .filter(|p| !p.is_empty())
+            .any(|p| p.parse::<f64>().is_err())
+        {
             return false;
         }
         any = true;
@@ -2769,7 +2878,9 @@ pub fn keyframe_decl_only_pulses(prop: &str, value: &str) -> bool {
             let mut rest = value;
             let mut any = false;
             while !rest.is_empty() {
-                let Some(m) = SCALE_FN_RE.captures(rest) else { return false };
+                let Some(m) = SCALE_FN_RE.captures(rest) else {
+                    return false;
+                };
                 if !scale_factors_within_unit(&m[1]) {
                     return false;
                 }
@@ -2783,10 +2894,12 @@ pub fn keyframe_decl_only_pulses(prop: &str, value: &str) -> bool {
             if lower.contains("linear(") || lower.contains("var(") {
                 return false;
             }
-            !crate::checks::rules::BEZIER_RE.captures_iter(&lower).any(|m| {
-                let (y1, y2) = (parse_float(&m[2]), parse_float(&m[4]));
-                !(0.0..=1.0).contains(&y1) || !(0.0..=1.0).contains(&y2)
-            })
+            !crate::checks::rules::BEZIER_RE
+                .captures_iter(&lower)
+                .any(|m| {
+                    let (y1, y2) = (parse_float(&m[2]), parse_float(&m[4]));
+                    !(0.0..=1.0).contains(&y1) || !(0.0..=1.0).contains(&y2)
+                })
         }
         _ => false,
     }
@@ -3133,9 +3246,13 @@ mod tests {
         let notch = ".px{clip-path:polygon(4px 0%, calc(100% - 4px) 0%, calc(100% - 4px) 4px, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 4px calc(100% - 4px), 0% calc(100% - 4px), 0% 4px, 4px 4px)}";
         assert!(scan_css_text_for_organic_clip_path(notch).is_empty());
         // A zero is a zero in any unit, and a fill rule leads the list.
-        assert!(polygon_is_rectilinear("evenodd, 0 0, 10px 0px, 10px 10px, 0% 10px)"));
+        assert!(polygon_is_rectilinear(
+            "evenodd, 0 0, 10px 0px, 10px 10px, 0% 10px)"
+        ));
         // One diagonal edge, and a vertex that is not a pair, answer no.
-        assert!(!polygon_is_rectilinear("0 0, 10px 0, 10px 10px, 5px 12px, 0 10px)"));
+        assert!(!polygon_is_rectilinear(
+            "0 0, 10px 0, 10px 10px, 5px 12px, 0 10px)"
+        ));
         assert!(!polygon_is_rectilinear("0 0, 10px, 10px 10px, 0 10px)"));
         let blob = ".b{clip-path:polygon(50% 0%, 61% 8%, 74% 6%, 82% 16%, 94% 22%, 96% 36%, 100% 50%, 92% 63%, 88% 78%, 74% 88%, 60% 100%, 46% 96%)}";
         assert_eq!(scan_css_text_for_organic_clip_path(blob).len(), 1);
@@ -3154,7 +3271,9 @@ mod tests {
         assert!(!polygon_is_zigzag("50% 0%, 61% 8%, 74% 6%, 82% 16%, 94% 22%, 96% 36%, 100% 50%, 92% 63%, 88% 78%, 74% 88%, 60% 100%, 46% 96%"));
         assert!(!polygon_is_zigzag("0% 0%, 100% 0%, 100% 13%, 96% 40%, 100% 62%, 96% 80%, 100% 100%, 0% 100%, 4% 77%, 0% 60%, 4% 31%, 0% 20%"));
         // A coordinate that is not a plain number answers no.
-        assert!(!polygon_is_zigzag("0 0, calc(100% - 4px) 0, 100% 20%, 0 100%"));
+        assert!(!polygon_is_zigzag(
+            "0 0, calc(100% - 4px) 0, 100% 20%, 0 100%"
+        ));
         // A torn bottom edge with a few levels in no order is not teeth.
         let torn = ".t{clip-path:polygon(0 0, 100% 0, 100% 96%, 95% 100%, 90% 97%, 85% 100%, 80% 96%, 75% 99%, 70% 96%, 65% 100%, 60% 97%, 55% 99%, 50% 96%, 0 96%)}";
         assert_eq!(scan_css_text_for_organic_clip_path(torn).len(), 1);
@@ -3172,18 +3291,28 @@ mod tests {
         assert!(path_is_rounded_rectangle(&format!("'{squircle}')")));
         // The same squircle where a corner's curve lands exactly where the
         // straight side ends: a zero-length side still parts the corners.
-        let wide = squircle.replace("110.003", "120.816").replace("135.203", "146.016");
+        let wide = squircle
+            .replace("110.003", "120.816")
+            .replace("135.203", "146.016");
         assert!(path_is_rounded_rectangle(&format!("'{wide}')")));
-        assert!(path_is_rounded_rectangle("evenodd, 'M10 0H90Q100 0 100 10V90Q100 100 90 100H10Q0 100 0 90V10Q0 0 10 0Z')"));
+        assert!(path_is_rounded_rectangle(
+            "evenodd, 'M10 0H90Q100 0 100 10V90Q100 100 90 100H10Q0 100 0 90V10Q0 0 10 0Z')"
+        ));
         // A fill rule ahead of path data that holds commas of its own
         // (review), and a comma right after the first command.
         assert!(path_is_rounded_rectangle("evenodd, 'M10,0 H90 Q100,0 100,10 V90 Q100,100 90,100 H10 Q0,100 0,90 V10 Q0,0 10,0 Z')"));
-        assert!(path_is_rounded_rectangle("nonzero, 'M,10 0H90Q100 0 100 10V90Q100 100 90 100H10Q0 100 0 90V10Q0 0 10 0Z')"));
-        assert!(path_is_rounded_rectangle("'M10,0 H90 Q100,0 100,10 V90 Q100,100 90,100 H10 Q0,100 0,90 V10 Q0,0 10,0 Z')"));
+        assert!(path_is_rounded_rectangle(
+            "nonzero, 'M,10 0H90Q100 0 100 10V90Q100 100 90 100H10Q0 100 0 90V10Q0 0 10 0Z')"
+        ));
+        assert!(path_is_rounded_rectangle(
+            "'M10,0 H90 Q100,0 100,10 V90 Q100,100 90,100 H10 Q0,100 0,90 V10 Q0,0 10,0 Z')"
+        ));
         // A blob of curves, and a curved shape with one flat side, still report.
         let blob = ".b{clip-path:path('M50 0 C80 0 100 20 100 50 C100 80 80 100 50 100 C20 100 0 80 0 50 C0 20 20 0 50 0 Z')}";
         assert_eq!(scan_css_text_for_organic_clip_path(blob).len(), 1);
-        assert!(!path_is_rounded_rectangle("'M0 100 L100 100 C100 40 70 0 50 0 C30 0 0 40 0 100 Z')"));
+        assert!(!path_is_rounded_rectangle(
+            "'M0 100 L100 100 C100 40 70 0 50 0 C30 0 0 40 0 100 Z')"
+        ));
         // Straight sides joined by curves that bulge far outside them.
         assert!(!path_is_rounded_rectangle(
             "'M20 0 H80 C150 -50 150 50 100 20 V80 C150 150 50 150 80 100 H20 C-50 150 -50 50 0 80 V20 C-50 -50 50 -50 20 0 Z')"
@@ -3242,11 +3371,23 @@ mod tests {
             (".card { @media (x) { & .s { c: d } } }", 31, None),
             ("@media (x) { .a{b} .c { d } }", 25, Some(".c")),
             // A quoted or escaped brace opens no block.
-            (".q::before { content: \"{\"; } .gone { c: d }", 40, Some(".gone")),
-            (".q::before { content: '\\{'; } .gone { c: d }", 40, Some(".gone")),
+            (
+                ".q::before { content: \"{\"; } .gone { c: d }",
+                40,
+                Some(".gone"),
+            ),
+            (
+                ".q::before { content: '\\{'; } .gone { c: d }",
+                40,
+                Some(".gone"),
+            ),
             // A quoted brace or semicolon in the selector itself bounds
             // nothing either (second review of #1042).
-            ("[data-template*=\"{\"] { c: d }", 23, Some("[data-template*=\"{\"]")),
+            (
+                "[data-template*=\"{\"] { c: d }",
+                23,
+                Some("[data-template*=\"{\"]"),
+            ),
             (".a{b} [title='x;y'] { c: d }", 22, Some("[title='x;y']")),
             // A stray quote ends at its line.
             ("a[x=\"] {}\n.c{d}\n.b { c: d }", 21, Some(".b")),
@@ -3267,11 +3408,18 @@ mod tests {
             "@media (x) { @supports (content: 'x;y') { .b { c: d } } }",
         ] {
             let idx = text.find("c: d").unwrap();
-            assert_eq!(enclosing_css_selector(text, idx).as_deref(), Some(".b"), "{text:?}");
+            assert_eq!(
+                enclosing_css_selector(text, idx).as_deref(),
+                Some(".b"),
+                "{text:?}"
+            );
         }
         // A quoted semicolon still ends nothing in a rule nested in a style rule.
         let nested = ".card { content: \"a;b\"; @media (x) { .s { c: d } } }";
-        assert_eq!(enclosing_css_selector(nested, nested.find("c: d").unwrap()), None);
+        assert_eq!(
+            enclosing_css_selector(nested, nested.find("c: d").unwrap()),
+            None
+        );
     }
 
     #[test]
@@ -3280,7 +3428,9 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].snippet, "Zero-offset box-shadow glow (#00a9ff)");
         // 10% alpha over 20px of blur, and a spread that swallows its blur.
-        assert!(scan_css_text_for_glow(".a{box-shadow:0 4px 20px rgba(149,100,255,0.1)}").is_empty());
+        assert!(
+            scan_css_text_for_glow(".a{box-shadow:0 4px 20px rgba(149,100,255,0.1)}").is_empty()
+        );
         assert!(
             scan_css_text_for_glow(".b{box-shadow:0 0 40px -22px rgba(52,211,153,0.4)}").is_empty()
         );
@@ -3301,7 +3451,10 @@ mod tests {
         let at = |s: &str, needle: &str| starts_css_property_token(s, s.find(needle).unwrap());
         assert!(at("box-shadow:0", "box-shadow"));
         assert!(at(".a{box-shadow:0}", "box-shadow"));
-        assert!(!at(".a{--bprogress-box-shadow:0 0 10px #29d}", "box-shadow"));
+        assert!(!at(
+            ".a{--bprogress-box-shadow:0 0 10px #29d}",
+            "box-shadow"
+        ));
         assert!(at(".a{-webkit-box-shadow:0 0 8px red}", "box-shadow"));
         assert!(!at(".a{--x-webkit-box-shadow:0}", "box-shadow"));
         assert!(!at("border-width .2s", "width"));
@@ -3311,14 +3464,18 @@ mod tests {
 
     #[test]
     fn glow_and_dark_page_read_properties_not_tokens() {
-        assert!(scan_css_text_for_glow(":root{--bprogress-box-shadow:0 0 10px #29d,0 0 5px #29d}")
-            .is_empty());
+        assert!(
+            scan_css_text_for_glow(":root{--bprogress-box-shadow:0 0 10px #29d,0 0 5px #29d}")
+                .is_empty()
+        );
         assert_eq!(
-            scan_css_text_for_glow(".a{-webkit-box-shadow:0 0 12px rgba(59,130,246,.6)}")[0].snippet,
+            scan_css_text_for_glow(".a{-webkit-box-shadow:0 0 12px rgba(59,130,246,.6)}")[0]
+                .snippet,
             "Zero-offset box-shadow glow (#3b82f6)"
         );
         // A dark token is not a dark background.
-        let token_dark = ".dark{--color-background:#0a0a0a}.c{box-shadow:0 8px 24px rgba(99,102,241,.6)}";
+        let token_dark =
+            ".dark{--color-background:#0a0a0a}.c{box-shadow:0 8px 24px rgba(99,102,241,.6)}";
         assert!(scan_css_text_for_glow(token_dark).is_empty());
         let real_dark = "body{background:#0a0a0a}.c{box-shadow:0 8px 24px rgba(99,102,241,.6)}";
         assert_eq!(scan_css_text_for_glow(real_dark).len(), 1);
@@ -3343,7 +3500,9 @@ mod tests {
             vec!["ticker".to_string()]
         );
         assert_eq!(
-            collect_marquee_keyframes("@keyframes t3d{to{transform:translate3d(calc(-50% + 1rem),0,0)}}"),
+            collect_marquee_keyframes(
+                "@keyframes t3d{to{transform:translate3d(calc(-50% + 1rem),0,0)}}"
+            ),
             vec!["t3d".to_string()]
         );
         assert!(collect_marquee_keyframes(
@@ -3434,8 +3593,12 @@ mod tests {
         assert!(pulses("@keyframes c4 { 0%,100% { opacity: .4; transform: translate(calc(0px), 8px) } 50% { opacity: 1; transform: translate(0px, 8px) } }"));
         assert!(pulses("@keyframes c3 { 0%,100% { opacity: .4; transform: translate(calc(-50% + 2px), 0) } 50% { opacity: 1; transform: translateX(-50%) } }"));
         // One height, or one step that translates, decides nothing.
-        assert!(pulses("@keyframes h { 0%, 100% { opacity: .4; height: 8px } 50% { opacity: 1 } }"));
-        assert!(pulses("@keyframes s { 0% { opacity: 1 } 50% { opacity: .5; transform: translateY(6px) } }"));
+        assert!(pulses(
+            "@keyframes h { 0%, 100% { opacity: .4; height: 8px } 50% { opacity: 1 } }"
+        ));
+        assert!(pulses(
+            "@keyframes s { 0% { opacity: 1 } 50% { opacity: .5; transform: translateY(6px) } }"
+        ));
         // Review of #1042, second round: two spellings of one height are one
         // size, and a matrix step's translation is unknown, not zero.
         assert!(pulses("@keyframes e { 0%,100% { opacity: .4; height: 8px; width: 8px } 50% { opacity: 1; height: 8.0px; width: 8px } }"));
@@ -3458,11 +3621,17 @@ mod tests {
         assert_eq!(dots("3px", "6px"), 0, "a waveform bar");
         assert_eq!(dots("12px", "4px"), 0, "a pill");
         // Review of #1042: the utility-class form reads both sides too.
-        let tw = |cls: &str| scan_css_text_for_pulsing_dot("", Some(&format!("<span class=\"{cls}\"></span>"))).len();
+        let tw = |cls: &str| {
+            scan_css_text_for_pulsing_dot("", Some(&format!("<span class=\"{cls}\"></span>"))).len()
+        };
         assert_eq!(tw("animate-pulse w-2 h-2 rounded-full"), 1);
         assert_eq!(tw("animate-ping size-2 rounded-full"), 1);
         assert_eq!(tw("animate-pulse w-2 h-3 rounded-full"), 1, "1.5 to 1");
-        assert_eq!(tw("animate-pulse w-1 h-4 rounded-full"), 0, "a 4 by 16px bar");
+        assert_eq!(
+            tw("animate-pulse w-1 h-4 rounded-full"),
+            0,
+            "a 4 by 16px bar"
+        );
         assert_eq!(tw("animate-pulse w-1 h-12 rounded-full"), 0, "a tall bar");
     }
 
@@ -3944,11 +4113,18 @@ mod tests {
             format!(".news::after{{content:\"\";position:absolute;bottom:0;height:10px;left:0;right:0;background:{bg}}}")
         };
         let snippets = |bg: &str| -> Vec<String> {
-            scan_css_text_for_pseudo_stripe(&rule(bg)).into_iter().map(|f| f.snippet).collect()
+            scan_css_text_for_pseudo_stripe(&rule(bg))
+                .into_iter()
+                .map(|f| f.snippet)
+                .collect()
         };
-        assert!(snippets("url(\"../images/before-sns.jpg\") left center / auto 10px repeat-x").is_empty());
+        assert!(
+            snippets("url(\"../images/before-sns.jpg\") left center / auto 10px repeat-x")
+                .is_empty()
+        );
         assert!(snippets("url(rule.png)").is_empty());
-        let reported = vec![".news::after — absolute 10px pseudo-element stripe (bottom: 0)".to_string()];
+        let reported =
+            vec![".news::after — absolute 10px pseudo-element stripe (bottom: 0)".to_string()];
         // A colour beside the image, in any spelling, reports as before.
         assert_eq!(snippets("url(rule.png) #e11d48"), reported);
         assert_eq!(snippets("crimson url(rule.png) repeat-x"), reported);
@@ -3960,8 +4136,12 @@ mod tests {
     #[test]
     fn keyframes_that_only_pulse() {
         // SpinKit: a dot swelling from nothing to its size and back.
-        let spinkit = "@keyframes sk-bounceDelay{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}";
-        assert_eq!(css_keyframes_only_pulse(spinkit, "sk-bounceDelay"), Some(true));
+        let spinkit =
+            "@keyframes sk-bounceDelay{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}";
+        assert_eq!(
+            css_keyframes_only_pulse(spinkit, "sk-bounceDelay"),
+            Some(true)
+        );
         assert_eq!(css_keyframes_only_pulse(spinkit, "other"), None);
         for (pulses, body) in [
             (true, "0%{opacity:0;-webkit-transform:scale3d(.3,.3,.3)}100%{opacity:1;transform:none}"),
@@ -3983,6 +4163,9 @@ mod tests {
         // Two definitions of one name: both have to pulse.
         let twice = "@keyframes k{0%{transform:scale(0)}100%{transform:scale(1)}} @-webkit-keyframes k{0%{transform:translateY(-10px)}}";
         assert_eq!(css_keyframes_only_pulse(twice, "k"), Some(false));
-        assert_eq!(css_keyframes_only_pulse("@keyframes k{0%{opacity:0}", "k"), Some(false));
+        assert_eq!(
+            css_keyframes_only_pulse("@keyframes k{0%{opacity:0}", "k"),
+            Some(false)
+        );
     }
 }

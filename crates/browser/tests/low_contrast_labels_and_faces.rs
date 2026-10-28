@@ -65,7 +65,9 @@ fn scan(fixture: &str) -> Option<Vec<(String, String, String, bool)>> {
     let engine = BrowserEngine::new(env);
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/{fixture}");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     Some(
         findings
             .iter()
@@ -77,7 +79,12 @@ fn scan(fixture: &str) -> Option<Vec<(String, String, String, bool)>> {
                     .and_then(|s| s.as_str())
                     .unwrap_or("")
                     .to_string();
-                (f.snippet.clone(), selector, f.severity.clone(), f.advisory == Some(true))
+                (
+                    f.snippet.clone(),
+                    selector,
+                    f.severity.clone(),
+                    f.advisory == Some(true),
+                )
             })
             .collect(),
     )
@@ -89,7 +96,11 @@ fn naming<'a>(
     needle: &str,
 ) -> &'a (String, String, String, bool) {
     let hits: Vec<_> = findings.iter().filter(|f| f.0.contains(needle)).collect();
-    assert_eq!(hits.len(), 1, "expected one finding naming {needle}, got {findings:#?}");
+    assert_eq!(
+        hits.len(),
+        1,
+        "expected one finding naming {needle}, got {findings:#?}"
+    );
     hits[0]
 }
 

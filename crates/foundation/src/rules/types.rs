@@ -5,14 +5,15 @@
 //! themselves live in the detector.
 
 use crate::color::{named_color, parse_any_color, Rgba};
-use crate::js::{self, ci, parse_float};
+use crate::js::{self, parse_float};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 macro_rules! re {
     ($name:ident, $pat:expr) => {
-        static $name: Lazy<Regex> = Lazy::new(|| Regex::new(&$pat).expect(stringify!($name)));
+        static $name: Lazy<Regex> =
+            Lazy::new(|| Regex::new(r"[a-zA-Z][a-zA-Z]*").expect(stringify!($name)));
     };
 }
 
@@ -422,12 +423,18 @@ pub const HERO_EYEBROW_TRACKING_EM: f64 = 0.08;
 /// Whether `letter_spacing_px` at `font_size_px` is tracked caps for the hero
 /// eyebrow: at least the fixed floor, or, where the engine passes one, at
 /// least `floor_em` of the size.
-pub fn hero_eyebrow_tracked(letter_spacing_px: f64, font_size_px: f64, floor_em: Option<f64>) -> bool {
+pub fn hero_eyebrow_tracked(
+    letter_spacing_px: f64,
+    font_size_px: f64,
+    floor_em: Option<f64>,
+) -> bool {
     if letter_spacing_px >= HERO_EYEBROW_TRACKING_PX {
         return true;
     }
     match floor_em {
-        Some(em) if font_size_px > 0.0 => letter_spacing_px > 0.0 && letter_spacing_px >= font_size_px * em - 1e-9,
+        Some(em) if font_size_px > 0.0 => {
+            letter_spacing_px > 0.0 && letter_spacing_px >= font_size_px * em - 1e-9
+        }
         _ => false,
     }
 }

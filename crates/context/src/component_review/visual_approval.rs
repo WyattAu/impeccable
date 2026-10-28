@@ -25,8 +25,11 @@ fn identity(state: &Value, component: &Value, blobs: &Path) -> Option<Value> {
         }
     }
     let mut views = serde_json::Map::new();
-    let keys: &[&str] = if component_stage { &["preview", "comp"] }
-        else { &["preview", "context", "thumbnail", "comp"] };
+    let keys: &[&str] = if component_stage {
+        &["preview", "comp"]
+    } else {
+        &["preview", "context", "thumbnail", "comp"]
+    };
     for &key in keys {
         let view = if key == "comp" {
             &state["packet"]["comp"]
@@ -38,7 +41,9 @@ fn identity(state: &Value, component: &Value, blobs: &Path) -> Option<Value> {
         }
         if key == "preview" && view["kind"] == "comp-crop" {
             // A plan item's pixels are the comp crop: its box is in the definition, the comp in `comp`.
-            if evidence["views"]["preview"]["kind"] != "comp-crop" { return None; }
+            if evidence["views"]["preview"]["kind"] != "comp-crop" {
+                return None;
+            }
             views.insert(key.into(), view.clone());
             continue;
         }
@@ -79,7 +84,11 @@ fn identity(state: &Value, component: &Value, blobs: &Path) -> Option<Value> {
             ] {
                 // These counts describe the entire shared document, including
                 // components outside this decision's isolated preview.
-                if component_stage && matches!(field, "svgElements" | "rasterElements" | "semanticControls") { continue; }
+                if component_stage
+                    && matches!(field, "svgElements" | "rasterElements" | "semanticControls")
+                {
+                    continue;
+                }
                 scoped[field] = proof[field].clone();
             }
         }

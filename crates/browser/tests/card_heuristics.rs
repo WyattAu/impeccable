@@ -84,7 +84,9 @@ fn scan(fixture: &str) -> Option<Vec<(String, String, String)>> {
     let engine = BrowserEngine::new(env);
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/{fixture}");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     Some(
         findings
             .iter()
@@ -113,13 +115,16 @@ fn assert_marks(findings: &[(String, String, String)], rule: &str, flag: &[&str]
     let hits = of_rule(findings, rule);
     for want in flag {
         assert!(
-            hits.iter().any(|(s, sel)| s.contains(want) || sel.contains(want)),
+            hits.iter()
+                .any(|(s, sel)| s.contains(want) || sel.contains(want)),
             "{rule}: expected {want} to flag, got {hits:?}"
         );
     }
     for unwanted in pass {
         assert!(
-            !hits.iter().any(|(s, sel)| s.contains(unwanted) || sel.contains(unwanted)),
+            !hits
+                .iter()
+                .any(|(s, sel)| s.contains(unwanted) || sel.contains(unwanted)),
             "{rule}: {unwanted} flagged in {hits:?}"
         );
     }
@@ -186,8 +191,19 @@ fn clipped_overflow_reads_track_words_past_bem_and_camel_case() {
     assert_marks(
         &findings,
         "clipped-overflow-container",
-        &["flag-bem-tooltip", "flag-overflow-hidden", "flag-native-dialog"],
-        &["pass-bem-marquee", "hotStuffBox", "pass-camel-host", "pass-nested-deck", "pass-closed-dialog", "pass-modal-dialog"],
+        &[
+            "flag-bem-tooltip",
+            "flag-overflow-hidden",
+            "flag-native-dialog",
+        ],
+        &[
+            "pass-bem-marquee",
+            "hotStuffBox",
+            "pass-camel-host",
+            "pass-nested-deck",
+            "pass-closed-dialog",
+            "pass-modal-dialog",
+        ],
     );
 }
 
@@ -218,8 +234,18 @@ fn gray_on_color_scales_its_bar_with_luminance() {
     assert_marks(
         &findings,
         "gray-on-color",
-        &["#flag-gray-on-navy", "#flag-gray-on-teal", "#flag-gray-on-dark-navy", "#flag-tailwind-classes"],
-        &["#pass-gray-on-near-black-navy", "#pass-off-white-on-navy", "#pass-off-white-on-teal", "#pass-hover-variant"],
+        &[
+            "#flag-gray-on-navy",
+            "#flag-gray-on-teal",
+            "#flag-gray-on-dark-navy",
+            "#flag-tailwind-classes",
+        ],
+        &[
+            "#pass-gray-on-near-black-navy",
+            "#pass-off-white-on-navy",
+            "#pass-off-white-on-teal",
+            "#pass-hover-variant",
+        ],
     );
 }
 
@@ -240,12 +266,24 @@ fn undersized_ui_text_skips_links_inside_markers() {
 fn page_level_misreads_stay_silent() {
     for (fixture, rule) in [
         ("flat-type-hierarchy-h1-tie.html", "flat-type-hierarchy"),
-        ("flat-type-hierarchy-dropped-role.html", "flat-type-hierarchy"),
+        (
+            "flat-type-hierarchy-dropped-role.html",
+            "flat-type-hierarchy",
+        ),
         ("flat-type-hierarchy-h1-label.html", "flat-type-hierarchy"),
         ("oversized-h1-rendered.html", "oversized-h1"),
-        ("first-viewport-column-overflow-outline.html", "first-viewport-column-overflow"),
-        ("first-viewport-column-overflow-tabs.html", "first-viewport-column-overflow"),
-        ("first-viewport-column-overflow-clipped.html", "first-viewport-column-overflow"),
+        (
+            "first-viewport-column-overflow-outline.html",
+            "first-viewport-column-overflow",
+        ),
+        (
+            "first-viewport-column-overflow-tabs.html",
+            "first-viewport-column-overflow",
+        ),
+        (
+            "first-viewport-column-overflow-clipped.html",
+            "first-viewport-column-overflow",
+        ),
         ("em-dash-pricing-matrix.html", "em-dash-overuse"),
     ] {
         let Some(findings) = scan(fixture) else {
@@ -257,16 +295,25 @@ fn page_level_misreads_stay_silent() {
     // The twins still report.
     for (fixture, rule) in [
         ("flat-type-hierarchy.html", "flat-type-hierarchy"),
-        ("flat-type-hierarchy-dropped-flat.html", "flat-type-hierarchy"),
+        (
+            "flat-type-hierarchy-dropped-flat.html",
+            "flat-type-hierarchy",
+        ),
         ("oversized-h1-browser.html", "oversized-h1"),
-        ("first-viewport-column-overflow.html", "first-viewport-column-overflow"),
+        (
+            "first-viewport-column-overflow.html",
+            "first-viewport-column-overflow",
+        ),
         ("em-dash-prose-with-matrix.html", "em-dash-overuse"),
     ] {
         let Some(findings) = scan(fixture) else {
             return;
         };
         let hits = of_rule(&findings, rule);
-        assert!(!hits.is_empty(), "{fixture}: expected {rule}, got {findings:?}");
+        assert!(
+            !hits.is_empty(),
+            "{fixture}: expected {rule}, got {findings:?}"
+        );
     }
 }
 
@@ -279,7 +326,12 @@ fn gpt_border_shadow_measures_spread_and_visibility() {
         &findings,
         "gpt-thin-border-wide-shadow",
         &["flag-row-first", "flag-offset-second"],
-        &["pass-spread-first", "pass-spread-third", "pass-dark-first", "pass-dark-third"],
+        &[
+            "pass-spread-first",
+            "pass-spread-third",
+            "pass-dark-first",
+            "pass-dark-third",
+        ],
     );
     // The per-article panels carry no id or unique class, so their selectors
     // are paths; the three of the flag column report at the halo's own blur.
@@ -288,7 +340,10 @@ fn gpt_border_shadow_measures_spread_and_visibility() {
         .filter(|(_, sel)| sel.contains("figure.card.panel"))
         .collect();
     assert_eq!(panels.len(), 3, "{panels:?}");
-    assert!(panels.iter().all(|(s, _)| s.contains("60px shadow blur")), "{panels:?}");
+    assert!(
+        panels.iter().all(|(s, _)| s.contains("60px shadow blur")),
+        "{panels:?}"
+    );
 }
 
 #[test]
@@ -307,7 +362,13 @@ fn label_collectors_climb_and_scale() {
             "Contents Wrapped Tile",
             "Emoji In A Span",
         ],
-        &["Far From The Tile", "Sarah Chen", "Inline Side By Side", "Word In A Span", "Hidden Emoji In A Span"],
+        &[
+            "Far From The Tile",
+            "Sarah Chen",
+            "Inline Side By Side",
+            "Word In A Span",
+            "Hidden Emoji In A Span",
+        ],
     );
 
     let Some(findings) = scan("kicker-above-heading.html") else {
@@ -323,7 +384,11 @@ fn label_collectors_climb_and_scale() {
             "Section Title In A Panel",
             "Display Title In A Band",
         ],
-        &["Label Too Large For Its Heading", "Untracked Caps Label", "Press Card Source"],
+        &[
+            "Label Too Large For Its Heading",
+            "Untracked Caps Label",
+            "Press Card Source",
+        ],
     );
 
     let Some(findings) = scan("numbered-section-labels.html") else {
@@ -332,7 +397,22 @@ fn label_collectors_climb_and_scale() {
     assert_marks(
         &findings,
         "numbered-section-labels",
-        &["Alpha ships first", "Instant deployment", "Omega grows larger", "Xi connects", "Omicron remembers"],
-        &["Nu sits too close in size", "Epsilon reads large", "Lambda sits in a card", "Pi keeps its card", "Rho sits in a linked card", "Sigma sits in a drawn wrapper", "Tau ranks first", "Upsilon ranks second"],
+        &[
+            "Alpha ships first",
+            "Instant deployment",
+            "Omega grows larger",
+            "Xi connects",
+            "Omicron remembers",
+        ],
+        &[
+            "Nu sits too close in size",
+            "Epsilon reads large",
+            "Lambda sits in a card",
+            "Pi keeps its card",
+            "Rho sits in a linked card",
+            "Sigma sits in a drawn wrapper",
+            "Tau ranks first",
+            "Upsilon ranks second",
+        ],
     );
 }

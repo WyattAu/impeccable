@@ -65,31 +65,60 @@ fn scan(page: &str) -> Option<Vec<impeccable_core::findings::Finding>> {
     let engine = BrowserEngine::new(env);
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/{page}");
-    Some(engine.detect_url(&url, &ScanOptions::default()).expect("scan"))
+    Some(
+        engine
+            .detect_url(&url, &ScanOptions::default())
+            .expect("scan"),
+    )
 }
 
 fn selector(f: &impeccable_core::findings::Finding) -> String {
-    f.extras.get("selector").and_then(|s| s.as_str()).unwrap_or("").to_string()
+    f.extras
+        .get("selector")
+        .and_then(|s| s.as_str())
+        .unwrap_or("")
+        .to_string()
 }
 
 #[test]
 fn code_tokens_supply_no_tell_hue() {
-    let Some(findings) = scan("ai-color-palette-code-tokens.html") else { return };
+    let Some(findings) = scan("ai-color-palette-code-tokens.html") else {
+        return;
+    };
     let palette: Vec<String> = findings
         .iter()
         .filter(|f| f.antipattern == "ai-color-palette")
         .map(selector)
         .collect();
-    assert!(palette.iter().any(|s| s.contains("flag-mono")), "{palette:?}");
-    assert!(palette.iter().any(|s| s.contains("flag-cyan")), "{palette:?}");
-    assert!(palette.iter().any(|s| s.contains("flag-pre") && !s.contains("flag-preline")), "{palette:?}");
-    assert!(palette.iter().any(|s| s.contains("flag-preline")), "{palette:?}");
-    assert!(!palette.iter().any(|s| s.contains("pass-code")), "{palette:?}");
+    assert!(
+        palette.iter().any(|s| s.contains("flag-mono")),
+        "{palette:?}"
+    );
+    assert!(
+        palette.iter().any(|s| s.contains("flag-cyan")),
+        "{palette:?}"
+    );
+    assert!(
+        palette
+            .iter()
+            .any(|s| s.contains("flag-pre") && !s.contains("flag-preline")),
+        "{palette:?}"
+    );
+    assert!(
+        palette.iter().any(|s| s.contains("flag-preline")),
+        "{palette:?}"
+    );
+    assert!(
+        !palette.iter().any(|s| s.contains("pass-code")),
+        "{palette:?}"
+    );
 }
 
 #[test]
 fn a_label_beside_its_heading_is_not_a_kicker() {
-    let Some(findings) = scan("kicker-above-heading-beside.html") else { return };
+    let Some(findings) = scan("kicker-above-heading-beside.html") else {
+        return;
+    };
     let kickers: Vec<&str> = findings
         .iter()
         .filter(|f| f.antipattern == "kicker-above-heading")
@@ -101,30 +130,46 @@ fn a_label_beside_its_heading_is_not_a_kicker() {
 
 #[test]
 fn a_composer_is_a_field_not_a_card() {
-    let Some(findings) = scan("nested-cards-composer.html") else { return };
+    let Some(findings) = scan("nested-cards-composer.html") else {
+        return;
+    };
     let cards: Vec<String> = findings
         .iter()
         .filter(|f| f.antipattern == "nested-cards")
         .map(selector)
         .collect();
     for flagged in ["flag-composer", "flag-plan", "flag-tile"] {
-        assert!(cards.iter().any(|s| s.contains(flagged)), "{flagged}: {cards:?}");
+        assert!(
+            cards.iter().any(|s| s.contains(flagged)),
+            "{flagged}: {cards:?}"
+        );
     }
-    assert!(!cards.iter().any(|s| s.contains("pass-composer")), "{cards:?}");
+    assert!(
+        !cards.iter().any(|s| s.contains("pass-composer")),
+        "{cards:?}"
+    );
 }
 
 #[test]
 fn furniture_classes_are_read_by_part() {
-    let Some(findings) = scan("undersized-ui-text-class-parts.html") else { return };
+    let Some(findings) = scan("undersized-ui-text-class-parts.html") else {
+        return;
+    };
     let undersized: Vec<&str> = findings
         .iter()
         .filter(|f| f.antipattern == "undersized-ui-text")
         .map(|f| f.snippet.as_str())
         .collect();
     for flagged in ["Design systems", "The tunnel for", "Privacy policy"] {
-        assert!(undersized.iter().any(|s| s.contains(flagged)), "{flagged}: {undersized:?}");
+        assert!(
+            undersized.iter().any(|s| s.contains(flagged)),
+            "{flagged}: {undersized:?}"
+        );
     }
     for passed in ["nodejs-typescript", "Photos from our"] {
-        assert!(!undersized.iter().any(|s| s.contains(passed)), "{passed}: {undersized:?}");
+        assert!(
+            !undersized.iter().any(|s| s.contains(passed)),
+            "{passed}: {undersized:?}"
+        );
     }
 }

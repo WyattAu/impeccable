@@ -21,10 +21,7 @@ pub fn scoped_ignore_active(dom: &dyn Dom, el: ElId, rule_id: &str) -> bool {
     while let Some(c) = cur {
         if let Some(attr) = dom.attr(c, "data-impeccable-ignore") {
             let lowered = crate::js::to_lower_case(crate::js::trim(&attr));
-            let rules: Vec<&str> = SPLIT_RE
-                .split(&lowered)
-                .filter(|s| !s.is_empty())
-                .collect();
+            let rules: Vec<&str> = SPLIT_RE.split(&lowered).filter(|s| !s.is_empty()).collect();
             if rules.is_empty() || rules.contains(&"*") || rules.contains(&rule.as_str()) {
                 return true;
             }
@@ -100,8 +97,9 @@ const DESIGN_SKIP_TAGS: &[&str] = &[
 static WS_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
     regex::Regex::new(&format!("{}+", crate::js::WS)).expect("WS_RE")
 });
-static VAR_RE: once_cell::sync::Lazy<regex::Regex> =
-    once_cell::sync::Lazy::new(|| regex::Regex::new(&format!("{}\\(", crate::js::ci("var"))).expect("VAR_RE"));
+static VAR_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+    regex::Regex::new(&format!("{}\\(", crate::js::ci("var"))).expect("VAR_RE")
+});
 static SLASH_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
     regex::Regex::new(&format!("{ws}*/{ws}*", ws = crate::js::WS)).expect("SLASH_RE")
 });
@@ -155,7 +153,9 @@ fn truthy(v: &serde_json::Value) -> bool {
     match v {
         serde_json::Value::Null => false,
         serde_json::Value::Bool(b) => *b,
-        serde_json::Value::Number(n) => n.as_f64().map(|f| f != 0.0 && !f.is_nan()).unwrap_or(false),
+        serde_json::Value::Number(n) => {
+            n.as_f64().map(|f| f != 0.0 && !f.is_nan()).unwrap_or(false)
+        }
         serde_json::Value::String(s) => !s.is_empty(),
         _ => true,
     }
@@ -223,11 +223,14 @@ pub fn browser_design_system_config(config: &BrowserConfig) -> Option<DesignSyst
     let raw = config.design_system.as_ref()?;
     let obj = raw.as_object()?;
     // JS `!raw?.present`.
-    if !obj.get("present").map_or(false, truthy) {
+    if !obj.get("present").is_some_and(truthy) {
         return None;
     }
     let arr = |k: &str| -> Vec<serde_json::Value> {
-        obj.get(k).and_then(|v| v.as_array()).cloned().unwrap_or_default()
+        obj.get(k)
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default()
     };
     let mut allowed_fonts: Vec<String> = Vec::new();
     for v in arr("allowedFonts") {
@@ -703,22 +706,22 @@ pub fn pseudo_element_host_selector(selector: &str) -> Option<String> {
         }
 
         let mut end = i + 1;
-        let is_pseudo_element;
-        if raw.get(end) == Some(&':') {
+
+        let is_pseudo_element = if raw.get(end) == Some(&':') {
             end += 1;
             let name_start = end;
             while is_selector_name_char(raw.get(end).copied()) {
                 end += 1;
             }
-            is_pseudo_element = end > name_start;
+            end > name_start
         } else {
             let name_start = end;
             while is_selector_name_char(raw.get(end).copied()) {
                 end += 1;
             }
             let name: String = raw[name_start..end].iter().collect();
-            is_pseudo_element = LEGACY_NAMES.contains(&crate::js::to_lower_case(&name).as_str());
-        }
+            LEGACY_NAMES.contains(&crate::js::to_lower_case(&name).as_str())
+        };
         if !is_pseudo_element {
             output.push(ch);
             i += 1;
@@ -779,9 +782,9 @@ static PURPLE_ACCENT_RGB: once_cell::sync::Lazy<Vec<crate::color::Rgba>> =
 /// values; the slack covers a token that reached the same color by another
 /// notation.
 fn is_stock_violet(c: &crate::color::Rgba) -> bool {
-    PURPLE_ACCENT_RGB.iter().any(|p| {
-        (p.r - c.r).abs() <= 8.0 && (p.g - c.g).abs() <= 8.0 && (p.b - c.b).abs() <= 8.0
-    })
+    PURPLE_ACCENT_RGB
+        .iter()
+        .any(|p| (p.r - c.r).abs() <= 8.0 && (p.g - c.g).abs() <= 8.0 && (p.b - c.b).abs() <= 8.0)
 }
 
 /// Whether any element a visitor can see wears one of the stock violet
@@ -823,14 +826,18 @@ fn page_paints_stock_violet(dom: &dyn Dom) -> bool {
             return true;
         }
         // A border, an outline or a shadow paints its colour too.
-        let painted = |c: Option<crate::color::Rgba>| c.is_some_and(|c| c.alpha_or_one() > 0.1 && is_stock_violet(&c));
+        let painted = |c: Option<crate::color::Rgba>| {
+            c.is_some_and(|c| c.alpha_or_one() > 0.1 && is_stock_violet(&c))
+        };
         for side in ["Top", "Right", "Bottom", "Left"] {
             let width = crate::js::parse_float(&dom.style(el, &format!("border{side}Width")));
             let style = dom.style(el, &format!("border{side}Style"));
             if width > 0.0
                 && style != "none"
                 && style != "hidden"
-                && painted(crate::color::parse_any_color(Some(&dom.style(el, &format!("border{side}Color")))))
+                && painted(crate::color::parse_any_color(Some(
+                    &dom.style(el, &format!("border{side}Color")),
+                )))
             {
                 return true;
             }
@@ -840,7 +847,9 @@ fn page_paints_stock_violet(dom: &dyn Dom) -> bool {
         if outline > 0.0
             && !outline_style.is_empty()
             && outline_style != "none"
-            && painted(crate::color::parse_any_color(Some(&dom.style(el, "outlineColor"))))
+            && painted(crate::color::parse_any_color(Some(
+                &dom.style(el, "outlineColor"),
+            )))
         {
             return true;
         }
@@ -905,7 +914,8 @@ fn names_logo(dom: &dyn Dom, el: ElId) -> bool {
 /// Words that make a name about logos rather than the name of one: a row,
 /// a gallery or a title for partner logos.
 const LOGO_COLLECTION_WORDS: &[&str] = &[
-    "logos", "gallery", "grid", "wall", "list", "strip", "row", "carousel", "cloud", "title", "heading", "section",
+    "logos", "gallery", "grid", "wall", "list", "strip", "row", "carousel", "cloud", "title",
+    "heading", "section",
 ];
 
 /// A class or id token that names a logo (`logo`, `site-logo`, `logo-text`,
@@ -915,9 +925,16 @@ fn is_named_logo(dom: &dyn Dom, el: ElId) -> bool {
     ["id", "class"].iter().any(|attr| {
         dom.attr(el, attr).is_some_and(|v| {
             v.split_whitespace().any(|token| {
-                let words: Vec<String> = token.split(['-', '_']).map(|w| w.to_ascii_lowercase()).collect();
-                words.iter().any(|w| w == "logo" || w == "logotype" || w == "wordmark")
-                    && !words.iter().any(|w| LOGO_COLLECTION_WORDS.contains(&w.as_str()))
+                let words: Vec<String> = token
+                    .split(['-', '_'])
+                    .map(|w| w.to_ascii_lowercase())
+                    .collect();
+                words
+                    .iter()
+                    .any(|w| w == "logo" || w == "logotype" || w == "wordmark")
+                    && !words
+                        .iter()
+                        .any(|w| LOGO_COLLECTION_WORDS.contains(&w.as_str()))
             })
         })
     })
@@ -948,7 +965,9 @@ fn brand_surface_colors(dom: &dyn Dom) -> Vec<crate::color::Rgba> {
         if is_heading_tag(&tag) && !is_named_logo(dom, el) {
             continue;
         }
-        let Some(rect) = element_rect(dom, el) else { continue };
+        let Some(rect) = element_rect(dom, el) else {
+            continue;
+        };
         if !ai_palette_is_visible(dom, el) {
             continue;
         }
@@ -963,7 +982,11 @@ fn brand_surface_colors(dom: &dyn Dom) -> Vec<crate::color::Rgba> {
         // other element counts when its name contains logo, as before. A
         // partner's `span.wordmark` in a footer is not the site's brand.
         let logo = !local
-            && if is_heading_tag(&tag) { is_named_logo(dom, el) } else { names_logo(dom, el) };
+            && if is_heading_tag(&tag) {
+                is_named_logo(dom, el)
+            } else {
+                names_logo(dom, el)
+            };
         let bar = !local
             && is_nav_bar(dom, el, &tag)
             && rect.width >= BRAND_BAR_MIN_WIDTH_SHARE * viewport_w;
@@ -973,7 +996,8 @@ fn brand_surface_colors(dom: &dyn Dom) -> Vec<crate::color::Rgba> {
             continue;
         }
         // A gradient paints over the background colour.
-        let painted_gradient = !parse_gradient_colors(Some(&dom.style(el, "backgroundImage"))).is_empty();
+        let painted_gradient =
+            !parse_gradient_colors(Some(&dom.style(el, "backgroundImage"))).is_empty();
         if !painted_gradient {
             if let Some(bg) = parse_any_color(Some(&dom.style(el, "backgroundColor"))) {
                 if bg.alpha_or_one() >= 0.9 && has_chroma(Some(&bg), Some(50.0)) {
@@ -1057,7 +1081,9 @@ fn palette_finding_role(f: &BrowserFinding) -> Option<PaletteRole> {
     }
     if f.detail.ends_with(" on heading") || f.detail.ends_with(" neon text on dark background") {
         Some(PaletteRole::Ink)
-    } else if f.detail.ends_with(" gradient background") || f.detail == "Purple/violet gradient (Tailwind)" {
+    } else if f.detail.ends_with(" gradient background")
+        || f.detail == "Purple/violet gradient (Tailwind)"
+    {
         Some(PaletteRole::Fill)
     } else {
         None
@@ -1110,12 +1136,17 @@ fn hues_are_a_category_system(hues: &[f64]) -> bool {
     sorted.sort_by(|a, b| a.total_cmp(b));
     let mut distinct: Vec<f64> = Vec::new();
     for h in sorted {
-        if distinct.last().is_none_or(|last| h - last >= CATEGORY_HUE_SEPARATION_DEG) {
+        if distinct
+            .last()
+            .is_none_or(|last| h - last >= CATEGORY_HUE_SEPARATION_DEG)
+        {
             distinct.push(h);
         }
     }
     // The wheel closes: 358 and 2 are one red.
-    if distinct.len() > 1 && distinct[0] + 360.0 - distinct[distinct.len() - 1] < CATEGORY_HUE_SEPARATION_DEG {
+    if distinct.len() > 1
+        && distinct[0] + 360.0 - distinct[distinct.len() - 1] < CATEGORY_HUE_SEPARATION_DEG
+    {
         distinct.pop();
     }
     let outside = distinct
@@ -1146,7 +1177,8 @@ impl CategoryHues {
             PaletteRole::Fill => &self.fill,
         };
         let groups = cell.get_or_init(|| {
-            let mut groups: std::collections::HashMap<String, Vec<f64>> = std::collections::HashMap::new();
+            let mut groups: std::collections::HashMap<String, Vec<f64>> =
+                std::collections::HashMap::new();
             for other in dom.query_all(None, "*").unwrap_or_default() {
                 if !element_is_scanned(dom, other) {
                     continue;
@@ -1157,7 +1189,9 @@ impl CategoryHues {
             }
             groups
         });
-        groups.get(&key).is_some_and(|hues| hues_are_a_category_system(hues))
+        groups
+            .get(&key)
+            .is_some_and(|hues| hues_are_a_category_system(hues))
     }
 }
 
@@ -1168,11 +1202,14 @@ impl CategoryHues {
 /// pulsing-dot hero promotion. Returns `{ type, detail, severity? }`; the
 /// caller applies `_ruleOk`.
 pub fn scoped_html_pattern_findings(dom: &dyn Dom) -> Vec<BrowserFinding> {
-    html_pattern_items(dom, &crate::checks::html_patterns::PatternContext::default())
-        .0
-        .into_iter()
-        .map(|item| item.finding)
-        .collect()
+    html_pattern_items(
+        dom,
+        &crate::checks::html_patterns::PatternContext::default(),
+    )
+    .0
+    .into_iter()
+    .map(|item| item.finding)
+    .collect()
 }
 
 /// One finding of the pattern pass with what the pass resolved about it.
@@ -1201,7 +1238,10 @@ fn pattern_finding_stands(
     if matches.is_empty() {
         return None;
     }
-    if !matches.iter().any(|el| !scoped_ignore_active(dom, *el, &f.id)) {
+    if !matches
+        .iter()
+        .any(|el| !scoped_ignore_active(dom, *el, &f.id))
+    {
         return None;
     }
     // A motion, glow or dot declared for elements a visitor never
@@ -1215,7 +1255,10 @@ fn pattern_finding_stands(
     // block that does not apply, or one a later rule overrides, paints
     // nothing on the element it names: the element's computed style must
     // carry what the rule declares ([`computed_paint_applies`]).
-    if !matches.iter().any(|&el| computed_paint_applies(dom, el, selector, &f.id, &f.snippet)) {
+    if !matches
+        .iter()
+        .any(|&el| computed_paint_applies(dom, el, selector, &f.id, &f.snippet))
+    {
         return None;
     }
     // A stripe on any edge from the style-text scans reports only
@@ -1245,7 +1288,13 @@ fn pattern_finding_stands(
 /// a host with none of the properties recorded, a pseudo-element whose mask
 /// the capture predates, or the pseudo-element of a glow, halo or grid.
 /// Other rules answer yes.
-fn computed_paint_applies(dom: &dyn Dom, el: ElId, selector: &str, rule: &str, snippet: &str) -> bool {
+fn computed_paint_applies(
+    dom: &dyn Dom,
+    el: ElId,
+    selector: &str,
+    rule: &str,
+    snippet: &str,
+) -> bool {
     let has = |v: &str, needle: &str| v.to_ascii_lowercase().contains(needle);
     let drawn = |v: &str| v != "none" && v != "initial";
     let shadow_props: &[&str] = if snippet.contains("text-shadow") {
@@ -1257,10 +1306,16 @@ fn computed_paint_applies(dom: &dyn Dom, el: ElId, selector: &str, rule: &str, s
     let applies = |read: &dyn Fn(&str) -> String, pseudo: bool| match rule {
         "repeating-stripes-gradient" if pseudo => {
             let mask = read("maskImage");
-            mask.is_empty() || has(&mask, "repeating-") || has(&read("backgroundImage"), "repeating-")
+            mask.is_empty()
+                || has(&mask, "repeating-")
+                || has(&read("backgroundImage"), "repeating-")
         }
         "repeating-stripes-gradient" => {
-            let values = [read("backgroundImage"), read("maskImage"), read("webkitMaskImage")];
+            let values = [
+                read("backgroundImage"),
+                read("maskImage"),
+                read("webkitMaskImage"),
+            ];
             values.iter().all(|v| v.is_empty()) || values.iter().any(|v| has(v, "repeating-"))
         }
         "radial-halo" => {
@@ -1277,7 +1332,10 @@ fn computed_paint_applies(dom: &dyn Dom, el: ElId, selector: &str, rule: &str, s
         }),
         _ => true,
     };
-    if !matches!(rule, "repeating-stripes-gradient" | "radial-halo" | "codex-grid-background" | "dark-glow") {
+    if !matches!(
+        rule,
+        "repeating-stripes-gradient" | "radial-halo" | "codex-grid-background" | "dark-glow"
+    ) {
         return true;
     }
     let host = || applies(&|prop: &str| dom.style(el, prop), false);
@@ -1293,12 +1351,17 @@ fn computed_paint_applies(dom: &dyn Dom, el: ElId, selector: &str, rule: &str, s
         if content == "none" || content == "normal" {
             return false;
         }
-        applies(&|prop: &str| dom.pseudo_style(el, name, prop).unwrap_or_default(), true)
+        applies(
+            &|prop: &str| dom.pseudo_style(el, name, prop).unwrap_or_default(),
+            true,
+        )
     };
-    selector_list_pseudos(selector).into_iter().any(|part| match part {
-        Some(name) => pseudo(name),
-        None => host(),
-    })
+    selector_list_pseudos(selector)
+        .into_iter()
+        .any(|part| match part {
+            Some(name) => pseudo(name),
+            None => host(),
+        })
 }
 
 /// For each part of a selector list (split on commas outside quotes,
@@ -1451,7 +1514,8 @@ fn drop_covered_class_forms(findings: &mut Vec<BrowserFinding>) {
         .map(|f| f.type_.clone())
         .collect();
     if !computed.is_empty() {
-        findings.retain(|f| !(f.detail.ends_with(CLASS_FORM_SUFFIX) && computed.contains(&f.type_)));
+        findings
+            .retain(|f| !(f.detail.ends_with(CLASS_FORM_SUFFIX) && computed.contains(&f.type_)));
     }
     drop_covered_palette_forms(findings);
 }
@@ -1492,7 +1556,9 @@ fn drop_size_findings_on_vanishing_ink(findings: &mut Vec<BrowserFinding>) {
 fn drop_covered_palette_forms(findings: &mut Vec<BrowserFinding>) {
     let palette = |f: &BrowserFinding| f.type_ == "ai-color-palette";
     let is_gradient_form = |f: &BrowserFinding| {
-        palette(f) && (f.detail.ends_with(" gradient background") || f.detail == "Purple/violet gradient (Tailwind)")
+        palette(f)
+            && (f.detail.ends_with(" gradient background")
+                || f.detail == "Purple/violet gradient (Tailwind)")
     };
     let is_class_text_form = |f: &BrowserFinding| {
         palette(f) && f.detail.starts_with("text-") && f.detail.ends_with(" on heading")
@@ -1500,9 +1566,11 @@ fn drop_covered_palette_forms(findings: &mut Vec<BrowserFinding>) {
     let computed_gradient = findings
         .iter()
         .any(|f| palette(f) && f.detail.ends_with(" gradient background"));
-    let computed_text = findings
-        .iter()
-        .any(|f| palette(f) && f.detail.starts_with("Purple/violet text (") && f.detail.ends_with(" on heading"));
+    let computed_text = findings.iter().any(|f| {
+        palette(f)
+            && f.detail.starts_with("Purple/violet text (")
+            && f.detail.ends_with(" on heading")
+    });
     let clipped_gradient = findings.iter().any(|f| f.type_ == "gradient-text");
     if !(computed_gradient || computed_text || clipped_gradient) {
         return;
@@ -1557,14 +1625,16 @@ fn is_light_surface(surface: &crate::color::Rgba) -> bool {
 fn dark_claim_stands(root_dark: Option<bool>, surfaces: &[Option<crate::color::Rgba>]) -> bool {
     if surfaces
         .iter()
-        .any(|s| s.as_ref().map_or(false, |c| !is_light_surface(c)))
+        .any(|s| s.as_ref().is_some_and(|c| !is_light_surface(c)))
     {
         return true;
     }
     if surfaces.is_empty() {
         return root_dark != Some(false);
     }
-    !surfaces.iter().all(|s| s.as_ref().map_or(false, is_light_surface))
+    !surfaces
+        .iter()
+        .all(|s| s.as_ref().is_some_and(is_light_surface))
 }
 
 /// The page-level forms of gradient-text, bounce-easing, dark-glow,
@@ -1591,7 +1661,8 @@ fn reconcile_page_level_forms(
             // Both page forms describe one treatment, text clipped to a
             // gradient, and the element forms read it off every element.
             "gradient-text" => {
-                element_findings("gradient-text").is_empty() && !gradient_declaration_silent(dom, &item)
+                element_findings("gradient-text").is_empty()
+                    && !gradient_declaration_silent(dom, &item)
             }
             "bounce-easing" => {
                 let page = bounce_declarations(&item.finding.detail);
@@ -1600,9 +1671,13 @@ fn reconcile_page_level_forms(
                     page.iter().any(|p| own.iter().any(|o| o.same_as(p)))
                 })
             }
-            "dark-glow" => {
-                dark_glow_page_form_stands(dom, &element_findings("dark-glow"), &item, style_text, root_dark)
-            }
+            "dark-glow" => dark_glow_page_form_stands(
+                dom,
+                &element_findings("dark-glow"),
+                &item,
+                style_text,
+                root_dark,
+            ),
             "radial-halo" => radial_halo_page_form_stands(dom, &item, root_dark),
             "marquee" => marquee_page_form_stands(dom, &item, &mut marquees),
             "side-tab" => side_tab_page_form_stands(groups, &item),
@@ -1628,12 +1703,19 @@ fn clipped_gradients_all_silent(dom: &dyn Dom) -> bool {
         .into_iter()
         .filter(|&el| computes_clipped_gradient(dom, el))
         .collect();
-    !clipped.is_empty() && clipped.into_iter().all(|el| clipped_gradient_silent(dom, el))
+    !clipped.is_empty()
+        && clipped
+            .into_iter()
+            .all(|el| clipped_gradient_silent(dom, el))
 }
 
 fn computes_clipped_gradient(dom: &dyn Dom, el: ElId) -> bool {
     let clip = dom.style(el, "webkitBackgroundClip");
-    let clip = if clip.is_empty() { dom.style(el, "backgroundClip") } else { clip };
+    let clip = if clip.is_empty() {
+        dom.style(el, "backgroundClip")
+    } else {
+        clip
+    };
     // A multi-layer `text, text` clip is not read here: whether ardainc's
     // shimmer eyebrows report per element waits on taste call r9-t4.
     clip == "text" && dom.style(el, "backgroundImage").contains("gradient")
@@ -1778,7 +1860,10 @@ fn dark_glow_page_form_stands(
             .map(|(prop, hex)| elements_casting_glow(dom, &prop, &hex))
             .unwrap_or_default()
             .into_iter()
-            .map(|el| dom.parent(el).and_then(|p| super::background::resolve_background_info(dom, p).color))
+            .map(|el| {
+                dom.parent(el)
+                    .and_then(|p| super::background::resolve_background_info(dom, p).color)
+            })
             .collect();
         return dark_claim_stands(root_dark, &surfaces);
     };
@@ -1798,7 +1883,11 @@ fn dark_glow_page_form_stands(
 /// The radial-halo page form claims a dark page. The surface under each
 /// element its selector names (its own opaque fill, else what lies behind
 /// it) and the painted root decide ([`dark_claim_stands`]).
-fn radial_halo_page_form_stands(dom: &dyn Dom, item: &PatternItem, root_dark: Option<bool>) -> bool {
+fn radial_halo_page_form_stands(
+    dom: &dyn Dom,
+    item: &PatternItem,
+    root_dark: Option<bool>,
+) -> bool {
     let surface = |el: ElId| -> Option<crate::color::Rgba> {
         if let Some(fill) = crate::color::parse_any_color(Some(&dom.style(el, "backgroundColor"))) {
             if fill.alpha_or_one() > 0.5 {
@@ -1817,7 +1906,8 @@ fn radial_halo_page_form_stands(dom: &dyn Dom, item: &PatternItem, root_dark: Op
             .map(|m| elements_painting_halo(dom, &crate::js::to_lower_case(&m[1])))
             .unwrap_or_default(),
     };
-    let surfaces: Vec<Option<crate::color::Rgba>> = elements.iter().map(|&el| surface(el)).collect();
+    let surfaces: Vec<Option<crate::color::Rgba>> =
+        elements.iter().map(|&el| surface(el)).collect();
     // A halo is light thrown on a darker surface. A stop no lighter than
     // every surface it was read on is a vignette in the surface's own tone
     // (weborama.com's dark green wash on its dark green band), not a glow.
@@ -1855,7 +1945,9 @@ pub fn page_form_anchor(dom: &dyn Dom, rule: &str, detail: &str) -> Option<ElId>
         "radial-halo" => HALO_COLOR_RE
             .captures(detail)
             .map(|m| elements_painting_halo(dom, &crate::js::to_lower_case(&m[1])))?,
-        "dark-glow" => glow_declaration(detail).map(|(prop, hex)| elements_casting_glow(dom, &prop, &hex))?,
+        "dark-glow" => {
+            glow_declaration(detail).map(|(prop, hex)| elements_casting_glow(dom, &prop, &hex))?
+        }
         "organic-clip-path" => ORGANIC_VERTICES_RE
             .captures(detail)
             .and_then(|m| m[1].parse::<usize>().ok())
@@ -1875,9 +1967,9 @@ pub fn page_form_anchor(dom: &dyn Dom, rule: &str, detail: &str) -> Option<ElId>
     if rule == "radial-halo" {
         carriers.sort_by_key(|&el| !FADES_OUT_RE.is_match(&dom.style(el, "backgroundImage")));
     }
-    carriers
-        .into_iter()
-        .find(|&el| super::painted::unpainted_for(dom, el, super::painted::PaintGate::Box).is_none())
+    carriers.into_iter().find(|&el| {
+        super::painted::unpainted_for(dom, el, super::painted::PaintGate::Box).is_none()
+    })
 }
 
 /// A computed gradient with a fully transparent stop (`transparent`
@@ -1886,9 +1978,10 @@ static FADES_OUT_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy
     regex::Regex::new(r"rgba\([^)]*,\s*0(?:\.0+)?\s*\)|transparent").expect("FADES_OUT_RE")
 });
 
-static ORGANIC_VERTICES_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
-    regex::Regex::new(r"polygon\(\) with (\d+) vertices").expect("ORGANIC_VERTICES_RE")
-});
+static ORGANIC_VERTICES_RE: once_cell::sync::Lazy<regex::Regex> =
+    once_cell::sync::Lazy::new(|| {
+        regex::Regex::new(r"polygon\(\) with (\d+) vertices").expect("ORGANIC_VERTICES_RE")
+    });
 
 /// The elements whose computed `clip-path` is a `polygon()` the
 /// organic-clip-path rule would report with `vertices` points
@@ -1939,8 +2032,9 @@ fn elements_easing_with(dom: &dyn Dom, declared: &[BounceDeclaration]) -> Vec<El
         .collect()
 }
 
-static HALO_COLOR_RE: once_cell::sync::Lazy<regex::Regex> =
-    once_cell::sync::Lazy::new(|| regex::Regex::new(r"halo \((#[0-9a-fA-F]+) ").expect("HALO_COLOR_RE"));
+static HALO_COLOR_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+    regex::Regex::new(r"halo \((#[0-9a-fA-F]+) ").expect("HALO_COLOR_RE")
+});
 
 /// The elements whose computed background draws a radial gradient with a
 /// stop in `hex` (lowercase `#rrggbb`).
@@ -1963,28 +2057,40 @@ fn elements_painting_halo(dom: &dyn Dom, hex: &str) -> Vec<ElId> {
 /// 4px, the floor the rule itself reads a glow from. A hard ring in the same
 /// colour (`0 0 0 1px`) is an outline, not the glow the finding names.
 fn elements_casting_glow(dom: &dyn Dom, prop: &str, hex: &str) -> Vec<ElId> {
-    let computed = if prop == "text-shadow" { "textShadow" } else { "boxShadow" };
+    let computed = if prop == "text-shadow" {
+        "textShadow"
+    } else {
+        "boxShadow"
+    };
     dom.query_all(None, "*")
         .unwrap_or_default()
         .into_iter()
         .filter(|&el| {
             let value = dom.style(el, computed);
             value != "none"
-                && crate::js_ext_a::split_commas_outside_parens(&value).into_iter().any(|layer| {
-                    crate::checks::rules::find_shadow_color(layer).map_or(false, |info| {
-                        let blur = crate::checks::rules::extract_shadow_lengths(layer, Some((info.start, info.end)))
+                && crate::js_ext_a::split_commas_outside_parens(&value)
+                    .into_iter()
+                    .any(|layer| {
+                        crate::checks::rules::find_shadow_color(layer).is_some_and(|info| {
+                            let blur = crate::checks::rules::extract_shadow_lengths(
+                                layer,
+                                Some((info.start, info.end)),
+                            )
                             .get(2)
                             .copied();
-                        blur.is_some_and(|b| b > 4.0)
-                            && info.color.map_or(false, |c| crate::color::color_to_hex(Some(&c)) == hex)
+                            blur.is_some_and(|b| b > 4.0)
+                                && info
+                                    .color
+                                    .is_some_and(|c| crate::color::color_to_hex(Some(&c)) == hex)
+                        })
                     })
-                })
         })
         .collect()
 }
 
 static KEYFRAMES_NAME_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
-    regex::Regex::new(r#"@(?:-webkit-|-moz-)?keyframes\s+["']?([^\s{"']+)"#).expect("KEYFRAMES_NAME_RE")
+    regex::Regex::new(r#"@(?:-webkit-|-moz-)?keyframes\s+["']?([^\s{"']+)"#)
+        .expect("KEYFRAMES_NAME_RE")
 });
 
 /// Whether a glow no element computes is a step of `@keyframes` that nothing
@@ -2004,14 +2110,19 @@ fn glow_keyframes_run_nowhere(dom: &dyn Dom, style_text: &str, prop: &str, hex: 
             continue;
         }
         let casts = dom.keyframes(&name).is_some_and(|frames| {
-            frames.iter().flat_map(|f| f.decls.iter()).any(|(p, value)| {
-                p == prop
-                    && crate::js_ext_a::split_commas_outside_parens(value).into_iter().any(|layer| {
-                        crate::checks::rules::find_shadow_color(layer)
-                            .and_then(|info| info.color)
-                            .is_some_and(|c| crate::color::color_to_hex(Some(&c)) == hex)
-                    })
-            })
+            frames
+                .iter()
+                .flat_map(|f| f.decls.iter())
+                .any(|(p, value)| {
+                    p == prop
+                        && crate::js_ext_a::split_commas_outside_parens(value)
+                            .into_iter()
+                            .any(|layer| {
+                                crate::checks::rules::find_shadow_color(layer)
+                                    .and_then(|info| info.color)
+                                    .is_some_and(|c| crate::color::color_to_hex(Some(&c)) == hex)
+                            })
+                })
         });
         if casts {
             names.push(name);
@@ -2020,12 +2131,18 @@ fn glow_keyframes_run_nowhere(dom: &dyn Dom, style_text: &str, prop: &str, hex: 
     if names.is_empty() {
         return false;
     }
-    !dom.query_all(None, "*").unwrap_or_default().into_iter().any(|el| {
-        let running = dom.style(el, "animationName");
-        running != "none"
-            && running.split(',').map(crate::js::trim).any(|n| names.iter().any(|k| k == n))
-            && super::painted::unpainted_for(dom, el, super::painted::PaintGate::Box).is_none()
-    })
+    !dom.query_all(None, "*")
+        .unwrap_or_default()
+        .into_iter()
+        .any(|el| {
+            let running = dom.style(el, "animationName");
+            running != "none"
+                && running
+                    .split(',')
+                    .map(crate::js::trim)
+                    .any(|n| names.iter().any(|k| k == n))
+                && super::painted::unpainted_for(dom, el, super::painted::PaintGate::Box).is_none()
+        })
 }
 
 /// One strip, one report. Rule blocks that name the same elements (a base
@@ -2079,20 +2196,31 @@ fn shows_text(dom: &dyn Dom, el: ElId) -> bool {
 }
 
 fn shows_text_at(dom: &dyn Dom, el: ElId, root: bool) -> bool {
-    if matches!(tag_lower(dom, el).as_str(), "title" | "desc" | "metadata" | "style" | "script" | "template")
-        || super::dom::renders_no_text(dom, el)
+    if matches!(
+        tag_lower(dom, el).as_str(),
+        "title" | "desc" | "metadata" | "style" | "script" | "template"
+    ) || super::dom::renders_no_text(dom, el)
         || (!root && crate::js::parse_float(&dom.style(el, "opacity")) == 0.0)
     {
         return false;
     }
     let visible = !matches!(dom.style(el, "visibility").as_str(), "hidden" | "collapse");
-    (visible && dom.direct_text_nodes(el).iter().any(|t| !crate::js::trim(t).is_empty()))
-        || dom.children(el).into_iter().any(|k| shows_text_at(dom, k, false))
+    (visible
+        && dom
+            .direct_text_nodes(el)
+            .iter()
+            .any(|t| !crate::js::trim(t).is_empty()))
+        || dom
+            .children(el)
+            .into_iter()
+            .any(|k| shows_text_at(dom, k, false))
 }
 
 fn marquee_carries_content(dom: &dyn Dom, el: ElId) -> bool {
     const MEDIA: &str = "img, picture, video, canvas, iframe, object, embed, svg, image, use";
-    const MEDIA_TAGS: [&str; 8] = ["img", "picture", "video", "canvas", "iframe", "object", "embed", "marquee"];
+    const MEDIA_TAGS: [&str; 8] = [
+        "img", "picture", "video", "canvas", "iframe", "object", "embed", "marquee",
+    ];
     if shows_text(dom, el) {
         return true;
     }
@@ -2102,19 +2230,34 @@ fn marquee_carries_content(dom: &dyn Dom, el: ElId) -> bool {
     // Inside one bare SVG drawing, its `use` copies and nested `svg`
     // viewports are parts of the drawing (a wave tiled with `use`); only a
     // raster `image` in it is a picture.
-    let media = if tag_lower(dom, el) == "svg" { "image" } else { MEDIA };
-    if dom.query_all(Some(el), media).map_or(true, |m| !m.is_empty()) {
+    let media = if tag_lower(dom, el) == "svg" {
+        "image"
+    } else {
+        MEDIA
+    };
+    if dom
+        .query_all(Some(el), media)
+        .map_or(true, |m| !m.is_empty())
+    {
         return true;
     }
     let paints_image = |e: ElId| dom.style(e, "backgroundImage").contains("url(");
-    if paints_image(el) || dom.query_all(Some(el), "*").unwrap_or_default().into_iter().any(paints_image) {
+    if paints_image(el)
+        || dom
+            .query_all(Some(el), "*")
+            .unwrap_or_default()
+            .into_iter()
+            .any(paints_image)
+    {
         return true;
     }
     ["::before", "::after"].iter().any(|which| {
-        dom.pseudo_style(el, which, "content").map_or(false, |c| {
+        dom.pseudo_style(el, which, "content").is_some_and(|c| {
             let c = crate::js::trim(&c).to_string();
             !(c.is_empty() || c == "none" || c == "normal" || c == "\"\"" || c == "''")
-                || dom.pseudo_style(el, which, "backgroundImage").map_or(false, |b| b.contains("url("))
+                || dom
+                    .pseudo_style(el, which, "backgroundImage")
+                    .is_some_and(|b| b.contains("url("))
         })
     })
 }
@@ -2143,10 +2286,11 @@ fn side_tab_page_form_stands(groups: &[FindingGroup], item: &PatternItem) -> boo
         return true;
     };
     if item.finding.detail.contains(INSET) {
-        return !groups
-            .iter()
-            .filter(|g| hosts.contains(&g.el))
-            .any(|g| g.findings.iter().any(|f| f.type_ == "side-tab" && f.detail.contains(INSET)));
+        return !groups.iter().filter(|g| hosts.contains(&g.el)).any(|g| {
+            g.findings
+                .iter()
+                .any(|f| f.type_ == "side-tab" && f.detail.contains(INSET))
+        });
     }
     if !item.finding.detail.contains(STRIPE) {
         return true;
@@ -2156,7 +2300,9 @@ fn side_tab_page_form_stands(groups: &[FindingGroup], item: &PatternItem) -> boo
     };
     !groups.iter().filter(|g| hosts.contains(&g.el)).any(|g| {
         g.findings.iter().any(|f| {
-            f.type_ == "side-tab" && f.detail.contains(STRIPE) && stripe_pseudo(&f.detail) == Some(pseudo)
+            f.type_ == "side-tab"
+                && f.detail.contains(STRIPE)
+                && stripe_pseudo(&f.detail) == Some(pseudo)
         })
     })
 }
@@ -2234,7 +2380,10 @@ pub fn serialize_findings(dom: &dyn Dom, groups: &[FindingGroup]) -> serde_json:
                 );
                 m.insert(
                     "name".into(),
-                    Value::String(ap.map(|a| a.name.to_string()).unwrap_or_else(|| f.type_.clone())),
+                    Value::String(
+                        ap.map(|a| a.name.to_string())
+                            .unwrap_or_else(|| f.type_.clone()),
+                    ),
                 );
                 m.insert(
                     "description".into(),
@@ -2249,12 +2398,23 @@ pub fn serialize_findings(dom: &dyn Dom, groups: &[FindingGroup]) -> serde_json:
         let mut m = Map::new();
         m.insert(
             "selector".into(),
-            Value::String(if el == 0 { "body".into() } else { generate_selector(dom, el) }),
+            Value::String(if el == 0 {
+                "body".into()
+            } else {
+                generate_selector(dom, el)
+            }),
         );
         m.insert("tagName".into(), Value::String(tag_name));
         m.insert("rect".into(), rect);
         m.insert("isPageLevel".into(), Value::Bool(is_page_level));
-        m.insert("isHidden".into(), Value::Bool(if el == 0 { false } else { is_element_hidden(dom, el) }));
+        m.insert(
+            "isHidden".into(),
+            Value::Bool(if el == 0 {
+                false
+            } else {
+                is_element_hidden(dom, el)
+            }),
+        );
         m.insert("findings".into(), Value::Array(findings));
         out.push(Value::Object(m));
     }
@@ -2301,7 +2461,7 @@ pub fn is_likely_hashed_class(c: &str) -> bool {
 fn class_list(dom: &dyn Dom, el: ElId) -> Vec<String> {
     let cls = dom.attr(el, "class").unwrap_or_default();
     let mut out: Vec<String> = Vec::new();
-    for tok in cls.split(|c: char| matches!(c, ' ' | '\t' | '\n' | '\x0C' | '\r')) {
+    for tok in cls.split([' ', '\t', '\n', '\x0C', '\r']) {
         if tok.is_empty() || out.iter().any(|t| t == tok) {
             continue;
         }
@@ -2339,7 +2499,12 @@ pub fn build_selector_segment(dom: &dyn Dom, el: ElId) -> String {
                         .into_iter()
                         .filter(|c| dom.tag_name(*c) == tag_name)
                         .collect();
-                    let idx = same_type.iter().position(|c| *c == el).map(|i| i as i64).unwrap_or(-1) + 1;
+                    let idx = same_type
+                        .iter()
+                        .position(|c| *c == el)
+                        .map(|i| i as i64)
+                        .unwrap_or(-1)
+                        + 1;
                     sel.push_str(&format!(":nth-of-type({idx})"));
                 }
             }
@@ -2428,7 +2593,7 @@ pub fn visual_contrast_result_el(dom: &dyn Dom, result: &serde_json::Value) -> O
     if result.get("status").and_then(|v| v.as_str()) != Some("fail") {
         return None;
     }
-    if !result.get("finding").map_or(false, truthy) {
+    if !result.get("finding").is_some_and(truthy) {
         return None;
     }
     let selector = result.get("selector")?;
@@ -2506,22 +2671,20 @@ static EDGE_QUOTE_RE: once_cell::sync::Lazy<regex::Regex> =
 static WS_RUN_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
     regex::Regex::new(&format!("[{}]+", crate::js::WS_CHARS)).expect("WS_RUN_RE")
 });
-static PRIMARY_FONT_RE: once_cell::sync::Lazy<regex::Regex> =
-    once_cell::sync::Lazy::new(|| {
-        regex::Regex::new(&format!(
-            "(?i:Primary font):[{}]*([^()\n;]+)",
-            crate::js::WS_CHARS
-        ))
-        .expect("PRIMARY_FONT_RE")
-    });
-static GOOGLE_LABEL_RE: once_cell::sync::Lazy<regex::Regex> =
-    once_cell::sync::Lazy::new(|| {
-        regex::Regex::new(&format!(
-            "(?i:Google Fonts):[{}]*([^()\n;]+)",
-            crate::js::WS_CHARS
-        ))
-        .expect("GOOGLE_LABEL_RE")
-    });
+static PRIMARY_FONT_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+    regex::Regex::new(&format!(
+        "(?i:Primary font):[{}]*([^()\n;]+)",
+        crate::js::WS_CHARS
+    ))
+    .expect("PRIMARY_FONT_RE")
+});
+static GOOGLE_LABEL_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+    regex::Regex::new(&format!(
+        "(?i:Google Fonts):[{}]*([^()\n;]+)",
+        crate::js::WS_CHARS
+    ))
+    .expect("GOOGLE_LABEL_RE")
+});
 static FAMILY_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
     regex::Regex::new(&format!(
         r#"(?i:font-family)[{ws}]*:[{ws}]*["']?([^'",;\n]+)"#,
@@ -2535,10 +2698,9 @@ static COLOR_HEX_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy
 static COLOR_RGB_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
     regex::Regex::new(r"^rgba?\(([\s\S]*)\)$").expect("COLOR_RGB_RE")
 });
-static COLOR_CHANNEL_RE: once_cell::sync::Lazy<regex::Regex> =
-    once_cell::sync::Lazy::new(|| {
-        regex::Regex::new(r"^(-?\d*\.?\d+)(%)?$").expect("COLOR_CHANNEL_RE")
-    });
+static COLOR_CHANNEL_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+    regex::Regex::new(r"^(-?\d*\.?\d+)(%)?$").expect("COLOR_CHANNEL_RE")
+});
 
 /// JS `_normValue`: trim, drop one edge quote at each end, `+` to space,
 /// collapse whitespace runs, lowercase.
@@ -2736,21 +2898,33 @@ pub fn element_is_scanned(dom: &dyn Dom, el: ElId) -> bool {
 /// Drops the [`super::hidden_mockup::DROP_RULES`] findings of an element
 /// inside a declared mockup, and reports them as advisory inside a box
 /// labelled as a screenshot or illustration.
-fn apply_mockup_signals(mockups: &super::hidden_mockup::HiddenMockups<'_>, groups: &mut Vec<FindingGroup>) {
+fn apply_mockup_signals(
+    mockups: &super::hidden_mockup::HiddenMockups<'_>,
+    groups: &mut Vec<FindingGroup>,
+) {
     use super::hidden_mockup::{MockupSignal, DROP_RULES};
     if mockups.is_empty() {
         return;
     }
     for g in groups.iter_mut() {
-        if !g.findings.iter().any(|f| DROP_RULES.contains(&f.type_.as_str())) {
+        if !g
+            .findings
+            .iter()
+            .any(|f| DROP_RULES.contains(&f.type_.as_str()))
+        {
             continue;
         }
         match mockups.signal(g.el) {
             Some(MockupSignal::Declared) => {
-                g.findings.retain(|f| !DROP_RULES.contains(&f.type_.as_str()));
+                g.findings
+                    .retain(|f| !DROP_RULES.contains(&f.type_.as_str()));
             }
             Some(MockupSignal::Labelled) => {
-                for f in g.findings.iter_mut().filter(|f| DROP_RULES.contains(&f.type_.as_str())) {
+                for f in g
+                    .findings
+                    .iter_mut()
+                    .filter(|f| DROP_RULES.contains(&f.type_.as_str()))
+                {
                     f.severity = Some(crate::checks::rules::ADVISORY_SEVERITY.to_string());
                 }
             }
@@ -2773,7 +2947,10 @@ pub fn collect_browser_findings(dom: &dyn Dom, config: &BrowserConfig) -> Collec
     // overlay resolves the globs per page (live-browser-ignores.js) and
     // forwards the verdict as config.skipScan. JS: index.mjs#skipScanActive().
     if config.extension_mode && config.skip_scan {
-        return CollectResult { groups: Vec::new(), page_level: Vec::new() };
+        return CollectResult {
+            groups: Vec::new(),
+            page_level: Vec::new(),
+        };
     }
 
     let mut groups: Vec<FindingGroup> = Vec::new();
@@ -2788,7 +2965,8 @@ pub fn collect_browser_findings(dom: &dyn Dom, config: &BrowserConfig) -> Collec
     let mut design_seen = DesignSeen::default();
     // One page, one set of already-reported SAFE_TAGS text colours.
     let mut color_seen = crate::checks::rules::SafeTagTextSeen::default();
-    let mut vanishing_ink_candidates: std::collections::HashSet<ElId> = std::collections::HashSet::new();
+    let mut vanishing_ink_candidates: std::collections::HashSet<ElId> =
+        std::collections::HashSet::new();
     let low_contrast_reported = !config.unreported_rules.iter().any(|r| r == "low-contrast");
     // The AI palette is read over the whole page: neon ink on a near-black
     // ground waits here until a second tell hue turns up somewhere, so one
@@ -2819,7 +2997,12 @@ pub fn collect_browser_findings(dom: &dyn Dom, config: &BrowserConfig) -> Collec
         findings.extend(hits(ec::check_element_pseudo_stripe_dom(dom, el)));
         findings.extend(hits(ec::check_element_inset_stripe_dom(dom, el)));
         findings.extend(hits(ec::check_element_stripe_child_dom(dom, el)));
-        findings.extend(hits(ec::check_element_colors_dom_in(dom, el, &mut color_seen, Some(&mockups))));
+        findings.extend(hits(ec::check_element_colors_dom_in(
+            dom,
+            el,
+            &mut color_seen,
+            Some(&mockups),
+        )));
         findings.extend(hits(ec::check_element_motion_dom(dom, el)));
         findings.extend(hits(ec::check_element_glow_dom(dom, el)));
         findings.extend(hits(ec::check_element_hard_offset_shadow_dom(dom, el)));
@@ -2837,7 +3020,11 @@ pub fn collect_browser_findings(dom: &dyn Dom, config: &BrowserConfig) -> Collec
             palette.tells.retain(|_| {
                 let is_fill_tell = has_fill && index == 0;
                 index += 1;
-                if is_fill_tell { !fill_is_category } else { !ink_is_category }
+                if is_fill_tell {
+                    !fill_is_category
+                } else {
+                    !ink_is_category
+                }
             });
             if ink_is_category {
                 palette.ink = None;
@@ -2864,14 +3051,14 @@ pub fn collect_browser_findings(dom: &dyn Dom, config: &BrowserConfig) -> Collec
         }
         findings.extend(hits(palette.hits));
         findings.extend(hits(ec::check_element_radial_spotlight_dom_with(
-            dom,
-            el,
-            &glow_text,
+            dom, el, &glow_text,
         )));
         findings.extend(hits(ec::check_element_icon_tile_dom(dom, el)));
         findings.extend(hits(ec::check_element_italic_serif_dom(dom, el)));
         findings.extend(hits(q::check_element_quality_dom(dom, el, config)));
-        findings.extend(hits(super::line_breaks::check_element_line_breaks_dom(dom, el)));
+        findings.extend(hits(super::line_breaks::check_element_line_breaks_dom(
+            dom, el,
+        )));
         findings.extend(hits(ec::check_element_oversized_h1_dom(dom, el)));
         findings.extend(hits(ec::check_element_clipped_overflow_dom(dom, el)));
         findings.extend(hits(ec::check_element_gpt_border_shadow_dom(dom, el)));
@@ -2929,7 +3116,9 @@ pub fn collect_browser_findings(dom: &dyn Dom, config: &BrowserConfig) -> Collec
     // copy wholly on screen that wore it later; the partial copy's report is
     // withdrawn where it was grouped.
     for (owner, snippet) in color_seen.take_superseded() {
-        let Ok(owner) = ElId::try_from(owner) else { continue };
+        let Ok(owner) = ElId::try_from(owner) else {
+            continue;
+        };
         if let Some(g) = groups.iter_mut().find(|g| g.el == owner) {
             g.findings
                 .retain(|f| !(f.type_ == "low-contrast" && f.detail == snippet));
@@ -2937,16 +3126,17 @@ pub fn collect_browser_findings(dom: &dyn Dom, config: &BrowserConfig) -> Collec
     }
     // With the colour claims settled, a low-contrast finding still on an
     // element speaks for its size findings.
-    for g in groups.iter_mut().filter(|g| vanishing_ink_candidates.contains(&g.el)) {
+    for g in groups
+        .iter_mut()
+        .filter(|g| vanishing_ink_candidates.contains(&g.el))
+    {
         drop_size_findings_on_vanishing_ink(&mut g.findings);
     }
     drop_brand_hue_headings(dom, &mut groups);
     groups.retain(|g| !g.findings.is_empty());
 
     // Two different tell hues on one page is the palette; one is an accent.
-    if palette_tells.iter().any(|t| *t == ec::TellHue::Cyan)
-        && palette_tells.iter().any(|t| *t == ec::TellHue::Purple)
-    {
+    if palette_tells.contains(&ec::TellHue::Cyan) && palette_tells.contains(&ec::TellHue::Purple) {
         for (el, finding) in palette_ink {
             if rule_ok(&finding.type_) {
                 add_browser_findings(dom, &mut groups, el, vec![finding]);
@@ -2954,7 +3144,9 @@ pub fn collect_browser_findings(dom: &dyn Dom, config: &BrowserConfig) -> Collec
         }
     }
 
-    let page_pass = |groups: &mut Vec<FindingGroup>, page_level: &mut Vec<BrowserFinding>, list: Vec<BrowserFinding>| {
+    let page_pass = |groups: &mut Vec<FindingGroup>,
+                     page_level: &mut Vec<BrowserFinding>,
+                     list: Vec<BrowserFinding>| {
         let list: Vec<BrowserFinding> = list.into_iter().filter(|f| rule_ok(&f.type_)).collect();
         if !list.is_empty() {
             page_level.extend(list.iter().cloned());
@@ -2981,20 +3173,50 @@ pub fn collect_browser_findings(dom: &dyn Dom, config: &BrowserConfig) -> Collec
         check_browser_design_system_sources(dom, design_system.as_ref(), &mut design_seen),
     );
     page_pass(&mut groups, &mut page_level, pc::check_typography(dom));
-    el_pass(&mut groups, tc::check_kicker_above_heading_dom(dom, design_system.as_ref()));
-    page_pass(&mut groups, &mut page_level, hits(tc::check_numbered_section_labels_dom(dom)));
-    page_pass(&mut groups, &mut page_level, hits(tc::check_repeated_container_text_dom(dom)));
-    page_pass(&mut groups, &mut page_level, hits(tc::check_em_dash_overuse_dom(dom)));
+    el_pass(
+        &mut groups,
+        tc::check_kicker_above_heading_dom(dom, design_system.as_ref()),
+    );
+    page_pass(
+        &mut groups,
+        &mut page_level,
+        hits(tc::check_numbered_section_labels_dom(dom)),
+    );
+    page_pass(
+        &mut groups,
+        &mut page_level,
+        hits(tc::check_repeated_container_text_dom(dom)),
+    );
+    page_pass(
+        &mut groups,
+        &mut page_level,
+        hits(tc::check_em_dash_overuse_dom(dom)),
+    );
 
     el_pass(&mut groups, pc::check_layout(dom));
     el_pass(&mut groups, pc::check_heading_rhythm_dom(dom));
     el_pass(&mut groups, pc::check_edge_flush_cards_dom(dom));
     el_pass(&mut groups, pc::check_text_occlusion_dom(dom));
-    el_pass(&mut groups, pc::check_first_viewport_column_overflow_dom(dom));
+    el_pass(
+        &mut groups,
+        pc::check_first_viewport_column_overflow_dom(dom),
+    );
 
-    page_pass(&mut groups, &mut page_level, q::check_page_quality_dom_in(dom, Some(&mockups)));
-    page_pass(&mut groups, &mut page_level, q::check_page_overflow_dom(dom));
-    page_pass(&mut groups, &mut page_level, hits(pc::check_cream_palette(dom)));
+    page_pass(
+        &mut groups,
+        &mut page_level,
+        q::check_page_quality_dom_in(dom, Some(&mockups)),
+    );
+    page_pass(
+        &mut groups,
+        &mut page_level,
+        q::check_page_overflow_dom(dom),
+    );
+    page_pass(
+        &mut groups,
+        &mut page_level,
+        hits(pc::check_cream_palette(dom)),
+    );
     // The stylesheet-text forms go last among the built-in passes because
     // they defer to what the element forms above have already read.
     // A dark root settles the scan's "dark page". A light or unread root
@@ -3039,7 +3261,9 @@ pub fn collect_browser_findings(dom: &dyn Dom, config: &BrowserConfig) -> Collec
     };
     if !disabled_values.is_empty() {
         for group in groups.iter_mut() {
-            group.findings.retain(|f| !browser_value_ignored(f, &disabled_values));
+            group
+                .findings
+                .retain(|f| !browser_value_ignored(f, &disabled_values));
         }
         groups.retain(|g| !g.findings.is_empty());
         page_level.retain(|f| !browser_value_ignored(f, &disabled_values));
@@ -3159,14 +3383,23 @@ mod tests {
 .blob{clip-path:polygon(50% 0%, 61% 8%, 74% 6%, 82% 16%, 94% 22%, 96% 36%, 100% 50%, 92% 63%, 88% 78%, 74% 88%, 60% 100%, 46% 96%)}\
 </style></head><body><div><div class=\"loader\"></div><div class=\"bar\"></div><div class=\"rail\"><div class=\"node\"></div></div><div class=\"stripes\"></div><div class=\"blob\"></div></div></body></html>"
                 .to_string();
-            let mut ids: Vec<String> = scoped_html_pattern_findings(&d).into_iter().map(|f| f.type_).collect();
+            let mut ids: Vec<String> = scoped_html_pattern_findings(&d)
+                .into_iter()
+                .map(|f| f.type_)
+                .collect();
             ids.sort();
             ids.dedup();
             ids
         };
         assert_eq!(
             run(false),
-            vec!["bounce-easing", "dark-glow", "organic-clip-path", "pulsing-dot", "repeating-stripes-gradient"]
+            vec![
+                "bounce-easing",
+                "dark-glow",
+                "organic-clip-path",
+                "pulsing-dot",
+                "repeating-stripes-gradient"
+            ]
         );
         assert_eq!(run(true), vec!["organic-clip-path"]);
     }
@@ -3199,7 +3432,10 @@ mod tests {
 @media (min-width: 1024px) {{ .gone {{ background: repeating-linear-gradient(45deg,#000 0 2px,#fff 2px 4px); box-shadow: 0 0 16px rgba(26, 58, 214, 0.8) }} }}\
 {tail}</style></head><body><div class=\"stripes\"></div><div class=\"bar\"></div></body></html>"
             );
-            let mut ids: Vec<String> = scoped_html_pattern_findings(&d).into_iter().map(|f| f.type_).collect();
+            let mut ids: Vec<String> = scoped_html_pattern_findings(&d)
+                .into_iter()
+                .map(|f| f.type_)
+                .collect();
             ids.sort();
             ids
         };
@@ -3227,7 +3463,10 @@ mod tests {
 @media (min-width: 2000px) { .card { background: repeating-linear-gradient(45deg,#000 0 2px,#fff 2px 4px) } }\
 </style></head><body><div class=\"card\"></div></body></html>"
                 .to_string();
-            scoped_html_pattern_findings(&d).into_iter().map(|f| f.type_).collect::<Vec<_>>()
+            scoped_html_pattern_findings(&d)
+                .into_iter()
+                .map(|f| f.type_)
+                .collect::<Vec<_>>()
         };
         assert!(run("none").is_empty());
         assert_eq!(
@@ -3279,7 +3518,11 @@ mod tests {
                     d.set_rect(el, 0.0, y, 320.0, 120.0);
                     d.set_styles(el, &[(prop, value), ("textShadow", "none")]);
                 }
-                let tail = if with_active { format!(".on {{ {active} }}") } else { String::new() };
+                let tail = if with_active {
+                    format!(".on {{ {active} }}")
+                } else {
+                    String::new()
+                };
                 d.html_for_patterns = format!(
                     "<html><head><style>body{{background:#0b0b0f}}\
 @media (min-width: 4000px) {{ .wide {{ {inactive} }} }}\
@@ -3318,7 +3561,11 @@ mod tests {
             (".a:before-ish", &[None]),
         ];
         for (selector, want) in cases {
-            assert_eq!(selector_list_pseudos(selector).as_slice(), *want, "{selector:?}");
+            assert_eq!(
+                selector_list_pseudos(selector).as_slice(),
+                *want,
+                "{selector:?}"
+            );
         }
         // The reviewers' cases through the gate: a quoted `:before` paints on
         // the host; an `:is()` comma does not let the host's stripes stand
@@ -3326,12 +3573,33 @@ mod tests {
         let mut d = FakeDom::new();
         let (_, body) = d.with_page();
         let el = d.add(Some(body), "div");
-        d.set_styles(el, &[("backgroundImage", "repeating-linear-gradient(90deg, black 0px 2px, white 2px 4px)"), ("maskImage", "none")]);
+        d.set_styles(
+            el,
+            &[
+                (
+                    "backgroundImage",
+                    "repeating-linear-gradient(90deg, black 0px 2px, white 2px 4px)",
+                ),
+                ("maskImage", "none"),
+            ],
+        );
         d.set_pseudo_style(el, "::before", "content", "\"\"");
         d.set_pseudo_style(el, "::before", "backgroundImage", "none");
         d.set_pseudo_style(el, "::before", "maskImage", "none");
-        assert!(computed_paint_applies(&d, el, "[data-icon=\":before\"]", "repeating-stripes-gradient", ""));
-        assert!(!computed_paint_applies(&d, el, ":is(.a, .b)::before", "repeating-stripes-gradient", ""));
+        assert!(computed_paint_applies(
+            &d,
+            el,
+            "[data-icon=\":before\"]",
+            "repeating-stripes-gradient",
+            ""
+        ));
+        assert!(!computed_paint_applies(
+            &d,
+            el,
+            ":is(.a, .b)::before",
+            "repeating-stripes-gradient",
+            ""
+        ));
     }
 
     /// Third review of #1042: a `::before` stripe is judged by the
@@ -3348,7 +3616,10 @@ mod tests {
             let card = d.add(Some(body), "div");
             d.add_selector(card, ".card");
             d.set_rect(card, 0.0, 100.0, 200.0, 40.0);
-            d.set_styles(card, &[("backgroundImage", host_image), ("maskImage", "none")]);
+            d.set_styles(
+                card,
+                &[("backgroundImage", host_image), ("maskImage", "none")],
+            );
             for (prop, value) in pseudo {
                 d.set_pseudo_style(card, "::before", prop, value);
             }
@@ -3356,13 +3627,23 @@ mod tests {
 .card::before { content: \"\"; background: black; mask-image: repeating-linear-gradient(90deg, black 0 2px, transparent 2px 4px) }\
 </style></head><body><div class=\"card\"></div></body></html>"
                 .to_string();
-            scoped_html_pattern_findings(&d).into_iter().map(|f| f.type_).collect::<Vec<_>>()
+            scoped_html_pattern_findings(&d)
+                .into_iter()
+                .map(|f| f.type_)
+                .collect::<Vec<_>>()
         };
         let drawn = |mask: &'static str| {
-            vec![("content", "\"\""), ("backgroundImage", "none"), ("maskImage", mask)]
+            vec![
+                ("content", "\"\""),
+                ("backgroundImage", "none"),
+                ("maskImage", mask),
+            ]
         };
         // Stripes drawn through the pseudo-element's mask, host plain.
-        assert_eq!(run("none", &drawn(STRIPES)), vec!["repeating-stripes-gradient"]);
+        assert_eq!(
+            run("none", &drawn(STRIPES)),
+            vec!["repeating-stripes-gradient"]
+        );
         // The pseudo rule did not apply; the host's own stripes say nothing.
         assert!(run(STRIPES, &drawn("none")).is_empty());
         // No pseudo box at all.
@@ -3386,7 +3667,10 @@ mod tests {
             d.set_rect(body, 0.0, 0.0, 1280.0, 3000.0);
             let nav = d.add(Some(body), "nav");
             d.set_rect(nav, 0.0, 0.0, bar_width, 50.0);
-            d.set_styles(nav, &[("backgroundColor", nav_bg), ("backgroundImage", "none")]);
+            d.set_styles(
+                nav,
+                &[("backgroundColor", nav_bg), ("backgroundImage", "none")],
+            );
             let h2 = d.add(Some(body), "h2");
             d.set_rect(h2, 15.0, 944.0, 1250.0, 43.0);
             d.set_style(h2, "color", "rgb(92, 45, 145)");
@@ -3395,19 +3679,34 @@ mod tests {
             let mut groups = vec![
                 FindingGroup {
                     el: h2,
-                    findings: vec![BrowserFinding::new("ai-color-palette", "Purple/violet text (#5c2d91) on heading")],
+                    findings: vec![BrowserFinding::new(
+                        "ai-color-palette",
+                        "Purple/violet text (#5c2d91) on heading",
+                    )],
                 },
                 FindingGroup {
                     el: hero,
-                    findings: vec![BrowserFinding::new("ai-color-palette", "Purple/violet gradient background")],
+                    findings: vec![BrowserFinding::new(
+                        "ai-color-palette",
+                        "Purple/violet gradient background",
+                    )],
                 },
             ];
             drop_brand_hue_headings(&d, &mut groups);
-            groups.iter().flat_map(|g| g.findings.iter().map(|f| f.detail.clone())).collect::<Vec<_>>()
+            groups
+                .iter()
+                .flat_map(|g| g.findings.iter().map(|f| f.detail.clone()))
+                .collect::<Vec<_>>()
         };
-        assert_eq!(run("rgb(92, 45, 145)", 1280.0), vec!["Purple/violet gradient background"]);
+        assert_eq!(
+            run("rgb(92, 45, 145)", 1280.0),
+            vec!["Purple/violet gradient background"]
+        );
         // A nearby hue is the same brand colour; a teal bar is not.
-        assert_eq!(run("rgb(110, 50, 160)", 1280.0), vec!["Purple/violet gradient background"]);
+        assert_eq!(
+            run("rgb(110, 50, 160)", 1280.0),
+            vec!["Purple/violet gradient background"]
+        );
         assert_eq!(run("rgb(0, 128, 128)", 1280.0).len(), 2);
         // A short nav pill is not the nav bar.
         assert_eq!(run("rgb(92, 45, 145)", 200.0).len(), 2);
@@ -3419,16 +3718,28 @@ mod tests {
     #[test]
     fn category_hue_sets() {
         // cnnbrasil.com.br's section headings.
-        assert!(hues_are_a_category_system(&[0.0, 200.0, 25.0, 173.0, 45.0, 258.0, 142.0, 189.0, 271.0, 330.0]));
+        assert!(hues_are_a_category_system(&[
+            0.0, 200.0, 25.0, 173.0, 45.0, 258.0, 142.0, 189.0, 271.0, 330.0
+        ]));
         // arbiproseller's icon tiles: two blues 8 degrees apart are two hues.
-        assert!(hues_are_a_category_system(&[255.0, 221.2, 213.1, 158.0, 43.0, 188.0]));
+        assert!(hues_are_a_category_system(&[
+            255.0, 221.2, 213.1, 158.0, 43.0, 188.0
+        ]));
         // Five hues, and one hue repeated.
-        assert!(!hues_are_a_category_system(&[0.0, 25.0, 142.0, 217.0, 271.0]));
-        assert!(!hues_are_a_category_system(&[271.0, 271.0, 271.0, 271.0, 272.0, 273.0, 189.0]));
+        assert!(!hues_are_a_category_system(&[
+            0.0, 25.0, 142.0, 217.0, 271.0
+        ]));
+        assert!(!hues_are_a_category_system(&[
+            271.0, 271.0, 271.0, 271.0, 272.0, 273.0, 189.0
+        ]));
         // Six hues, all of them the palette's own.
-        assert!(!hues_are_a_category_system(&[262.0, 271.0, 293.0, 192.0, 175.0, 199.0]));
+        assert!(!hues_are_a_category_system(&[
+            262.0, 271.0, 293.0, 192.0, 175.0, 199.0
+        ]));
         // 358 and 2 are one red.
-        assert!(!hues_are_a_category_system(&[358.0, 2.0, 25.0, 142.0, 217.0, 271.0]));
+        assert!(!hues_are_a_category_system(&[
+            358.0, 2.0, 25.0, 142.0, 217.0, 271.0
+        ]));
     }
 
     #[test]
@@ -3440,7 +3751,10 @@ mod tests {
         let heading = |d: &mut FakeDom, color: &str, size: &str| {
             let h = d.add(Some(body), "h2");
             d.set_rect(h, 0.0, 100.0, 300.0, 36.0);
-            d.set_styles(h, &[("color", color), ("fontSize", size), ("fontWeight", "700")]);
+            d.set_styles(
+                h,
+                &[("color", color), ("fontSize", size), ("fontWeight", "700")],
+            );
             h
         };
         let section_inks = [
@@ -3459,7 +3773,11 @@ mod tests {
         let tile = |d: &mut FakeDom, stops: &str, side: f64| {
             let t = d.add(Some(body), "div");
             d.set_rect(t, 0.0, 400.0, side, side);
-            d.set_style(t, "backgroundImage", &format!("linear-gradient(135deg, {stops})"));
+            d.set_style(
+                t,
+                "backgroundImage",
+                &format!("linear-gradient(135deg, {stops})"),
+            );
             t
         };
         let purple_tile = tile(&mut d, "rgb(147, 51, 234), rgb(168, 85, 247)", 56.0);
@@ -3485,14 +3803,27 @@ mod tests {
 
     #[test]
     fn palette_findings_name_their_role() {
-        let role = |detail: &str| palette_finding_role(&BrowserFinding::new("ai-color-palette", detail));
+        let role =
+            |detail: &str| palette_finding_role(&BrowserFinding::new("ai-color-palette", detail));
         assert_eq!(role("text-violet-500 on heading"), Some(PaletteRole::Ink));
-        assert_eq!(role("Purple/violet text (#7c3aed) on heading"), Some(PaletteRole::Ink));
-        assert_eq!(role("Cyan neon text on dark background"), Some(PaletteRole::Ink));
+        assert_eq!(
+            role("Purple/violet text (#7c3aed) on heading"),
+            Some(PaletteRole::Ink)
+        );
+        assert_eq!(
+            role("Cyan neon text on dark background"),
+            Some(PaletteRole::Ink)
+        );
         assert_eq!(role("Cyan gradient background"), Some(PaletteRole::Fill));
-        assert_eq!(role("Purple/violet gradient (Tailwind)"), Some(PaletteRole::Fill));
+        assert_eq!(
+            role("Purple/violet gradient (Tailwind)"),
+            Some(PaletteRole::Fill)
+        );
         assert_eq!(role("Purple/violet accent colors detected"), None);
-        assert_eq!(palette_finding_role(&BrowserFinding::new("low-contrast", "x on heading")), None);
+        assert_eq!(
+            palette_finding_role(&BrowserFinding::new("low-contrast", "x on heading")),
+            None
+        );
     }
 
     #[test]
@@ -3508,7 +3839,10 @@ mod tests {
             d.set_style(h1, "color", "rgb(124, 58, 237)");
             let mut groups = vec![FindingGroup {
                 el: h1,
-                findings: vec![BrowserFinding::new("ai-color-palette", "text-violet-600 on heading")],
+                findings: vec![BrowserFinding::new(
+                    "ai-color-palette",
+                    "text-violet-600 on heading",
+                )],
             }];
             drop_brand_hue_headings(&d, &mut groups);
             groups[0].findings.len()
@@ -3649,7 +3983,10 @@ mod tests {
                     band,
                     &[
                         ("backgroundColor", "rgb(124, 58, 237)"),
-                        ("backgroundImage", "linear-gradient(90deg, rgb(124, 58, 237), rgb(219, 39, 119))"),
+                        (
+                            "backgroundImage",
+                            "linear-gradient(90deg, rgb(124, 58, 237), rgb(219, 39, 119))",
+                        ),
                     ],
                 );
             }),
@@ -3678,10 +4015,21 @@ mod tests {
         d.set_rect(button, 10.0, 10.0, 72.0, 24.0);
         let own = d.add(Some(body), "button");
         d.set_rect(own, 10.0, 100.0, 72.0, 24.0);
-        let finding = || BrowserFinding::new("undersized-ui-text", "10px functional text \"Learn More\" (below 11px floor)");
+        let finding = || {
+            BrowserFinding::new(
+                "undersized-ui-text",
+                "10px functional text \"Learn More\" (below 11px floor)",
+            )
+        };
         let groups = vec![
-            FindingGroup { el: button, findings: vec![finding()] },
-            FindingGroup { el: own, findings: vec![finding()] },
+            FindingGroup {
+                el: button,
+                findings: vec![finding()],
+            },
+            FindingGroup {
+                el: own,
+                findings: vec![finding()],
+            },
         ];
         let out = serialize_findings(&d, &groups);
         let first = &out[0]["findings"][0];
@@ -3692,7 +4040,10 @@ mod tests {
         assert_eq!(first["thirdParty"], json!("Taboola"));
         assert_eq!(first["severity"], json!("warning"));
         let second = &out[1]["findings"][0];
-        assert_eq!(second["detail"], json!("10px functional text \"Learn More\" (below 11px floor)"));
+        assert_eq!(
+            second["detail"],
+            json!("10px functional text \"Learn More\" (below 11px floor)")
+        );
         assert!(second.get("thirdParty").is_none());
     }
 
@@ -3728,12 +4079,18 @@ mod tests {
 
     #[test]
     fn primary_font_and_normalization() {
-        assert_eq!(browser_primary_font("\"Inter\", system-ui, sans-serif"), "inter");
+        assert_eq!(
+            browser_primary_font("\"Inter\", system-ui, sans-serif"),
+            "inter"
+        );
         assert_eq!(browser_primary_font("'Foo, Bar', sans-serif"), "foo, bar");
         assert_eq!(browser_primary_font("system-ui, sans-serif"), "");
         assert_eq!(browser_primary_font("system-ui, Roboto"), "roboto");
         assert_eq!(browser_primary_font("var(--font)"), "");
-        assert_eq!(normalize_browser_font_name("  'Space+Grotesk'  "), "space grotesk");
+        assert_eq!(
+            normalize_browser_font_name("  'Space+Grotesk'  "),
+            "space grotesk"
+        );
     }
 
     #[test]
@@ -3770,7 +4127,12 @@ mod tests {
         let types: Vec<&str> = f.iter().map(|x| x.type_.as_str()).collect();
         assert_eq!(
             types,
-            vec!["design-system-font", "design-system-color", "design-system-radius", "design-system-radius"]
+            vec![
+                "design-system-font",
+                "design-system-color",
+                "design-system-radius",
+                "design-system-radius"
+            ]
         );
         assert_eq!(
             f[0].detail,
@@ -3781,7 +4143,10 @@ mod tests {
             f[1].detail,
             "text color rgb(255, 0, 0) on p \"Hello world\" is outside DESIGN.md colors"
         );
-        assert_eq!(f[2].detail, "border-radius 3px on p \"Hello world\" is outside the DESIGN.md rounded scale");
+        assert_eq!(
+            f[2].detail,
+            "border-radius 3px on p \"Hello world\" is outside the DESIGN.md rounded scale"
+        );
         assert_eq!(f[3].ignore_value.as_deref(), Some("2px"));
         // Second element with the same offenders adds nothing.
         let q = d.add(Some(body), "p");
@@ -3968,10 +4333,9 @@ mod tests {
     fn stock_violet_page() -> (FakeDom, ElId, ElId) {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
-        d.html_for_patterns =
-            "<style>.accent { font-weight: 600; color: #8b5cf6; }</style>\
+        d.html_for_patterns = "<style>.accent { font-weight: 600; color: #8b5cf6; }</style>\
              <p class=\"accent\">Start free</p>"
-                .to_string();
+            .to_string();
         let wrapper = d.add(Some(body), "div");
         d.set_rect(wrapper, 0.0, 0.0, 200.0, 24.0);
         let p = d.add(Some(wrapper), "p");
@@ -4014,11 +4378,25 @@ mod tests {
         // So does a border, an outline or a shadow in it.
         d.set_style(p, "backgroundImage", "none");
         assert!(!purple_accent_reported(&d));
-        d.set_styles(p, &[("borderLeftWidth", "2px"), ("borderLeftStyle", "solid"), ("borderLeftColor", "rgb(139, 92, 246)")]);
+        d.set_styles(
+            p,
+            &[
+                ("borderLeftWidth", "2px"),
+                ("borderLeftStyle", "solid"),
+                ("borderLeftColor", "rgb(139, 92, 246)"),
+            ],
+        );
         assert!(purple_accent_reported(&d));
         d.set_style(p, "borderLeftStyle", "none");
         assert!(!purple_accent_reported(&d));
-        d.set_styles(p, &[("outlineWidth", "2px"), ("outlineStyle", "solid"), ("outlineColor", "rgb(139, 92, 246)")]);
+        d.set_styles(
+            p,
+            &[
+                ("outlineWidth", "2px"),
+                ("outlineStyle", "solid"),
+                ("outlineColor", "rgb(139, 92, 246)"),
+            ],
+        );
         assert!(purple_accent_reported(&d));
         d.set_style(p, "outlineStyle", "none");
         d.set_style(p, "boxShadow", "rgba(139, 92, 246, 0.5) 0px 0px 0px 0px");
@@ -4103,12 +4481,20 @@ mod tests {
             let (html, _body) = d.with_page();
             let head = d.add(Some(html), "head");
             let link = d.add(Some(head), "link");
-            d.set_attr(link, "href", "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700");
+            d.set_attr(
+                link,
+                "href",
+                "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700",
+            );
             d.add_selector(link, "link[href*=\"fonts.googleapis.com/css\"]");
             d
         };
         let ds = json!({ "present": true, "hasFonts": true, "allowedFonts": ["Inter"] });
-        let base = BrowserConfig { extension_mode: true, design_system: Some(ds), ..Default::default() };
+        let base = BrowserConfig {
+            extension_mode: true,
+            design_system: Some(ds),
+            ..Default::default()
+        };
 
         // The same page flags without skipScan...
         let d = make_dom();
@@ -4117,14 +4503,21 @@ mod tests {
         assert!(!out.page_level.is_empty());
 
         // ...and answers empty with it.
-        let skip = BrowserConfig { skip_scan: true, ..base.clone() };
+        let skip = BrowserConfig {
+            skip_scan: true,
+            ..base.clone()
+        };
         let d = make_dom();
         let out = collect_browser_findings(&d, &skip);
         assert!(out.groups.is_empty());
         assert!(out.page_level.is_empty());
 
         // The guard is extension-mode only, exactly as the JS reads it.
-        let non_ext = BrowserConfig { extension_mode: false, skip_scan: true, ..skip };
+        let non_ext = BrowserConfig {
+            extension_mode: false,
+            skip_scan: true,
+            ..skip
+        };
         let d = make_dom();
         let out = collect_browser_findings(&d, &non_ext);
         assert!(!out.groups.is_empty());
@@ -4139,7 +4532,11 @@ mod tests {
         let (html, body) = d.with_page();
         let head = d.add(Some(html), "head");
         let link = d.add(Some(head), "link");
-        d.set_attr(link, "href", "https://fonts.googleapis.com/css2?family=Poppins");
+        d.set_attr(
+            link,
+            "href",
+            "https://fonts.googleapis.com/css2?family=Poppins",
+        );
         d.add_selector(link, "link[href*=\"fonts.googleapis.com/css\"]");
         let p = d.add(Some(body), "p");
         d.add_text(p, "Hello");
@@ -4273,7 +4670,10 @@ mod tests {
             d.set_rect(label, 24.0, 24.0, 60.0, 20.0);
             let second = d.add(Some(panel), "span");
             d.add_text(second, "Status");
-            d.set_styles(second, &[("color", second_color), ("fontFamily", "Inter, sans-serif")]);
+            d.set_styles(
+                second,
+                &[("color", second_color), ("fontFamily", "Inter, sans-serif")],
+            );
             d.el_mut(second).check_visibility = Some(true);
             d.set_rect(second, 100.0, 24.0, 60.0, 20.0);
             d
@@ -4301,23 +4701,55 @@ mod tests {
         let without_ds = BrowserConfig::default();
 
         // No DESIGN.md: two unexplained hues form a palette, not one accent.
-        let out = collect_browser_findings(&make_dom("rgb(15, 182, 172)", "rgb(168, 85, 247)"), &without_ds);
+        let out = collect_browser_findings(
+            &make_dom("rgb(15, 182, 172)", "rgb(168, 85, 247)"),
+            &without_ds,
+        );
         assert!(types(&out).contains(&"ai-color-palette".to_string()));
 
         // Declared token: neither the palette rule nor the drift rule fires.
-        let out = collect_browser_findings(&make_dom("rgb(15, 182, 172)", "rgb(168, 85, 247)"), &with_ds);
-        assert!(!types(&out).contains(&"ai-color-palette".to_string()), "{:?}", types(&out));
-        assert!(!types(&out).contains(&"design-system-color".to_string()), "{:?}", types(&out));
+        let out = collect_browser_findings(
+            &make_dom("rgb(15, 182, 172)", "rgb(168, 85, 247)"),
+            &with_ds,
+        );
+        assert!(
+            !types(&out).contains(&"ai-color-palette".to_string()),
+            "{:?}",
+            types(&out)
+        );
+        assert!(
+            !types(&out).contains(&"design-system-color".to_string()),
+            "{:?}",
+            types(&out)
+        );
 
         // A declared purple does not open the two-hue gate for undeclared cyan.
-        let out = collect_browser_findings(&make_dom("rgb(0, 229, 255)", "rgb(168, 85, 247)"), &with_ds);
-        assert!(!types(&out).contains(&"ai-color-palette".to_string()), "{:?}", types(&out));
-        assert!(types(&out).contains(&"design-system-color".to_string()), "{:?}", types(&out));
+        let out =
+            collect_browser_findings(&make_dom("rgb(0, 229, 255)", "rgb(168, 85, 247)"), &with_ds);
+        assert!(
+            !types(&out).contains(&"ai-color-palette".to_string()),
+            "{:?}",
+            types(&out)
+        );
+        assert!(
+            types(&out).contains(&"design-system-color".to_string()),
+            "{:?}",
+            types(&out)
+        );
 
         // Two undeclared hues still report both rules.
-        let out = collect_browser_findings(&make_dom("rgb(0, 229, 255)", "rgb(220, 0, 255)"), &with_ds);
-        assert!(types(&out).contains(&"ai-color-palette".to_string()), "{:?}", types(&out));
-        assert!(types(&out).contains(&"design-system-color".to_string()), "{:?}", types(&out));
+        let out =
+            collect_browser_findings(&make_dom("rgb(0, 229, 255)", "rgb(220, 0, 255)"), &with_ds);
+        assert!(
+            types(&out).contains(&"ai-color-palette".to_string()),
+            "{:?}",
+            types(&out)
+        );
+        assert!(
+            types(&out).contains(&"design-system-color".to_string()),
+            "{:?}",
+            types(&out)
+        );
     }
 
     #[test]
@@ -4344,7 +4776,10 @@ mod tests {
             serde_json::from_str(r#"{"disabledValues":"not an array"}"#).unwrap();
         assert!(junk.disabled_values.is_empty());
 
-        assert_eq!(normalize_browser_ignore_value("  \"Geist+Mono\" "), "geist mono");
+        assert_eq!(
+            normalize_browser_ignore_value("  \"Geist+Mono\" "),
+            "geist mono"
+        );
         assert_eq!(browser_color_ignore_key("#fff"), "255,255,255,255");
         assert_eq!(browser_color_ignore_key("rgb(255, 0, 0)"), "255,0,0,255");
         assert_eq!(
@@ -4369,10 +4804,19 @@ mod tests {
 
     #[test]
     fn html_pattern_query_strips_pseudos_and_dangling_commas() {
-        assert_eq!(html_pattern_query(".card::before"), Some(".card".to_string()));
-        assert_eq!(html_pattern_query(".a:hover, .b::after"), Some(".a, .b".to_string()));
+        assert_eq!(
+            html_pattern_query(".card::before"),
+            Some(".card".to_string())
+        );
+        assert_eq!(
+            html_pattern_query(".a:hover, .b::after"),
+            Some(".a, .b".to_string())
+        );
         assert_eq!(html_pattern_query("::before, ::after"), None);
-        assert_eq!(html_pattern_query(".x:not(.y)::before"), Some(".x".to_string()));
+        assert_eq!(
+            html_pattern_query(".x:not(.y)::before"),
+            Some(".x".to_string())
+        );
         assert_eq!(html_pattern_query(".a::before,"), Some(".a".to_string()));
     }
 
@@ -4447,7 +4891,10 @@ mod tests {
         assert!(visual_contrast_result_finding(&d, p, &[], &result).is_none());
         d.set_attr(wrap, "data-impeccable-ignore", "glow-effect");
         let f = visual_contrast_result_finding(&d, p, &[], &result).unwrap();
-        assert_eq!((f.type_.as_str(), f.detail.as_str()), ("low-contrast", "browser contrast 2.0:1"));
+        assert_eq!(
+            (f.type_.as_str(), f.detail.as_str()),
+            ("low-contrast", "browser contrast 2.0:1")
+        );
         let existing = vec![BrowserFinding::new("low-contrast", "x")];
         assert!(visual_contrast_result_finding(&d, p, &existing, &result).is_none());
         let pass = json!({ "status": "pass", "selector": "#t", "finding": null });
@@ -4513,7 +4960,8 @@ mod page_level_form_tests {
     fn page(style: &str) -> (FakeDom, ElId) {
         let mut d = FakeDom::new();
         let (_html, body) = d.with_page();
-        d.html_for_patterns = format!("<html><head><style>{style}</style></head><body></body></html>");
+        d.html_for_patterns =
+            format!("<html><head><style>{style}</style></head><body></body></html>");
         (d, body)
     }
 
@@ -4531,7 +4979,13 @@ mod page_level_form_tests {
         drop_covered_class_forms(&mut findings);
         let kept: Vec<&str> = findings.iter().map(|f| f.detail.as_str()).collect();
         // The bounce class form has no computed twin on this element and stays.
-        assert_eq!(kept, vec!["background-clip: text + gradient", "animate-bounce (Tailwind)"]);
+        assert_eq!(
+            kept,
+            vec![
+                "background-clip: text + gradient",
+                "animate-bounce (Tailwind)"
+            ]
+        );
     }
 
     /// vps.dance's `p.nid`: #eee on #f8f8f8 at 1.1:1, a size nobody sees.
@@ -4539,16 +4993,28 @@ mod page_level_form_tests {
     fn size_findings_defer_to_a_low_contrast_finding_under_1_25() {
         let run = |ratio: &str| {
             let mut findings = vec![
-                BrowserFinding::new("low-contrast", &format!("{ratio}:1 (need 4.5:1) — text #eeeeee on #f8f8f8")),
-                BrowserFinding::new("undersized-ui-text", "10px functional text \"bwhkg\" (below 11px floor)"),
+                BrowserFinding::new(
+                    "low-contrast",
+                    format!("{ratio}:1 (need 4.5:1) — text #eeeeee on #f8f8f8"),
+                ),
+                BrowserFinding::new(
+                    "undersized-ui-text",
+                    "10px functional text \"bwhkg\" (below 11px floor)",
+                ),
                 BrowserFinding::new("tiny-text", "10px body text"),
             ];
             drop_size_findings_on_vanishing_ink(&mut findings);
             findings.into_iter().map(|f| f.type_).collect::<Vec<_>>()
         };
         assert_eq!(run("1.1"), vec!["low-contrast"]);
-        assert_eq!(run("1.3"), vec!["low-contrast", "undersized-ui-text", "tiny-text"]);
-        assert_eq!(run("2.5"), vec!["low-contrast", "undersized-ui-text", "tiny-text"]);
+        assert_eq!(
+            run("1.3"),
+            vec!["low-contrast", "undersized-ui-text", "tiny-text"]
+        );
+        assert_eq!(
+            run("2.5"),
+            vec!["low-contrast", "undersized-ui-text", "tiny-text"]
+        );
         // With no contrast finding on the element the size findings stand.
         let mut alone = vec![BrowserFinding::new("tiny-text", "10px body text")];
         drop_size_findings_on_vanishing_ink(&mut alone);
@@ -4567,17 +5033,30 @@ mod page_level_form_tests {
             d.set_rect(p, 40.0, 40.0, 400.0, 14.0);
             d.set_styles(
                 p,
-                &[("color", "rgb(238, 238, 238)"), ("fontSize", "10px"), ("lineHeight", "14px"), ("backgroundColor", "rgba(0, 0, 0, 0)")],
+                &[
+                    ("color", "rgb(238, 238, 238)"),
+                    ("fontSize", "10px"),
+                    ("lineHeight", "14px"),
+                    ("backgroundColor", "rgba(0, 0, 0, 0)"),
+                ],
             );
             (d, p)
         };
         let ids = |r: &CollectResult, el: ElId| -> Vec<String> {
-            r.groups.iter().filter(|g| g.el == el).flat_map(|g| g.findings.iter().map(|f| f.type_.clone())).collect()
+            r.groups
+                .iter()
+                .filter(|g| g.el == el)
+                .flat_map(|g| g.findings.iter().map(|f| f.type_.clone()))
+                .collect()
         };
         let (d, p) = build();
         let all = ids(&scan(&d), p);
         assert!(all.iter().any(|t| t == "low-contrast"), "{all:?}");
-        assert!(!all.iter().any(|t| t == "tiny-text" || t == "undersized-ui-text"), "{all:?}");
+        assert!(
+            !all.iter()
+                .any(|t| t == "tiny-text" || t == "undersized-ui-text"),
+            "{all:?}"
+        );
         let config = BrowserConfig {
             extension_mode: true,
             disabled_rules: vec!["low-contrast".to_string()],
@@ -4587,12 +5066,24 @@ mod page_level_form_tests {
         assert!(off.iter().any(|t| t == "tiny-text"), "{off:?}");
         // The CLI reports low-contrast here and removes it afterwards
         // (`ignoreRules`, a `--scope` without it): the size findings stand.
-        let config = BrowserConfig { unreported_rules: vec!["low-contrast".to_string()], ..BrowserConfig::default() };
+        let config = BrowserConfig {
+            unreported_rules: vec!["low-contrast".to_string()],
+            ..BrowserConfig::default()
+        };
         let unreported = ids(&collect_browser_findings(&d, &config), p);
-        assert!(unreported.iter().any(|t| t == "low-contrast"), "{unreported:?}");
-        assert!(unreported.iter().any(|t| t == "tiny-text"), "{unreported:?}");
+        assert!(
+            unreported.iter().any(|t| t == "low-contrast"),
+            "{unreported:?}"
+        );
+        assert!(
+            unreported.iter().any(|t| t == "tiny-text"),
+            "{unreported:?}"
+        );
         // Another rule left out of the report changes nothing.
-        let config = BrowserConfig { unreported_rules: vec!["overused-font".to_string()], ..BrowserConfig::default() };
+        let config = BrowserConfig {
+            unreported_rules: vec!["overused-font".to_string()],
+            ..BrowserConfig::default()
+        };
         let other = ids(&collect_browser_findings(&d, &config), p);
         assert!(!other.iter().any(|t| t == "tiny-text"), "{other:?}");
     }
@@ -4611,13 +5102,22 @@ mod page_level_form_tests {
             d.set_rect(p, x, 40.0, 400.0, 14.0);
             d.set_styles(
                 p,
-                &[("color", "rgb(238, 238, 238)"), ("fontSize", size), ("lineHeight", "14px"), ("backgroundColor", "rgba(0, 0, 0, 0)")],
+                &[
+                    ("color", "rgb(238, 238, 238)"),
+                    ("fontSize", size),
+                    ("lineHeight", "14px"),
+                    ("backgroundColor", "rgba(0, 0, 0, 0)"),
+                ],
             );
             p
         };
         let cut = copy(&mut d, -30.0, "10px");
         let ids = |r: &CollectResult, el: ElId| -> Vec<String> {
-            r.groups.iter().filter(|g| g.el == el).flat_map(|g| g.findings.iter().map(|f| f.type_.clone())).collect()
+            r.groups
+                .iter()
+                .filter(|g| g.el == el)
+                .flat_map(|g| g.findings.iter().map(|f| f.type_.clone()))
+                .collect()
         };
         let alone = ids(&scan(&d), cut);
         assert!(alone.iter().any(|t| t == "low-contrast"), "{alone:?}");
@@ -4626,7 +5126,10 @@ mod page_level_form_tests {
         let r = scan(&d);
         assert!(ids(&r, whole).iter().any(|t| t == "low-contrast"));
         let settled = ids(&r, cut);
-        assert!(!settled.iter().any(|t| t == "low-contrast"), "the whole copy took the pair: {settled:?}");
+        assert!(
+            !settled.iter().any(|t| t == "low-contrast"),
+            "the whole copy took the pair: {settled:?}"
+        );
         assert!(settled.iter().any(|t| t == "tiny-text"), "{settled:?}");
     }
 
@@ -4647,7 +5150,13 @@ mod page_level_form_tests {
         ];
         drop_covered_class_forms(&mut findings);
         let kept: Vec<&str> = findings.iter().map(|f| f.detail.as_str()).collect();
-        assert_eq!(kept, vec!["cubic-bezier(0.34, 1.56, 0.64, 1)", "animate-bounce (Tailwind)"]);
+        assert_eq!(
+            kept,
+            vec![
+                "cubic-bezier(0.34, 1.56, 0.64, 1)",
+                "animate-bounce (Tailwind)"
+            ]
+        );
     }
 
     #[test]
@@ -4655,7 +5164,8 @@ mod page_level_form_tests {
         let (mut d, body) = page(
             ".title{background-image:linear-gradient(90deg,#f0f,#0ff);-webkit-background-clip:text;background-clip:text;color:transparent}",
         );
-        d.html_for_patterns.push_str("<h1 class=\"title bg-clip-text bg-gradient-to-r\">Ship</h1>");
+        d.html_for_patterns
+            .push_str("<h1 class=\"title bg-clip-text bg-gradient-to-r\">Ship</h1>");
         let h1 = d.add(Some(body), "h1");
         d.add_selector(h1, ".title");
         d.set_attr(h1, "class", "title bg-clip-text bg-gradient-to-r");
@@ -4664,7 +5174,10 @@ mod page_level_form_tests {
         d.set_styles(
             h1,
             &[
-                ("backgroundImage", "linear-gradient(90deg, rgb(255, 0, 255), rgb(0, 255, 255))"),
+                (
+                    "backgroundImage",
+                    "linear-gradient(90deg, rgb(255, 0, 255), rgb(0, 255, 255))",
+                ),
                 ("webkitBackgroundClip", "text"),
                 ("backgroundClip", "text"),
                 ("fontSize", "48px"),
@@ -4701,7 +5214,10 @@ mod page_level_form_tests {
         d.set_styles(
             h2,
             &[
-                ("backgroundImage", "linear-gradient(rgb(14, 15, 18) 0%, rgb(14, 15, 18) 53%)"),
+                (
+                    "backgroundImage",
+                    "linear-gradient(rgb(14, 15, 18) 0%, rgb(14, 15, 18) 53%)",
+                ),
                 ("webkitBackgroundClip", "text"),
                 ("backgroundClip", "text"),
                 ("fontSize", "48px"),
@@ -4755,7 +5271,10 @@ mod page_level_form_tests {
         d.set_styles(
             ghost,
             &[
-                ("backgroundImage", "linear-gradient(90deg, rgb(0, 0, 0), rgb(0, 0, 0))"),
+                (
+                    "backgroundImage",
+                    "linear-gradient(90deg, rgb(0, 0, 0), rgb(0, 0, 0))",
+                ),
                 ("webkitBackgroundClip", "text"),
                 ("backgroundClip", "text"),
                 ("opacity", "0"),
@@ -4780,7 +5299,11 @@ mod page_level_form_tests {
         let pop = d.add(Some(body), "div");
         d.add_selector(pop, ".pop");
         d.set_rect(pop, 0.0, 40.0, 120.0, 40.0);
-        d.set_style(pop, "transitionTimingFunction", "cubic-bezier(0.34, 1.3, 0.64, 1)");
+        d.set_style(
+            pop,
+            "transitionTimingFunction",
+            "cubic-bezier(0.34, 1.3, 0.64, 1)",
+        );
         assert_eq!(
             details(&scan(&d), "bounce-easing"),
             vec![
@@ -4848,17 +5371,26 @@ mod page_level_form_tests {
         let frames = || {
             vec![
                 crate::browser::dom::KeyframeFrame {
-                    decls: vec![("box-shadow".to_string(), "rgba(153, 193, 152, 0) 0px 0px 0px".to_string())],
+                    decls: vec![(
+                        "box-shadow".to_string(),
+                        "rgba(153, 193, 152, 0) 0px 0px 0px".to_string(),
+                    )],
                 },
                 crate::browser::dom::KeyframeFrame {
-                    decls: vec![("box-shadow".to_string(), "rgba(153, 193, 152, 0.35) 0px 0px 14px".to_string())],
+                    decls: vec![(
+                        "box-shadow".to_string(),
+                        "rgba(153, 193, 152, 0.35) 0px 0px 14px".to_string(),
+                    )],
                 },
             ]
         };
 
         // Keyframes the probe cannot read: the text decides, as before.
         let (d, body) = page(style);
-        assert_eq!(details(&scan(&d), "dark-glow"), vec![(body, reported.clone())]);
+        assert_eq!(
+            details(&scan(&d), "dark-glow"),
+            vec![(body, reported.clone())]
+        );
 
         // Readable keyframes that no element runs.
         let (mut d, _body) = page(style);
@@ -4878,13 +5410,18 @@ mod page_level_form_tests {
         let button = d.add(Some(body), "a");
         d.set_style(button, "animationName", "spin, cart-breathe");
         d.set_rect(button, 0.0, 0.0, 40.0, 40.0);
-        assert_eq!(details(&scan(&d), "dark-glow"), vec![(body, reported.clone())]);
+        assert_eq!(
+            details(&scan(&d), "dark-glow"),
+            vec![(body, reported.clone())]
+        );
 
         // Another animation's keyframes do not carry the glow.
         let (mut d, body) = page(style);
         d.keyframes.insert(
             "cart-breathe".to_string(),
-            vec![crate::browser::dom::KeyframeFrame { decls: vec![("opacity".to_string(), "0.5".to_string())] }],
+            vec![crate::browser::dom::KeyframeFrame {
+                decls: vec![("opacity".to_string(), "0.5".to_string())],
+            }],
         );
         assert_eq!(details(&scan(&d), "dark-glow"), vec![(body, reported)]);
     }
@@ -4893,7 +5430,10 @@ mod page_level_form_tests {
     fn dark_page_is_read_off_the_painted_root() {
         // A glow in a keyframe step names no rule, so only the page decides.
         let style = ".player{background-color:#000}@keyframes lift{50%{box-shadow:0 8px 24px rgba(99,102,241,.6)}}";
-        let on_dark = vec![(0, "Colored box-shadow glow (#6366f1) on dark page".to_string())];
+        let on_dark = [(
+            0,
+            "Colored box-shadow glow (#6366f1) on dark page".to_string(),
+        )];
         let with_body = |body: ElId| -> Vec<(ElId, String)> {
             on_dark.iter().map(|(_, s)| (body, s.clone())).collect()
         };
@@ -4918,7 +5458,10 @@ mod page_level_form_tests {
         let (mut d, body) = page(style);
         d.set_styles(
             body,
-            &[("backgroundColor", "rgb(255, 255, 255)"), ("backgroundImage", "url(\"a.png\")")],
+            &[
+                ("backgroundColor", "rgb(255, 255, 255)"),
+                ("backgroundImage", "url(\"a.png\")"),
+            ],
         );
         assert_eq!(painted_root_is_dark(&d), None);
     }
@@ -4953,7 +5496,10 @@ mod page_level_form_tests {
         let hero = d.add(Some(body), "section");
         d.add_selector(hero, ".hero");
         d.set_rect(hero, 0.0, 0.0, 1280.0, 600.0);
-        assert_eq!(details(&scan(&d), "radial-halo"), vec![(body, reported.clone())]);
+        assert_eq!(
+            details(&scan(&d), "radial-halo"),
+            vec![(body, reported.clone())]
+        );
 
         // Light root, but the halo sits in a near-black band: a dark surface.
         let (mut d, body) = page(&format!(".band{{background:#040406}}{halo}"));
@@ -4990,13 +5536,24 @@ mod page_level_form_tests {
             let (_html, body) = d.with_page();
             let badge = d.add(Some(body), "span");
             d.set_rect(badge, 20.0, 20.0, 80.0, 80.0);
-            d.set_style(badge, "backgroundImage", "radial-gradient(circle, rgb(124, 106, 247) 0%, rgb(60, 40, 200) 100%)");
+            d.set_style(
+                badge,
+                "backgroundImage",
+                "radial-gradient(circle, rgb(124, 106, 247) 0%, rgb(60, 40, 200) 100%)",
+            );
             let orb = d.add(Some(body), "div");
             d.set_rect(orb, 100.0, 40.0, 700.0, 700.0);
             d.set_style(orb, "backgroundImage", gradient);
             assert_eq!(page_form_anchor(&d, "radial-halo", detail), Some(orb));
         }
-        assert_eq!(page_form_anchor(&d, "radial-halo", "radial-gradient halo (#ffb27a → transparent) on dark page"), None);
+        assert_eq!(
+            page_form_anchor(
+                &d,
+                "radial-halo",
+                "radial-gradient halo (#ffb27a → transparent) on dark page"
+            ),
+            None
+        );
         assert_eq!(page_form_anchor(&d, "gradient-text", detail), None);
 
         // A hard ring in the glow's colour, earlier on the page, is an
@@ -5004,12 +5561,23 @@ mod page_level_form_tests {
         let ringed = d.add(Some(body), "input");
         d.set_rect(ringed, 400.0, 480.0, 176.0, 40.0);
         d.set_style(ringed, "boxShadow", "rgb(124, 106, 247) 0px 0px 0px 1px");
-        assert_eq!(page_form_anchor(&d, "dark-glow", "Zero-offset box-shadow glow (#7c6af7) on dark page"), None);
+        assert_eq!(
+            page_form_anchor(
+                &d,
+                "dark-glow",
+                "Zero-offset box-shadow glow (#7c6af7) on dark page"
+            ),
+            None
+        );
         let button = d.add(Some(body), "a");
         d.set_rect(button, 400.0, 560.0, 176.0, 56.0);
         d.set_style(button, "boxShadow", "rgb(124, 106, 247) 0px 0px 24px 0px");
         assert_eq!(
-            page_form_anchor(&d, "dark-glow", "Zero-offset box-shadow glow (#7c6af7) on dark page"),
+            page_form_anchor(
+                &d,
+                "dark-glow",
+                "Zero-offset box-shadow glow (#7c6af7) on dark page"
+            ),
             Some(button)
         );
     }
@@ -5040,9 +5608,16 @@ mod page_level_form_tests {
         let blob = d.add(Some(body), "div");
         d.set_rect(blob, 0.0, 300.0, 600.0, 400.0);
         d.set_style(blob, "clipPath", blob_clip);
-        assert_eq!(page_form_anchor(&d, "organic-clip-path", organic), Some(blob));
         assert_eq!(
-            page_form_anchor(&d, "organic-clip-path", "clip-path: polygon() with 9 vertices approximating an organic contour"),
+            page_form_anchor(&d, "organic-clip-path", organic),
+            Some(blob)
+        );
+        assert_eq!(
+            page_form_anchor(
+                &d,
+                "organic-clip-path",
+                "clip-path: polygon() with 9 vertices approximating an organic contour"
+            ),
             None
         );
 
@@ -5051,17 +5626,31 @@ mod page_level_form_tests {
         let (_html, body) = d.with_page();
         let eased = d.add(Some(body), "a");
         d.set_rect(eased, 20.0, 20.0, 120.0, 40.0);
-        d.set_style(eased, "transitionTimingFunction", "ease, cubic-bezier(0.25, 0.1, 0.25, 1)");
+        d.set_style(
+            eased,
+            "transitionTimingFunction",
+            "ease, cubic-bezier(0.25, 0.1, 0.25, 1)",
+        );
         assert_eq!(page_form_anchor(&d, "bounce-easing", bounce), None);
         let card = d.add(Some(body), "div");
         d.set_rect(card, 20.0, 100.0, 300.0, 200.0);
-        d.set_style(card, "transitionTimingFunction", "ease, cubic-bezier(0.175, 0.885, 0.32, 1.275)");
+        d.set_style(
+            card,
+            "transitionTimingFunction",
+            "ease, cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+        );
         assert_eq!(page_form_anchor(&d, "bounce-easing", bounce), Some(card));
         let dot = d.add(Some(body), "span");
         d.set_rect(dot, 400.0, 100.0, 16.0, 16.0);
         d.set_style(dot, "animationName", "fade, Bounce");
-        assert_eq!(page_form_anchor(&d, "bounce-easing", "animation: bounce"), Some(dot));
-        assert_eq!(page_form_anchor(&d, "bounce-easing", "animation: wobble"), None);
+        assert_eq!(
+            page_form_anchor(&d, "bounce-easing", "animation: bounce"),
+            Some(dot)
+        );
+        assert_eq!(
+            page_form_anchor(&d, "bounce-easing", "animation: wobble"),
+            None
+        );
     }
 
     #[test]
@@ -5097,7 +5686,8 @@ mod page_level_form_tests {
     fn a_halo_no_lighter_than_its_surface_is_a_vignette() {
         // weborama.com: a dark green wash on a dark green band of a light page.
         let build = |band_fill: &str| {
-            let halo = ".wash{background:radial-gradient(circle at 50% 0%,#012d2a 0%,transparent 70%)}";
+            let halo =
+                ".wash{background:radial-gradient(circle at 50% 0%,#012d2a 0%,transparent 70%)}";
             let (mut d, body) = page(&format!(".band{{background:#0f3d38}}{halo}"));
             d.set_style(body, "backgroundColor", "rgb(255, 255, 255)");
             let band = d.add(Some(body), "section");
@@ -5115,7 +5705,10 @@ mod page_level_form_tests {
         let (d, body) = build("rgb(0, 0, 0)");
         assert_eq!(
             details(&scan(&d), "radial-halo"),
-            vec![(body, "radial-gradient halo (#012d2a → transparent) on dark page".to_string())]
+            vec![(
+                body,
+                "radial-gradient halo (#012d2a → transparent) on dark page".to_string()
+            )]
         );
     }
 
@@ -5158,7 +5751,10 @@ mod page_level_form_tests {
         let logos = d.add(Some(band), "div");
         d.add_selector(logos, ".logos");
         d.add_text(logos, "Acme Globex Initech");
-        let snippets: Vec<String> = details(&scan(&d), "marquee").into_iter().map(|(_, s)| s).collect();
+        let snippets: Vec<String> = details(&scan(&d), "marquee")
+            .into_iter()
+            .map(|(_, s)| s)
+            .collect();
         assert_eq!(
             snippets,
             vec![
@@ -5193,7 +5789,11 @@ mod page_level_form_tests {
         // The usual seamless loop draws the path once and tiles it with `use`.
         let _tile = d.add(Some(wave), "use");
         // Labels the drawing carries hidden paint nothing either.
-        for (prop, value) in [("display", "none"), ("visibility", "hidden"), ("opacity", "0")] {
+        for (prop, value) in [
+            ("display", "none"),
+            ("visibility", "hidden"),
+            ("opacity", "0"),
+        ] {
             let hidden = d.add(Some(wave), "text");
             d.set_style(hidden, prop, value);
             d.add_text(hidden, "Hidden label");
@@ -5213,7 +5813,10 @@ mod page_level_form_tests {
                 }
                 "svg" => {
                     let logo = d.add(Some(track), "svg");
-                    d.add_selector(logo, "img, picture, video, canvas, iframe, object, embed, svg, image, use");
+                    d.add_selector(
+                        logo,
+                        "img, picture, video, canvas, iframe, object, embed, svg, image, use",
+                    );
                 }
                 _ => {
                     let tile = d.add(Some(track), "div");
@@ -5221,7 +5824,10 @@ mod page_level_form_tests {
                     d.set_style(tile, "backgroundImage", "url(\"logo.png\")");
                 }
             }
-            let snippets: Vec<String> = details(&scan(&d), "marquee").into_iter().map(|(_, s)| s).collect();
+            let snippets: Vec<String> = details(&scan(&d), "marquee")
+                .into_iter()
+                .map(|(_, s)| s)
+                .collect();
             assert_eq!(
                 snippets,
                 vec![".wave — infinite horizontal loop animation \"wave\"".to_string()],
@@ -5259,7 +5865,10 @@ mod page_level_form_tests {
                 }
             }
             let out = scan(&d);
-            let mut all: Vec<String> = details(&out, "side-tab").into_iter().map(|(_, s)| s).collect();
+            let mut all: Vec<String> = details(&out, "side-tab")
+                .into_iter()
+                .map(|(_, s)| s)
+                .collect();
             all.sort();
             all
         };

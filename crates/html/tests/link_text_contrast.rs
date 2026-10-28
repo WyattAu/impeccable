@@ -45,7 +45,10 @@ fn fixture_flags_every_should_flag_case() {
         ("link in a row a media query hides on phones", "#8e8e8e"),
         ("link on a white card over a hero photo", "#939393"),
         ("link on a white section with a texture tile", "#969696"),
-        ("paragraph in a [hidden] panel author CSS reveals", "#8c8c8c"),
+        (
+            "paragraph in a [hidden] panel author CSS reveals",
+            "#8c8c8c",
+        ),
         ("link inside a <map>", "#919191"),
         ("link with its own external-link icon", "#979797"),
         ("link in a list item with an arrow bullet image", "#989898"),
@@ -186,7 +189,9 @@ body { background: #ffffff; }
         "{snippets:?}"
     );
     assert!(
-        !snippets.iter().any(|s| s.contains("#a1a1a1") || s.contains("#a2a2a2")),
+        !snippets
+            .iter()
+            .any(|s| s.contains("#a1a1a1") || s.contains("#a2a2a2")),
         "{snippets:?}"
     );
 }
@@ -367,7 +372,11 @@ p.near { color: #fdfdfd; font-size: 14px; }
 <body><a class="ghost" href="/x">Invisible link</a><p class="ghost">Invisible paragraph</p><p class="near">Nearly invisible paragraph</p></body></html>
 "#;
     let snippets = low_contrast_snippets(html, Path::new("/tmp/ghost.html"));
-    assert_eq!(snippets.len(), 1, "only the near-white paragraph reports: {snippets:?}");
+    assert_eq!(
+        snippets.len(),
+        1,
+        "only the near-white paragraph reports: {snippets:?}"
+    );
     assert!(snippets[0].contains("#fdfdfd on #ffffff"), "{snippets:?}");
 }
 
@@ -544,17 +553,27 @@ fn a_stretched_photo_beside_the_content_is_under_the_text() {
         "<section class=\"hero\"><div class=\"media\"><div class=\"frame\"><img class=\"photo\" src=\"{PHOTO}\"></div></div>\
          <div class=\"content\"><a class=\"o\" href=\"#\">Orange link over a wrapped photo</a></div></section>"
     );
-    assert!(hero_page(css, &wrapped).is_empty(), "{:?}", hero_page(css, &wrapped));
+    assert!(
+        hero_page(css, &wrapped).is_empty(),
+        "{:?}",
+        hero_page(css, &wrapped)
+    );
     // The photo after the content, laid beneath it by z-index.
     let later = format!(
         "<section class=\"hero\"><div class=\"content\"><a class=\"o\" href=\"#\">Orange link over a later photo</a></div>\
          <img class=\"photo\" style=\"z-index: -1\" src=\"{PHOTO}\"></section>"
     );
-    assert!(hero_page(css, &later).is_empty(), "{:?}", hero_page(css, &later));
+    assert!(
+        hero_page(css, &later).is_empty(),
+        "{:?}",
+        hero_page(css, &later)
+    );
     // Control: no photo, and the page's white is the surface.
     let bare = "<section class=\"hero\"><div class=\"content\"><a class=\"o\" href=\"#\">Orange link on the page</a></div></section>";
     assert!(
-        hero_page(css, bare).iter().any(|s| s.contains("#f37b2e on #ffffff")),
+        hero_page(css, bare)
+            .iter()
+            .any(|s| s.contains("#f37b2e on #ffffff")),
         "{:?}",
         hero_page(css, bare)
     );
@@ -566,7 +585,11 @@ fn a_photo_drawn_by_a_pseudo_element_is_under_the_text() {
                .hero::before { content: \"\"; position: absolute; inset: 0; background: url(\"hero.jpg\") center / cover no-repeat; } \
                .content { position: relative; padding: 150px 100px; }";
     let body = "<section class=\"hero\"><div class=\"content\"><a class=\"o\" href=\"#\">Orange link over a pseudo photo</a></div></section>";
-    assert!(hero_page(css, body).is_empty(), "{:?}", hero_page(css, body));
+    assert!(
+        hero_page(css, body).is_empty(),
+        "{:?}",
+        hero_page(css, body)
+    );
 }
 
 #[test]
@@ -581,7 +604,9 @@ fn a_photo_sized_to_part_of_its_block_is_not_under_the_whole_run() {
          <div class=\"content\"><a class=\"o\" href=\"#\">Orange link half over a picture</a></div></section>"
     );
     assert!(
-        hero_page(css, &body).iter().any(|s| s.contains("#f37b2e on #ffffff")),
+        hero_page(css, &body)
+            .iter()
+            .any(|s| s.contains("#f37b2e on #ffffff")),
         "{:?}",
         hero_page(css, &body)
     );
@@ -600,7 +625,10 @@ fn an_opaque_card_over_the_photo_is_still_the_surface() {
          <div class=\"glass\"><a class=\"g2\" href=\"#\">Glass card link</a></div></section>"
     );
     let snippets = hero_page(css, &body);
-    assert!(snippets.iter().any(|s| s.contains("#949494 on #ffffff")), "{snippets:?}");
+    assert!(
+        snippets.iter().any(|s| s.contains("#949494 on #ffffff")),
+        "{snippets:?}"
+    );
     assert!(
         !snippets.iter().any(|s| s.contains("#959595")),
         "translucent glass over a photo is not a surface this can name, {snippets:?}"
@@ -620,8 +648,14 @@ fn an_icon_beside_the_text_does_not_hide_its_surface() {
                 <ul class=\"arrows\"><li><a class=\"m6\" href=\"#\">Grey link in a list item with an arrow bullet</a></li></ul>\
                 <p><a class=\"photo-link\" href=\"#\">Grey link over its own remote image</a></p>";
     let snippets = hero_page(&css, body);
-    assert!(snippets.iter().any(|s| s.contains("#9f9f9f on #ffffff")), "{snippets:?}");
-    assert!(snippets.iter().any(|s| s.contains("#9e9e9e on #ffffff")), "{snippets:?}");
+    assert!(
+        snippets.iter().any(|s| s.contains("#9f9f9f on #ffffff")),
+        "{snippets:?}"
+    );
+    assert!(
+        snippets.iter().any(|s| s.contains("#9e9e9e on #ffffff")),
+        "{snippets:?}"
+    );
     assert!(
         !snippets.iter().any(|s| s.contains("#9d9d9d")),
         "a remote image has no size this engine can read, {snippets:?}"
@@ -640,7 +674,9 @@ fn a_photo_stretched_over_another_section_is_not_under_the_text() {
          <section class=\"plain\"><div><a class=\"lnk2\" href=\"#\">Control link on page white</a></div></section>"
     );
     assert!(
-        hero_page(css, &body).iter().any(|s| s.contains("#9c9c9c on #ffffff")),
+        hero_page(css, &body)
+            .iter()
+            .any(|s| s.contains("#9c9c9c on #ffffff")),
         "{:?}",
         hero_page(css, &body)
     );

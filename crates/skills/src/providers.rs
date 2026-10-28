@@ -8,8 +8,24 @@ use crate::util::{self, jsp, Env};
 pub const API_BASE: &str = "https://impeccable.style";
 
 pub const PROVIDER_DIRS: &[&str] = &[
-    ".claude", ".cursor", ".dsh", ".gemini", ".agents", ".agent", ".github", ".grok", ".hermes", ".kiro",
-    ".opencode", ".pi", ".omp", ".qoder", ".trae", ".trae-cn", ".rovodev", ".vibe",
+    ".claude",
+    ".cursor",
+    ".dsh",
+    ".gemini",
+    ".agents",
+    ".agent",
+    ".github",
+    ".grok",
+    ".hermes",
+    ".kiro",
+    ".opencode",
+    ".pi",
+    ".omp",
+    ".qoder",
+    ".trae",
+    ".trae-cn",
+    ".rovodev",
+    ".vibe",
 ];
 
 const PROVIDER_ALIASES: &[(&str, &str)] = &[
@@ -65,8 +81,24 @@ const PROVIDER_DISPLAY: &[(&str, &str, &str)] = &[
 ];
 
 pub const PROVIDER_INPUT_ORDER: &[&str] = &[
-    "antigravity", "claude", "codex", "cursor", "dsh", "gemini", "github", "grok", "hermes", "kiro",
-    "opencode", "pi", "omp", "qoder", "trae", "trae-cn", "rovo-dev", "vibe",
+    "antigravity",
+    "claude",
+    "codex",
+    "cursor",
+    "dsh",
+    "gemini",
+    "github",
+    "grok",
+    "hermes",
+    "kiro",
+    "opencode",
+    "pi",
+    "omp",
+    "qoder",
+    "trae",
+    "trae-cn",
+    "rovo-dev",
+    "vibe",
 ];
 
 pub const DEFAULT_TARGETS: &[&str] = &[".claude", ".agents"];
@@ -123,13 +155,19 @@ fn home_skills_dir_override(env: &Env, cwd: &str, provider: &str, home: &str) ->
         ".hermes" => Some(jsp::join(&[&hermes_global_home(env, cwd, home), "skills"])),
         ".pi" => Some(jsp::join(&[home, ".pi", "agent", "skills"])),
         ".omp" => Some(jsp::join(&[home, ".omp", "agent", "skills"])),
-        ".opencode" => Some(jsp::join(&[&opencode_global_config_dir(env, home), "skills"])),
+        ".opencode" => Some(jsp::join(&[
+            &opencode_global_config_dir(env, home),
+            "skills",
+        ])),
         _ => None,
     }
 }
 
 fn has_home_override(provider: &str) -> bool {
-    matches!(provider, ".agent" | ".dsh" | ".hermes" | ".pi" | ".omp" | ".opencode")
+    matches!(
+        provider,
+        ".agent" | ".dsh" | ".hermes" | ".pi" | ".omp" | ".opencode"
+    )
 }
 
 /// Everything the scans need from the process: env, cwd, and the resolved
@@ -165,7 +203,12 @@ impl Sys {
     }
 
     /// JS: providerSkillsDirCandidates(root, provider, scope)
-    pub fn provider_skills_dir_candidates(&self, root: &str, provider: &str, scope: Option<Scope>) -> Vec<String> {
+    pub fn provider_skills_dir_candidates(
+        &self,
+        root: &str,
+        provider: &str,
+        scope: Option<Scope>,
+    ) -> Vec<String> {
         if scope == Some(Scope::User) {
             return vec![self.user_provider_skills_dir(root, provider)];
         }
@@ -177,7 +220,12 @@ impl Sys {
     }
 
     /// JS: existingSkillsDirs(root, provider, scope)
-    pub fn existing_skills_dirs(&self, root: &str, provider: &str, scope: Option<Scope>) -> Vec<String> {
+    pub fn existing_skills_dirs(
+        &self,
+        root: &str,
+        provider: &str,
+        scope: Option<Scope>,
+    ) -> Vec<String> {
         self.provider_skills_dir_candidates(root, provider, scope)
             .into_iter()
             .filter(|d| util::exists(d))
@@ -209,7 +257,9 @@ impl Sys {
                 if !util::exists(&skill_md) {
                     continue;
                 }
-                let Ok(content) = util::read_text(&skill_md) else { continue };
+                let Ok(content) = util::read_text(&skill_md) else {
+                    continue;
+                };
                 if let Some(v) = extract_version(&content) {
                     return Some(v);
                 }
@@ -238,7 +288,9 @@ impl Sys {
         let mut migrated = 0;
         for d in PROVIDER_DIRS {
             for skills_dir in self.existing_skills_dirs(root, d, scope) {
-                let Some(entries) = util::read_dir_names(&skills_dir) else { continue };
+                let Some(entries) = util::read_dir_names(&skills_dir) else {
+                    continue;
+                };
                 for name in entries {
                     if name == "impeccable" || name == "teach-impeccable" {
                         continue;
@@ -281,7 +333,9 @@ impl Sys {
         let mut found = Vec::new();
         for d in PROVIDER_DIRS {
             for skills_dir in self.existing_skills_dirs(root, d, scope) {
-                let Some(entries) = util::read_dir_names(&skills_dir) else { continue };
+                let Some(entries) = util::read_dir_names(&skills_dir) else {
+                    continue;
+                };
                 if entries.iter().any(|e| is_impeccable_skill_name(e)) {
                     found.push(*d);
                     break;
@@ -292,7 +346,12 @@ impl Sys {
     }
 
     /// JS: findLinkedProviders(root, providers, scope)
-    pub fn find_linked_providers<'a>(&self, root: &str, providers: &[&'a str], scope: Option<Scope>) -> Vec<&'a str> {
+    pub fn find_linked_providers<'a>(
+        &self,
+        root: &str,
+        providers: &[&'a str],
+        scope: Option<Scope>,
+    ) -> Vec<&'a str> {
         providers
             .iter()
             .copied()
@@ -306,7 +365,12 @@ impl Sys {
 
     /// JS: deduplicateProviders(root, providers, scope): one entry per unique
     /// real skills path.
-    pub fn deduplicate_providers<'a>(&self, root: &str, providers: &[&'a str], scope: Option<Scope>) -> Vec<(&'a str, String)> {
+    pub fn deduplicate_providers<'a>(
+        &self,
+        root: &str,
+        providers: &[&'a str],
+        scope: Option<Scope>,
+    ) -> Vec<(&'a str, String)> {
         let mut seen: Vec<String> = Vec::new();
         let mut out = Vec::new();
         for provider in providers {
@@ -378,7 +442,11 @@ impl Sys {
     }
 
     /// JS: resolveInstallTargets(root, providersValue)
-    pub fn resolve_install_targets(&self, root: &str, providers_value: Option<&str>) -> Vec<&'static str> {
+    pub fn resolve_install_targets(
+        &self,
+        root: &str,
+        providers_value: Option<&str>,
+    ) -> Vec<&'static str> {
         if let Some(v) = providers_value {
             return parse_provider_list(v).0;
         }
@@ -390,7 +458,11 @@ impl Sys {
     }
 
     /// JS: resolveUpdateTarget({projectRoot, home, explicitScope})
-    pub fn resolve_update_target(&self, project_root: &str, explicit_scope: Option<Scope>) -> Option<UpdateTarget> {
+    pub fn resolve_update_target(
+        &self,
+        project_root: &str,
+        explicit_scope: Option<Scope>,
+    ) -> Option<UpdateTarget> {
         let home = self.home.clone();
         let home_rooted = self.is_home_dir(project_root);
         if home_rooted && explicit_scope.is_none() {
@@ -401,7 +473,13 @@ impl Sys {
                 // JS: agentScope 'user' — the skill scope stays inferred, but
                 // agent freshness and refresh must target the user agent dirs
                 // (upstream d2a9efb9).
-                Some(UpdateTarget::Resolved { root: home, scope: None, agent_scope: Some(Scope::User), providers, scope_label: "user level" })
+                Some(UpdateTarget::Resolved {
+                    root: home,
+                    scope: None,
+                    agent_scope: Some(Scope::User),
+                    providers,
+                    scope_label: "user level",
+                })
             };
         }
         let project_providers = if home_rooted {
@@ -415,26 +493,53 @@ impl Sys {
                 return if user_providers.is_empty() {
                     None
                 } else {
-                    Some(UpdateTarget::Resolved { root: home, scope: Some(Scope::User), agent_scope: Some(Scope::User), providers: user_providers, scope_label: "user level" })
+                    Some(UpdateTarget::Resolved {
+                        root: home,
+                        scope: Some(Scope::User),
+                        agent_scope: Some(Scope::User),
+                        providers: user_providers,
+                        scope_label: "user level",
+                    })
                 };
             }
             Some(Scope::Project) => {
                 return if project_providers.is_empty() {
                     None
                 } else {
-                    Some(UpdateTarget::Resolved { root: project_root.to_string(), scope: Some(Scope::Project), agent_scope: Some(Scope::Project), providers: project_providers, scope_label: "this project" })
+                    Some(UpdateTarget::Resolved {
+                        root: project_root.to_string(),
+                        scope: Some(Scope::Project),
+                        agent_scope: Some(Scope::Project),
+                        providers: project_providers,
+                        scope_label: "this project",
+                    })
                 };
             }
             None => {}
         }
         if !project_providers.is_empty() && !user_providers.is_empty() {
-            return Some(UpdateTarget::Ambiguous { project_providers, user_providers });
+            return Some(UpdateTarget::Ambiguous {
+                project_providers,
+                user_providers,
+            });
         }
         if !project_providers.is_empty() {
-            return Some(UpdateTarget::Resolved { root: project_root.to_string(), scope: Some(Scope::Project), agent_scope: Some(Scope::Project), providers: project_providers, scope_label: "this project" });
+            return Some(UpdateTarget::Resolved {
+                root: project_root.to_string(),
+                scope: Some(Scope::Project),
+                agent_scope: Some(Scope::Project),
+                providers: project_providers,
+                scope_label: "this project",
+            });
         }
         if !user_providers.is_empty() {
-            return Some(UpdateTarget::Resolved { root: home, scope: Some(Scope::User), agent_scope: Some(Scope::User), providers: user_providers, scope_label: "user level" });
+            return Some(UpdateTarget::Resolved {
+                root: home,
+                scope: Some(Scope::User),
+                agent_scope: Some(Scope::User),
+                providers: user_providers,
+                scope_label: "user level",
+            });
         }
         None
     }
@@ -444,8 +549,17 @@ pub enum UpdateTarget {
     /// `agent_scope` is the JS `agentScope = scope` default made explicit:
     /// identical to `scope` everywhere except the home-rooted implicit
     /// branch, which infers 'user' for the agent artifacts (d2a9efb9).
-    Resolved { root: String, scope: Option<Scope>, agent_scope: Option<Scope>, providers: Vec<&'static str>, scope_label: &'static str },
-    Ambiguous { project_providers: Vec<&'static str>, user_providers: Vec<&'static str> },
+    Resolved {
+        root: String,
+        scope: Option<Scope>,
+        agent_scope: Option<Scope>,
+        providers: Vec<&'static str>,
+        scope_label: &'static str,
+    },
+    Ambiguous {
+        project_providers: Vec<&'static str>,
+        user_providers: Vec<&'static str>,
+    },
 }
 
 enum Hint {
@@ -523,7 +637,10 @@ fn unique_paths(paths: Vec<String>) -> Vec<String> {
 
 /// `e === 'impeccable' || e.endsWith('-impeccable') || e === 'teach-impeccable' || e.endsWith('-teach-impeccable')`
 fn is_impeccable_skill_name(e: &str) -> bool {
-    e == "impeccable" || e.ends_with("-impeccable") || e == "teach-impeccable" || e.ends_with("-teach-impeccable")
+    e == "impeccable"
+        || e.ends_with("-impeccable")
+        || e == "teach-impeccable"
+        || e.ends_with("-teach-impeccable")
 }
 
 /// JS: isSkillDir(skillsDir, name)
@@ -537,9 +654,13 @@ pub fn has_real_skill_entries(skills_dir: &str) -> bool {
     if !util::exists(skills_dir) {
         return false;
     }
-    let Some(entries) = util::read_dir_names(skills_dir) else { return false };
+    let Some(entries) = util::read_dir_names(skills_dir) else {
+        return false;
+    };
     entries.iter().any(|name| {
-        !name.starts_with('.') && !IGNORED_SKILL_DIR_NAMES.contains(&name.as_str()) && is_skill_dir(skills_dir, name)
+        !name.starts_with('.')
+            && !IGNORED_SKILL_DIR_NAMES.contains(&name.as_str())
+            && is_skill_dir(skills_dir, name)
     })
 }
 
@@ -568,7 +689,10 @@ fn extract_version(content: &str) -> Option<String> {
         if trimmed_start.is_empty() || trimmed_start.starts_with('#') {
             continue;
         }
-        let indent_text: String = line.chars().take_while(|c| *c == ' ' || *c == '\t').collect();
+        let indent_text: String = line
+            .chars()
+            .take_while(|c| *c == ' ' || *c == '\t')
+            .collect();
         // JS `indentText.replace(/\t/g, '  ').length`.
         let indent = indent_text.replace('\t', "  ").chars().count();
 
@@ -614,7 +738,9 @@ fn extract_version(content: &str) -> Option<String> {
 fn frontmatter_body(content: &str) -> Option<&str> {
     let rest = content.strip_prefix("---")?;
     let rest = rest.trim_start_matches([' ', '\t']);
-    let rest = rest.strip_prefix("\r\n").or_else(|| rest.strip_prefix('\n'))?;
+    let rest = rest
+        .strip_prefix("\r\n")
+        .or_else(|| rest.strip_prefix('\n'))?;
     let mut from = 0usize;
     while let Some(idx) = rest[from..].find("\n---") {
         let at = from + idx;
@@ -631,7 +757,9 @@ fn frontmatter_body(content: &str) -> Option<&str> {
 
 /// JS `/^metadata:\s*(?:#.*)?$/`.
 fn is_metadata_key_line(line: &str) -> bool {
-    let Some(rest) = line.strip_prefix("metadata:") else { return false };
+    let Some(rest) = line.strip_prefix("metadata:") else {
+        return false;
+    };
     let rest = rest.trim_start_matches(|c: char| c.is_whitespace());
     rest.is_empty() || rest.starts_with('#')
 }
@@ -673,7 +801,10 @@ pub fn normalize_provider_name(value: &str) -> Option<&'static str> {
         return Some(p);
     }
     let key = raw.strip_prefix('.').unwrap_or(raw).to_lowercase();
-    PROVIDER_ALIASES.iter().find(|(k, _)| *k == key).map(|(_, v)| *v)
+    PROVIDER_ALIASES
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map(|(_, v)| *v)
 }
 
 /// JS: parseProviderList(value) -> (providers, invalid)
@@ -713,7 +844,11 @@ pub fn provider_display_name(provider: &str) -> String {
 
 /// JS: formatProviderList(providers)
 pub fn format_provider_list(providers: &[&str]) -> String {
-    providers.iter().map(|p| provider_input_name(p)).collect::<Vec<_>>().join(", ")
+    providers
+        .iter()
+        .map(|p| provider_input_name(p))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// JS: formatPathForDisplay(path, home)
@@ -740,12 +875,18 @@ pub fn unique_providers(detections: &[&Detection]) -> Vec<&'static str> {
 
 /// JS: defaultDetectedProviders(detections)
 pub fn default_detected_providers(detections: &[Detection]) -> Vec<&'static str> {
-    let project: Vec<&Detection> = detections.iter().filter(|d| d.scope == Scope::Project).collect();
+    let project: Vec<&Detection> = detections
+        .iter()
+        .filter(|d| d.scope == Scope::Project)
+        .collect();
     let project_providers = unique_providers(&project);
     if !project_providers.is_empty() {
         return project_providers;
     }
-    let user: Vec<&Detection> = detections.iter().filter(|d| d.scope == Scope::User).collect();
+    let user: Vec<&Detection> = detections
+        .iter()
+        .filter(|d| d.scope == Scope::User)
+        .collect();
     unique_providers(&user)
 }
 
@@ -775,10 +916,16 @@ pub fn get_install_scope_value(flags: &[String]) -> Option<String> {
 
 /// JS: defaultInstallScope(detections, providers)
 pub fn default_install_scope(detections: &[Detection], providers: &[&str]) -> Scope {
-    if detections.iter().any(|d| providers.contains(&d.provider) && d.scope == Scope::Project) {
+    if detections
+        .iter()
+        .any(|d| providers.contains(&d.provider) && d.scope == Scope::Project)
+    {
         return Scope::Project;
     }
-    if detections.iter().any(|d| providers.contains(&d.provider) && d.scope == Scope::User && d.has_real_skills) {
+    if detections
+        .iter()
+        .any(|d| providers.contains(&d.provider) && d.scope == Scope::User && d.has_real_skills)
+    {
         return Scope::User;
     }
     Scope::Project
@@ -805,12 +952,25 @@ mod tests {
         assert_eq!(normalize_provider_name("omp"), Some(".omp"));
         assert_eq!(normalize_provider_name("oh-my-pi"), Some(".omp"));
 
-        let home = if cfg!(windows) { r"C:\Users\u" } else { "/home/u" };
-        let sys = Sys { env: Env::new(), cwd: home.into(), home: home.into() };
+        let home = if cfg!(windows) {
+            r"C:\Users\u"
+        } else {
+            "/home/u"
+        };
+        let sys = Sys {
+            env: Env::new(),
+            cwd: home.into(),
+            home: home.into(),
+        };
 
-        assert_eq!(sys.user_provider_skills_dir(&home, ".omp"), jsp::join(&[&home, ".omp", "agent", "skills"]));
-        assert_eq!(sys.provider_skills_dir_candidates("/project", ".omp", Some(Scope::Project)), vec![jsp::join(&["/project", ".omp", "skills"])]);
-
+        assert_eq!(
+            sys.user_provider_skills_dir(home, ".omp"),
+            jsp::join(&[home, ".omp", "agent", "skills"])
+        );
+        assert_eq!(
+            sys.provider_skills_dir_candidates("/project", ".omp", Some(Scope::Project)),
+            vec![jsp::join(&["/project", ".omp", "skills"])]
+        );
     }
 
     #[test]
@@ -825,7 +985,11 @@ mod tests {
         // Default global skills dir is ~/.dsh/skills; $DSH_HOME wins only
         // when it sits under home, like $HERMES_HOME for .hermes.
         let cwd = if cfg!(windows) { r"C:\work" } else { "/work" };
-        let home = if cfg!(windows) { r"C:\Users\u" } else { "/home/u" };
+        let home = if cfg!(windows) {
+            r"C:\Users\u"
+        } else {
+            "/home/u"
+        };
         let default = jsp::join(&[home, ".dsh"]);
         let custom = jsp::join(&[home, "custom-dsh"]);
         let env = Env::new();
@@ -839,18 +1003,29 @@ mod tests {
 
     #[test]
     fn dsh_home_respects_resolved_path_boundaries() {
-        let home = if cfg!(windows) { r"C:\Users\Test User" } else { "/home/Test User" };
+        let home = if cfg!(windows) {
+            r"C:\Users\Test User"
+        } else {
+            "/home/Test User"
+        };
         let cwd = jsp::join(&[home, "project"]);
         let default = jsp::join(&[home, ".dsh"]);
         for (value, expected) in [
-            ("../custom dsh".to_string(), jsp::join(&[home, "custom dsh"])),
+            (
+                "../custom dsh".to_string(),
+                jsp::join(&[home, "custom dsh"]),
+            ),
             (home.to_string(), home.to_string()),
             (String::new(), default.clone()),
             (format!("{home}-other/dsh"), default.clone()),
             (format!("{home}/../outside"), default),
         ] {
             let env = Env::from([("DSH_HOME".into(), value.clone())]);
-            assert_eq!(dsh_global_home(&env, &cwd, home), expected, "DSH_HOME={value}");
+            assert_eq!(
+                dsh_global_home(&env, &cwd, home),
+                expected,
+                "DSH_HOME={value}"
+            );
         }
         // A drive/filesystem root has no extra separator to append.
         let root = if cfg!(windows) { "C:\\" } else { "/" };
@@ -863,10 +1038,26 @@ mod tests {
     #[test]
     fn dsh_home_handles_windows_case_separators_and_devices() {
         for (home, value, expected) in [
-            (r"C:\Users\Alice", "c:/users/alice/custom", r"c:\users\alice\custom"),
-            (r"C:\Users\Alice", r"D:\Users\Alice\custom", r"C:\Users\Alice\.dsh"),
-            (r"\\server\share\Alice", r"\\server\share\Alice\custom", r"\\server\share\Alice\custom"),
-            (r"\\server\share\Alice", r"\\server\other\Alice\custom", r"\\server\share\Alice\.dsh"),
+            (
+                r"C:\Users\Alice",
+                "c:/users/alice/custom",
+                r"c:\users\alice\custom",
+            ),
+            (
+                r"C:\Users\Alice",
+                r"D:\Users\Alice\custom",
+                r"C:\Users\Alice\.dsh",
+            ),
+            (
+                r"\\server\share\Alice",
+                r"\\server\share\Alice\custom",
+                r"\\server\share\Alice\custom",
+            ),
+            (
+                r"\\server\share\Alice",
+                r"\\server\other\Alice\custom",
+                r"\\server\share\Alice\.dsh",
+            ),
         ] {
             let env = Env::from([("DSH_HOME".into(), value.into())]);
             assert_eq!(dsh_global_home(&env, home, home), expected);
@@ -876,35 +1067,70 @@ mod tests {
     #[test]
     fn version_extraction() {
         // Values recorded from origin/main's parseSkillFrontmatterVersion (#703).
-        assert_eq!(extract_version("---\nname: x\nversion: \"9.9.9\"\n---").as_deref(), Some("9.9.9"));
+        assert_eq!(
+            extract_version("---\nname: x\nversion: \"9.9.9\"\n---").as_deref(),
+            Some("9.9.9")
+        );
         assert_eq!(extract_version("---\nname: x\n---"), None);
-        assert_eq!(extract_version("---\nname: x\nversion: 4.1.3\n---\n\nbody\n").as_deref(), Some("4.1.3"));
-        assert_eq!(extract_version("---\nname: x\nversion: '4.1.3'\n---\n").as_deref(), Some("4.1.3"));
         assert_eq!(
-            extract_version("---\nname: x\nmetadata:\n  version: 4.1.3\n  argument-hint: \"[t]\"\n---\n").as_deref(),
-            Some("4.1.3")
-        );
-        assert_eq!(extract_version("---\nversion: 1.0.0\nmetadata:\n  version: 4.1.3\n---\n").as_deref(), Some("4.1.3"));
-        assert_eq!(
-            extract_version("---\nmetadata:\n  version: 4.1.3\nname: x\nversion: 2.0.0\n---\n").as_deref(),
+            extract_version("---\nname: x\nversion: 4.1.3\n---\n\nbody\n").as_deref(),
             Some("4.1.3")
         );
         assert_eq!(
-            extract_version("---\nmetadata:\n  a:\n    version: 9.9.9\n  version: 4.1.3\n---\n").as_deref(),
+            extract_version("---\nname: x\nversion: '4.1.3'\n---\n").as_deref(),
             Some("4.1.3")
         );
-        assert_eq!(extract_version("---\nmetadata:\n\tversion: 4.1.3\n---\n").as_deref(), Some("4.1.3"));
-        assert_eq!(extract_version("---\nmetadata: # note\n  version: 4.1.3\n---\n").as_deref(), Some("4.1.3"));
-        assert_eq!(extract_version("---\r\nmetadata:\r\n  version: 4.1.3\r\n---\r\n").as_deref(), Some("4.1.3"));
-        assert_eq!(extract_version("---\n# version: 9.9.9\nversion: 4.1.3\n---\n").as_deref(), Some("4.1.3"));
-        assert_eq!(extract_version("---  \nversion: 4.1.3\n---  \n").as_deref(), Some("4.1.3"));
+        assert_eq!(
+            extract_version(
+                "---\nname: x\nmetadata:\n  version: 4.1.3\n  argument-hint: \"[t]\"\n---\n"
+            )
+            .as_deref(),
+            Some("4.1.3")
+        );
+        assert_eq!(
+            extract_version("---\nversion: 1.0.0\nmetadata:\n  version: 4.1.3\n---\n").as_deref(),
+            Some("4.1.3")
+        );
+        assert_eq!(
+            extract_version("---\nmetadata:\n  version: 4.1.3\nname: x\nversion: 2.0.0\n---\n")
+                .as_deref(),
+            Some("4.1.3")
+        );
+        assert_eq!(
+            extract_version("---\nmetadata:\n  a:\n    version: 9.9.9\n  version: 4.1.3\n---\n")
+                .as_deref(),
+            Some("4.1.3")
+        );
+        assert_eq!(
+            extract_version("---\nmetadata:\n\tversion: 4.1.3\n---\n").as_deref(),
+            Some("4.1.3")
+        );
+        assert_eq!(
+            extract_version("---\nmetadata: # note\n  version: 4.1.3\n---\n").as_deref(),
+            Some("4.1.3")
+        );
+        assert_eq!(
+            extract_version("---\r\nmetadata:\r\n  version: 4.1.3\r\n---\r\n").as_deref(),
+            Some("4.1.3")
+        );
+        assert_eq!(
+            extract_version("---\n# version: 9.9.9\nversion: 4.1.3\n---\n").as_deref(),
+            Some("4.1.3")
+        );
+        assert_eq!(
+            extract_version("---  \nversion: 4.1.3\n---  \n").as_deref(),
+            Some("4.1.3")
+        );
         assert_eq!(extract_version("version: 4.1.3\n"), None);
         assert_eq!(extract_version("---\nversion:\n---\n"), None);
     }
 
     #[test]
     fn flag_values() {
-        let flags: Vec<String> = ["--providers=claude", "--scope", "user", "--x"].iter().map(|s| s.to_string()).collect();
+        let flags: Vec<String> = ["--providers=claude", "--scope", "user", "--x"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         assert_eq!(get_flag_value(&flags, "--providers"), Some("claude"));
         assert_eq!(get_flag_value(&flags, "--scope"), Some("user"));
         assert_eq!(get_flag_value(&flags, "--x"), None);

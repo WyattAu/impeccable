@@ -16,7 +16,7 @@ fn normalize_route_target(route: &str) -> Option<String> {
     if !route.starts_with('/') || route.contains("..") {
         return None;
     }
-    let cut = route.split(|c| c == '?' || c == '#').next().unwrap_or("");
+    let cut = route.split(['?', '#']).next().unwrap_or("");
     // collapse //+ -> /
     let mut collapsed = String::with_capacity(cut.len());
     let mut prev_slash = false;
@@ -68,7 +68,11 @@ pub fn normalize_surface_target(target: Option<&str>, project_root: &str) -> Opt
             return normalize_route_target(trimmed);
         }
     }
-    let abs = if jsp::is_absolute(trimmed) { trimmed.to_string() } else { jsp::resolve(project_root, &[trimmed]) };
+    let abs = if jsp::is_absolute(trimmed) {
+        trimmed.to_string()
+    } else {
+        jsp::resolve(project_root, &[trimmed])
+    };
     let rel = jsp::relative(project_root, project_root, &abs);
     if rel.is_empty() || rel == "." || rel.starts_with("..") || jsp::is_absolute(&rel) {
         return None;
@@ -84,17 +88,26 @@ pub fn surface_brief_path_for_target(target: Option<&str>, project_root: &str) -
         None => normalized.clone(),
     };
     let slug = slug_from_target(Some(&slug_input), project_root)?;
-    Some(jsp::join(&[&get_surface_brief_dir(project_root), &format!("{}.md", slug)]))
+    Some(jsp::join(&[
+        &get_surface_brief_dir(project_root),
+        &format!("{}.md", slug),
+    ]))
 }
 
-fn legacy_surface_brief_path_for_target(target: Option<&str>, project_root: &str) -> Option<String> {
+fn legacy_surface_brief_path_for_target(
+    target: Option<&str>,
+    project_root: &str,
+) -> Option<String> {
     let normalized = normalize_surface_target(target, project_root)?;
     let slug_input = match normalized.strip_prefix("route:") {
         Some(rest) => format!("route{}", rest),
         None => normalized.clone(),
     };
     let slug = legacy_slug_from_target(Some(&slug_input), project_root)?;
-    Some(jsp::join(&[&get_surface_brief_dir(project_root), &format!("{}.md", slug)]))
+    Some(jsp::join(&[
+        &get_surface_brief_dir(project_root),
+        &format!("{}.md", slug),
+    ]))
 }
 
 #[derive(Debug, Clone)]
@@ -135,10 +148,9 @@ fn is_json_scalar(raw: &str) -> bool {
 pub fn split_frontmatter(text: &str) -> Option<(String, usize)> {
     let after_open = if let Some(r) = text.strip_prefix("---\r\n") {
         (r, 5)
-    } else if let Some(r) = text.strip_prefix("---\n") {
-        (r, 4)
     } else {
-        return None;
+        let r = text.strip_prefix("---\n")?;
+        (r, 4)
     };
     let (rest, open_len) = after_open;
     // find the earliest "\r?\n---" followed by "\r?\n" or end
@@ -146,7 +158,11 @@ pub fn split_frontmatter(text: &str) -> Option<(String, usize)> {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'\n' && rest[i + 1..].starts_with("---") {
-            let inner_end = if i > 0 && bytes[i - 1] == b'\r' { i - 1 } else { i };
+            let inner_end = if i > 0 && bytes[i - 1] == b'\r' {
+                i - 1
+            } else {
+                i
+            };
             let after = &rest[i + 4..];
             let tail_len = if after.starts_with("\r\n") {
                 Some(2)
@@ -174,7 +190,9 @@ pub fn parse_surface_brief(text: &str, file_path: Option<&str>) -> SurfaceBrief 
     if let Some((inner, _)) = &fm {
         for line in inner.split('\n') {
             let line = line.strip_suffix('\r').unwrap_or(line);
-            let Some(colon) = line.find(':') else { continue };
+            let Some(colon) = line.find(':') else {
+                continue;
+            };
             let key = js_trim(&line[..colon]);
             let raw = js_trim(&line[colon + 1..]);
             if key.is_empty() {
@@ -197,11 +215,18 @@ pub fn parse_surface_brief(text: &str, file_path: Option<&str>) -> SurfaceBrief 
             meta.insert(key.to_string(), Value::String(v.to_string()));
         }
     }
-    let primary_target = meta.get("primary_target").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let primary_target = meta
+        .get("primary_target")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
     let related_targets: Vec<String> = meta
         .get("related_targets")
         .and_then(|v| v.as_array())
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
+        })
         .unwrap_or_default();
     let body = match &fm {
         Some((_, len)) => js_trim(&text[*len..]).to_string(),
@@ -237,7 +262,9 @@ pub fn parse_surface_brief(text: &str, file_path: Option<&str>) -> SurfaceBrief 
 /// JS: listSurfaceBriefs
 pub fn list_surface_briefs(project_root: &str) -> Vec<SurfaceBrief> {
     let dir = get_surface_brief_dir(project_root);
-    let Some(names) = read_dir_names(&dir) else { return vec![] };
+    let Some(names) = read_dir_names(&dir) else {
+        return vec![];
+    };
     let mut names: Vec<String> = names.into_iter().filter(|n| n.ends_with(".md")).collect();
     names.sort();
     names
@@ -261,13 +288,27 @@ pub fn resolve_surface_brief(project_root: &str, target: Option<&str>) -> Surfac
     let Some(target) = target.filter(|t| !t.is_empty()) else {
         let n = briefs.len();
         return SurfaceResolution {
-            brief: if n == 1 { Some(briefs[0].clone()) } else { None },
-            reason: if n == 1 { "only-brief" } else if n > 1 { "ambiguous" } else { "none" },
+            brief: if n == 1 {
+                Some(briefs[0].clone())
+            } else {
+                None
+            },
+            reason: if n == 1 {
+                "only-brief"
+            } else if n > 1 {
+                "ambiguous"
+            } else {
+                "none"
+            },
             candidates: briefs,
         };
     };
     let Some(normalized) = normalize_surface_target(Some(target), project_root) else {
-        return SurfaceResolution { brief: None, candidates: briefs, reason: "invalid-target" };
+        return SurfaceResolution {
+            brief: None,
+            candidates: briefs,
+            reason: "invalid-target",
+        };
     };
     let exact_path = surface_brief_path_for_target(Some(&normalized), project_root);
     let legacy_path = legacy_surface_brief_path_for_target(Some(&normalized), project_root);
@@ -278,17 +319,37 @@ pub fn resolve_surface_brief(project_root: &str, target: Option<&str>) -> Surfac
             // Pre-hash long slugs can collide because they contain only the
             // target suffix. Require the legacy brief's metadata to prove it
             // belongs to this target before accepting that compatibility path.
-            briefs.iter().find(|b| b.path == legacy_path && b.targets.contains(&normalized))
+            briefs
+                .iter()
+                .find(|b| b.path == legacy_path && b.targets.contains(&normalized))
         });
     if let Some(exact) = exact {
-        return SurfaceResolution { brief: Some(exact.clone()), candidates: briefs, reason: "slug" };
+        return SurfaceResolution {
+            brief: Some(exact.clone()),
+            candidates: briefs,
+            reason: "slug",
+        };
     }
-    let mapped: Vec<SurfaceBrief> = briefs.iter().filter(|b| b.targets.contains(&normalized)).cloned().collect();
+    let mapped: Vec<SurfaceBrief> = briefs
+        .iter()
+        .filter(|b| b.targets.contains(&normalized))
+        .cloned()
+        .collect();
     let n = mapped.len();
     SurfaceResolution {
-        brief: if n == 1 { Some(mapped[0].clone()) } else { None },
+        brief: if n == 1 {
+            Some(mapped[0].clone())
+        } else {
+            None
+        },
         candidates: if n > 1 { mapped } else { briefs },
-        reason: if n == 1 { "mapping" } else if n > 1 { "ambiguous-target" } else { "not-found" },
+        reason: if n == 1 {
+            "mapping"
+        } else if n > 1 {
+            "ambiguous-target"
+        } else {
+            "not-found"
+        },
     }
 }
 
@@ -300,7 +361,9 @@ pub fn write_surface_brief(
     body: &str,
 ) -> Result<String, String> {
     let normalized_primary = normalize_surface_target(Some(primary_target), project_root)
-        .ok_or_else(|| "surface brief requires a concrete project-relative primary target or URL".to_string())?;
+        .ok_or_else(|| {
+            "surface brief requires a concrete project-relative primary target or URL".to_string()
+        })?;
     let mut related: Vec<String> = Vec::new();
     for t in related_targets {
         if let Some(n) = normalize_surface_target(Some(t), project_root) {
@@ -311,14 +374,22 @@ pub fn write_surface_brief(
     }
     let slug = slug_from_target(Some(&normalized_primary), project_root);
     let file_path = surface_brief_path_for_target(Some(&normalized_primary), project_root)
-        .ok_or_else(|| "surface brief requires a concrete project-relative primary target or URL".to_string())?;
+        .ok_or_else(|| {
+            "surface brief requires a concrete project-relative primary target or URL".to_string()
+        })?;
     let _ = std::fs::create_dir_all(jsp::dirname(&file_path));
     let frontmatter = [
         "---".to_string(),
         format!("version: {}", SURFACE_BRIEF_VERSION),
         format!("slug: {}", serde_json::to_string(&slug).unwrap()),
-        format!("primary_target: {}", serde_json::to_string(&normalized_primary).unwrap()),
-        format!("related_targets: {}", serde_json::to_string(&related).unwrap()),
+        format!(
+            "primary_target: {}",
+            serde_json::to_string(&normalized_primary).unwrap()
+        ),
+        format!(
+            "related_targets: {}",
+            serde_json::to_string(&related).unwrap()
+        ),
         "---".to_string(),
     ]
     .join("\n");
@@ -357,11 +428,17 @@ mod tests {
 
         let resolved = resolve_surface_brief(&root, Some(target));
         assert_eq!(resolved.reason, "slug");
-        assert_eq!(resolved.brief.unwrap().path.as_deref(), Some(legacy.as_str()));
+        assert_eq!(
+            resolved.brief.unwrap().path.as_deref(),
+            Some(legacy.as_str())
+        );
 
         std::fs::write(&current, "# Current brief\n").unwrap();
         let resolved = resolve_surface_brief(&root, Some(target));
-        assert_eq!(resolved.brief.unwrap().path.as_deref(), Some(current.as_str()));
+        assert_eq!(
+            resolved.brief.unwrap().path.as_deref(),
+            Some(current.as_str())
+        );
 
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -374,10 +451,15 @@ mod tests {
             TMP_SEQ.fetch_add(1, Ordering::Relaxed)
         ));
         let root = root.to_string_lossy().into_owned();
-        let target = "src/first-prefix-that-is-long-enough/a-very-long-shared-tail/component-name.tsx";
-        let collision = "src/second-prefix-that-is-long-enough/a-very-long-shared-tail/component-name.tsx";
+        let target =
+            "src/first-prefix-that-is-long-enough/a-very-long-shared-tail/component-name.tsx";
+        let collision =
+            "src/second-prefix-that-is-long-enough/a-very-long-shared-tail/component-name.tsx";
         let legacy = legacy_surface_brief_path_for_target(Some(target), &root).unwrap();
-        assert_eq!(legacy, legacy_surface_brief_path_for_target(Some(collision), &root).unwrap());
+        assert_eq!(
+            legacy,
+            legacy_surface_brief_path_for_target(Some(collision), &root).unwrap()
+        );
         assert_ne!(
             surface_brief_path_for_target(Some(target), &root),
             surface_brief_path_for_target(Some(collision), &root)
@@ -385,7 +467,10 @@ mod tests {
 
         std::fs::create_dir_all(get_surface_brief_dir(&root)).unwrap();
         std::fs::write(&legacy, "# Unmapped legacy brief\n").unwrap();
-        assert_eq!(resolve_surface_brief(&root, Some(target)).reason, "not-found");
+        assert_eq!(
+            resolve_surface_brief(&root, Some(target)).reason,
+            "not-found"
+        );
 
         let normalized = normalize_surface_target(Some(target), &root).unwrap();
         let legacy_body = format!(
@@ -394,7 +479,10 @@ mod tests {
         );
         std::fs::write(&legacy, legacy_body).unwrap();
         assert_eq!(resolve_surface_brief(&root, Some(target)).reason, "slug");
-        assert_eq!(resolve_surface_brief(&root, Some(collision)).reason, "not-found");
+        assert_eq!(
+            resolve_surface_brief(&root, Some(collision)).reason,
+            "not-found"
+        );
 
         let _ = std::fs::remove_dir_all(&root);
     }

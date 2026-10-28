@@ -10,17 +10,28 @@ use std::collections::{HashMap, HashSet};
 use unicode_normalization::UnicodeNormalization;
 
 pub const WELL_TIERS: [&str; 3] = ["graphic", "interaction", "atmosphere"];
-pub const SYSTEM_PREFIXES: [&str; 5] =
-    ["Palette/material:", "Type/composition:", "Topology/navigation:", "Controls/state:", "Responsive/motion:"];
+pub const SYSTEM_PREFIXES: [&str; 5] = [
+    "Palette/material:",
+    "Type/composition:",
+    "Topology/navigation:",
+    "Controls/state:",
+    "Responsive/motion:",
+];
 const CONCEPT_STRENGTHS: [&str; 3] = ["world", "composition", "dual"];
 const CONCEPT_STATUSES: [&str; 2] = ["approved", "rejected"];
 const CONCEPT_BREADTHS: [&str; 2] = ["general", "niche"];
 pub const SEED_MODES: [&str; 4] = ["persuade", "operate", "read", "experience"];
 
 static ID_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[a-z0-9]+(?:-[a-z0-9]+)*$").unwrap());
-static WRAPPER_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)(?-u:\b)(?:live digital system|shared participatory system) modeled on(?-u:\b)").unwrap());
-static IMITATION_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)(?-u:\b)(?:in the style of|styled like|copy of)(?-u:\b)").unwrap());
+static WRAPPER_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r"(?i)(?-u:\b)(?:live digital system|shared participatory system) modeled on(?-u:\b)",
+    )
+    .unwrap()
+});
+static IMITATION_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)(?-u:\b)(?:in the style of|styled like|copy of)(?-u:\b)").unwrap()
+});
 static BLAND_FORM_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?i)(?-u:\b)(?:control room|command center|operations center|dispatch desk|review queue|speaker queue|management console|admin console|operator loop|coordination system|tracking system|planning system|software platform|digital platform|operations cockpit|app portal|web portal|data hub|dashboard|workflow|planner|tracker|orchestrator)(?-u:\b)").unwrap()
 });
@@ -88,22 +99,38 @@ fn string_len_between(v: Option<&Value>, min: usize, max: usize) -> bool {
 
 fn is_string_array_of(v: Option<&Value>, len: usize) -> bool {
     match v.and_then(|x| x.as_array()) {
-        Some(a) => a.len() == len && a.iter().all(|t| t.as_str().map(|x| !js_trim(x).is_empty()).unwrap_or(false)),
+        Some(a) => {
+            a.len() == len
+                && a.iter()
+                    .all(|t| t.as_str().map(|x| !js_trim(x).is_empty()).unwrap_or(false))
+        }
         None => false,
     }
 }
 
 /// JS: validateConceptEntry (error strings; only emptiness matters to the seeder)
-pub fn validate_concept_entry(concept: &Value, existing_forms: &HashMap<String, String>) -> Vec<String> {
+pub fn validate_concept_entry(
+    concept: &Value,
+    existing_forms: &HashMap<String, String>,
+) -> Vec<String> {
     let mut errors = Vec::new();
-    let id = s(concept.get("id")).filter(|x| !x.is_empty()).unwrap_or("(unknown)").to_string();
+    let id = s(concept.get("id"))
+        .filter(|x| !x.is_empty())
+        .unwrap_or("(unknown)")
+        .to_string();
     if let Some(axes) = concept.get("axes") {
         if !axes.is_null() && !axes.is_object() {
-            errors.push(format!("concept {} axes must be an object of axis id to value id", id));
+            errors.push(format!(
+                "concept {} axes must be an object of axis id to value id",
+                id
+            ));
         }
     }
     if !ID_RE.is_match(s(concept.get("id")).unwrap_or("")) {
-        errors.push(format!("invalid concept id: {}", nullish_or_string(concept.get("id"))));
+        errors.push(format!(
+            "invalid concept id: {}",
+            nullish_or_string(concept.get("id"))
+        ));
     }
     let normalized = normalize_concept_form(concept.get("form"));
     if normalized.is_empty() {
@@ -112,53 +139,96 @@ pub fn validate_concept_entry(concept: &Value, existing_forms: &HashMap<String, 
         errors.push(format!("duplicate concept form: {} and {}", id, other));
     }
     let form = s(concept.get("form"));
-    if !string_len_between(concept.get("form"), 40, 360) || !form.map(|f| f.contains(',')).unwrap_or(false) {
-        errors.push(format!("concept {} must name a form and inherited structure after a comma", id));
+    if !string_len_between(concept.get("form"), 40, 360)
+        || !form.map(|f| f.contains(',')).unwrap_or(false)
+    {
+        errors.push(format!(
+            "concept {} must name a form and inherited structure after a comma",
+            id
+        ));
     }
     if !string_len_between(concept.get("lineage"), 12, 200) {
-        errors.push(format!("concept {} needs specific lineage metadata of 12–200 characters", id));
+        errors.push(format!(
+            "concept {} needs specific lineage metadata of 12–200 characters",
+            id
+        ));
     }
-    if !s(concept.get("strength")).map(|x| CONCEPT_STRENGTHS.contains(&x)).unwrap_or(false) {
+    if !s(concept.get("strength"))
+        .map(|x| CONCEPT_STRENGTHS.contains(&x))
+        .unwrap_or(false)
+    {
         errors.push(format!("concept {} needs a strength", id));
     }
     if !is_string_array_of(concept.get("tags"), 3) {
-        errors.push(format!("concept {} must have exactly three structural tags", id));
+        errors.push(format!(
+            "concept {} must have exactly three structural tags",
+            id
+        ));
     }
     if let Some(avoid) = concept.get("avoid") {
         let ok = avoid
             .as_array()
-            .map(|a| a.len() >= 2 && a.len() <= 3 && a.iter().all(|i| string_len_between(Some(i), 12, 160)))
+            .map(|a| {
+                a.len() >= 2
+                    && a.len() <= 3
+                    && a.iter().all(|i| string_len_between(Some(i), 12, 160))
+            })
             .unwrap_or(false);
         if !ok {
-            errors.push(format!("concept {} avoid must be two or three negations of 12–160 characters", id));
+            errors.push(format!(
+                "concept {} avoid must be two or three negations of 12–160 characters",
+                id
+            ));
         }
     }
     let system_ok = concept
         .get("system")
         .and_then(|x| x.as_array())
-        .map(|a| a.len() == SYSTEM_PREFIXES.len() && a.iter().all(|r| string_len_between(Some(r), 12, 180)))
+        .map(|a| {
+            a.len() == SYSTEM_PREFIXES.len()
+                && a.iter().all(|r| string_len_between(Some(r), 12, 180))
+        })
         .unwrap_or(false);
     if !system_ok {
-        errors.push(format!("concept {} needs system grammar with exactly five rules of 12–180 characters", id));
+        errors.push(format!(
+            "concept {} needs system grammar with exactly five rules of 12–180 characters",
+            id
+        ));
     } else {
         let rules = concept.get("system").unwrap().as_array().unwrap();
-        let unique: HashSet<String> = rules.iter().map(|r| normalize_concept_form(Some(r))).collect();
+        let unique: HashSet<String> = rules
+            .iter()
+            .map(|r| normalize_concept_form(Some(r)))
+            .collect();
         if unique.len() != SYSTEM_PREFIXES.len() {
             errors.push(format!("concept {} has duplicate system grammar rules", id));
         }
-        if rules.iter().enumerate().any(|(i, r)| !r.as_str().unwrap_or("").starts_with(SYSTEM_PREFIXES[i])) {
+        if rules
+            .iter()
+            .enumerate()
+            .any(|(i, r)| !r.as_str().unwrap_or("").starts_with(SYSTEM_PREFIXES[i]))
+        {
             errors.push(format!("concept {} system grammar must use palette, type, topology, controls, and responsive prefixes in order", id));
         }
     }
     if !string_len_between(concept.get("spark"), 80, 320) {
-        errors.push(format!("concept {} needs a vivid creative spark of 80–320 characters", id));
+        errors.push(format!(
+            "concept {} needs a vivid creative spark of 80–320 characters",
+            id
+        ));
     }
     if !string_len_between(concept.get("webLeverage"), 20, 240) {
-        errors.push(format!("concept {} needs web leverage of 20–240 characters", id));
+        errors.push(format!(
+            "concept {} needs web leverage of 20–240 characters",
+            id
+        ));
     }
     let form_s = form.unwrap_or("");
     if WRAPPER_RE.is_match(form_s) {
-        errors.push(format!("concept {} is a generic wrapper around another artifact", id));
+        errors.push(format!(
+            "concept {} is a generic wrapper around another artifact",
+            id
+        ));
     }
     if IMITATION_RE.is_match(form_s) {
         errors.push(format!("concept {} contains imitation language", id));
@@ -201,33 +271,83 @@ pub fn read_concept_catalog(catalog_path: &str, reviews_path: &str) -> Option<Co
     if review_data.is_null() {
         return None;
     }
-    let reviews = obj_get(&review_data, "reviews").cloned().filter(|r| crate::staleness::js_truthy(r)).unwrap_or(Value::Object(Map::new()));
+    let reviews = obj_get(&review_data, "reviews")
+        .cloned()
+        .filter(crate::staleness::js_truthy)
+        .unwrap_or(Value::Object(Map::new()));
     let wells: HashMap<String, Value> = obj_get(&catalog, "wells")
         .and_then(|w| w.as_array())
-        .map(|a| a.iter().filter_map(|w| s(w.get("id")).map(|id| (id.to_string(), w.clone()))).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|w| s(w.get("id")).map(|id| (id.to_string(), w.clone())))
+                .collect()
+        })
         .unwrap_or_default();
     let mut concepts = Vec::new();
-    for family in obj_get(&catalog, "families").and_then(|f| f.as_array()).cloned().unwrap_or_default() {
-        for concept in family.get("concepts").and_then(|c| c.as_array()).cloned().unwrap_or_default() {
+    for family in obj_get(&catalog, "families")
+        .and_then(|f| f.as_array())
+        .cloned()
+        .unwrap_or_default()
+    {
+        for concept in family
+            .get("concepts")
+            .and_then(|c| c.as_array())
+            .cloned()
+            .unwrap_or_default()
+        {
             let mut m = concept.as_object().cloned().unwrap_or_default();
             let well_key = family.get("well").and_then(|w| w.as_str()).unwrap_or("");
             let well = wells.get(well_key);
             let cid = s(concept.get("id")).unwrap_or("");
             let review = reviews.get(cid).cloned().filter(|r| !r.is_null());
-            m.insert("familyId".into(), family.get("id").cloned().unwrap_or(Value::Null));
-            m.insert("familyLabel".into(), family.get("label").cloned().unwrap_or(Value::Null));
-            m.insert("wellId".into(), family.get("well").cloned().filter(|v| crate::staleness::js_truthy(v)).unwrap_or(Value::Null));
-            m.insert("wellLabel".into(), well.and_then(|w| w.get("label")).cloned().filter(|v| crate::staleness::js_truthy(v)).unwrap_or(Value::Null));
-            m.insert("wellTier".into(), well.and_then(|w| w.get("tier")).cloned().filter(|v| crate::staleness::js_truthy(v)).unwrap_or(Value::Null));
+            m.insert(
+                "familyId".into(),
+                family.get("id").cloned().unwrap_or(Value::Null),
+            );
+            m.insert(
+                "familyLabel".into(),
+                family.get("label").cloned().unwrap_or(Value::Null),
+            );
+            m.insert(
+                "wellId".into(),
+                family
+                    .get("well")
+                    .cloned()
+                    .filter(crate::staleness::js_truthy)
+                    .unwrap_or(Value::Null),
+            );
+            m.insert(
+                "wellLabel".into(),
+                well.and_then(|w| w.get("label"))
+                    .cloned()
+                    .filter(crate::staleness::js_truthy)
+                    .unwrap_or(Value::Null),
+            );
+            m.insert(
+                "wellTier".into(),
+                well.and_then(|w| w.get("tier"))
+                    .cloned()
+                    .filter(crate::staleness::js_truthy)
+                    .unwrap_or(Value::Null),
+            );
             m.insert(
                 "status".into(),
-                review.as_ref().and_then(|r| r.get("status")).cloned().filter(|v| crate::staleness::js_truthy(v)).unwrap_or(Value::String("pending".into())),
+                review
+                    .as_ref()
+                    .and_then(|r| r.get("status"))
+                    .cloned()
+                    .filter(crate::staleness::js_truthy)
+                    .unwrap_or(Value::String("pending".into())),
             );
             m.insert("review".into(), review.unwrap_or(Value::Null));
             concepts.push(Value::Object(m));
         }
     }
-    Some(ConceptCatalog { catalog, review_data, concepts })
+    Some(ConceptCatalog {
+        catalog,
+        review_data,
+        concepts,
+    })
 }
 
 fn is_int(v: Option<&Value>) -> Option<i64> {
@@ -254,26 +374,57 @@ pub fn validate_concept_catalog(catalog: &Value, review_data: &Value) -> Vec<Str
     if !matches!(is_int(obj_get(catalog, "schemaVersion")), Some(v) if v >= 7) {
         errors.push("catalog.schemaVersion must be 7 or newer".into());
     }
-    if !s(obj_get(catalog, "catalogVersion")).map(|x| !js_trim(x).is_empty()).unwrap_or(false) {
+    if !s(obj_get(catalog, "catalogVersion"))
+        .map(|x| !js_trim(x).is_empty())
+        .unwrap_or(false)
+    {
         errors.push("catalog.catalogVersion must be a non-empty string".into());
     }
     let qb = obj_get(catalog, "qualityBar");
     if !string_len_between(qb.and_then(|q| q.get("principle")), 80, usize::MAX) {
         errors.push("catalog.qualityBar.principle must define the universal creative bar".into());
     }
-    if qb.and_then(|q| q.get("rejectIf")).and_then(|x| x.as_array()).map(|a| a.len()).unwrap_or(0) < 5 {
+    if qb
+        .and_then(|q| q.get("rejectIf"))
+        .and_then(|x| x.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0)
+        < 5
+    {
         errors.push("catalog.qualityBar.rejectIf must define at least five rejection gates".into());
     }
-    if qb.and_then(|q| q.get("reviewAxes")).and_then(|x| x.as_array()).map(|a| a.len()).unwrap_or(0) < 8 {
+    if qb
+        .and_then(|q| q.get("reviewAxes"))
+        .and_then(|x| x.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0)
+        < 8
+    {
         errors.push("catalog.qualityBar.reviewAxes must define at least eight review axes".into());
     }
-    let families: Vec<Value> = obj_get(catalog, "families").and_then(|f| f.as_array()).cloned().unwrap_or_default();
-    if obj_get(catalog, "families").and_then(|f| f.as_array()).map(|a| a.len()).unwrap_or(0) < 3 {
+    let families: Vec<Value> = obj_get(catalog, "families")
+        .and_then(|f| f.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if obj_get(catalog, "families")
+        .and_then(|f| f.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0)
+        < 3
+    {
         errors.push("catalog.families must contain at least three families".into());
     }
-    let wells: Vec<Value> = obj_get(catalog, "wells").and_then(|w| w.as_array()).cloned().unwrap_or_default();
+    let wells: Vec<Value> = obj_get(catalog, "wells")
+        .and_then(|w| w.as_array())
+        .cloned()
+        .unwrap_or_default();
     let mut well_ids: HashSet<String> = HashSet::new();
-    if obj_get(catalog, "wells").and_then(|w| w.as_array()).map(|a| a.len()).unwrap_or(0) < 5 {
+    if obj_get(catalog, "wells")
+        .and_then(|w| w.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0)
+        < 5
+    {
         errors.push("catalog.wells must define at least five inspiration wells".into());
     }
     for well in &wells {
@@ -284,17 +435,27 @@ pub fn validate_concept_catalog(catalog: &Value, review_data: &Value) -> Vec<Str
             errors.push(format!("duplicate well id: {}", wid));
         }
         well_ids.insert(wid.to_string());
-        if !s(well.get("label")).map(|x| !js_trim(x).is_empty()).unwrap_or(false) {
+        if !s(well.get("label"))
+            .map(|x| !js_trim(x).is_empty())
+            .unwrap_or(false)
+        {
             errors.push("well needs a label".into());
         }
         if !string_len_between(well.get("description"), 40, usize::MAX) {
             errors.push("well needs a description".into());
         }
-        if !s(well.get("tier")).map(|t| WELL_TIERS.contains(&t)).unwrap_or(false) {
+        if !s(well.get("tier"))
+            .map(|t| WELL_TIERS.contains(&t))
+            .unwrap_or(false)
+        {
             errors.push("well needs a tier".into());
         }
     }
-    let tiers_present: HashSet<&str> = wells.iter().filter_map(|w| s(w.get("tier"))).filter(|t| WELL_TIERS.contains(t)).collect();
+    let tiers_present: HashSet<&str> = wells
+        .iter()
+        .filter_map(|w| s(w.get("tier")))
+        .filter(|t| WELL_TIERS.contains(t))
+        .collect();
     for tier in WELL_TIERS {
         if !wells.is_empty() && !tiers_present.contains(tier) {
             errors.push(format!("no well declares the {} tier", tier));
@@ -309,7 +470,10 @@ pub fn validate_concept_catalog(catalog: &Value, review_data: &Value) -> Vec<Str
             errors.push(format!("duplicate family id: {}", fid));
         }
         family_ids.insert(fid.to_string());
-        if !s(family.get("label")).map(|x| !js_trim(x).is_empty()).unwrap_or(false) {
+        if !s(family.get("label"))
+            .map(|x| !js_trim(x).is_empty())
+            .unwrap_or(false)
+        {
             errors.push("family needs a label".into());
         }
         let well = s(family.get("well")).unwrap_or("");
@@ -318,7 +482,11 @@ pub fn validate_concept_catalog(catalog: &Value, review_data: &Value) -> Vec<Str
         } else {
             populated_wells.insert(well.to_string());
         }
-        let Some(fc) = family.get("concepts").and_then(|c| c.as_array()).filter(|a| !a.is_empty()) else {
+        let Some(fc) = family
+            .get("concepts")
+            .and_then(|c| c.as_array())
+            .filter(|a| !a.is_empty())
+        else {
             errors.push("family has no concepts".into());
             continue;
         };
@@ -346,16 +514,28 @@ pub fn validate_concept_catalog(catalog: &Value, review_data: &Value) -> Vec<Str
     if !matches!(is_int(obj_get(review_data, "schemaVersion")), Some(v) if v >= 2) {
         errors.push("reviews.schemaVersion must be 2 or newer".into());
     }
-    let concepts_by_id: HashMap<String, &Value> = concepts.iter().filter_map(|c| s(c.get("id")).map(|i| (i.to_string(), c))).collect();
-    let reviews: Map<String, Value> = obj_get(review_data, "reviews").and_then(|r| r.as_object()).cloned().unwrap_or_default();
+    let concepts_by_id: HashMap<String, &Value> = concepts
+        .iter()
+        .filter_map(|c| s(c.get("id")).map(|i| (i.to_string(), c)))
+        .collect();
+    let reviews: Map<String, Value> = obj_get(review_data, "reviews")
+        .and_then(|r| r.as_object())
+        .cloned()
+        .unwrap_or_default();
     for (id, review) in &reviews {
         if !concept_ids.contains(id) {
             errors.push(format!("review references missing concept: {}", id));
         }
-        if !s(review.get("status")).map(|x| CONCEPT_STATUSES.contains(&x)).unwrap_or(false) {
+        if !s(review.get("status"))
+            .map(|x| CONCEPT_STATUSES.contains(&x))
+            .unwrap_or(false)
+        {
             errors.push(format!("invalid review status for {}", id));
         }
-        if !s(review.get("reviewedBy")).map(|x| !js_trim(x).is_empty()).unwrap_or(false) {
+        if !s(review.get("reviewedBy"))
+            .map(|x| !js_trim(x).is_empty())
+            .unwrap_or(false)
+        {
             errors.push(format!("review {} needs reviewedBy", id));
         }
         match s(review.get("reviewedAt")) {
@@ -363,7 +543,10 @@ pub fn validate_concept_catalog(catalog: &Value, review_data: &Value) -> Vec<Str
             _ => errors.push(format!("review {} needs an ISO reviewedAt timestamp", id)),
         }
         match s(review.get("formHash")).filter(|x| !js_trim(x).is_empty()) {
-            None => errors.push(format!("review {} needs a formHash of the reviewed content", id)),
+            None => errors.push(format!(
+                "review {} needs a formHash of the reviewed content",
+                id
+            )),
             Some(h) => {
                 if let Some(c) = concepts_by_id.get(id) {
                     if h != concept_content_hash(c) {
@@ -373,9 +556,15 @@ pub fn validate_concept_catalog(catalog: &Value, review_data: &Value) -> Vec<Str
             }
         }
         if let Some(note) = review.get("note") {
-            let ok = note.as_str().map(|n| !js_trim(n).is_empty() && utf16_len(n) <= 500).unwrap_or(false);
+            let ok = note
+                .as_str()
+                .map(|n| !js_trim(n).is_empty() && utf16_len(n) <= 500)
+                .unwrap_or(false);
             if !ok {
-                errors.push(format!("review {} note must be a non-empty string of 500 characters or fewer", id));
+                errors.push(format!(
+                    "review {} note must be a non-empty string of 500 characters or fewer",
+                    id
+                ));
             }
         }
         if let Some(rating) = review.get("rating") {
@@ -383,43 +572,77 @@ pub fn validate_concept_catalog(catalog: &Value, review_data: &Value) -> Vec<Str
             if !matches!(r, Some(x) if x == 1.0 || x == 2.0 || x == 3.0) {
                 errors.push(format!("review {} rating must be 1, 2, or 3", id));
             } else if s(review.get("status")) != Some("approved") {
-                errors.push(format!("review {} rating only applies to approved concepts", id));
+                errors.push(format!(
+                    "review {} rating only applies to approved concepts",
+                    id
+                ));
             }
         }
         if let Some(b) = review.get("breadth") {
-            if !b.as_str().map(|x| CONCEPT_BREADTHS.contains(&x)).unwrap_or(false) {
-                errors.push(format!("review {} breadth must be one of general, niche", id));
+            if !b
+                .as_str()
+                .map(|x| CONCEPT_BREADTHS.contains(&x))
+                .unwrap_or(false)
+            {
+                errors.push(format!(
+                    "review {} breadth must be one of general, niche",
+                    id
+                ));
             }
         }
         if let Some(am) = review.get("allowedModes") {
             match am.as_array() {
-                None => errors.push(format!("review {} allowedModes must be a non-empty array", id)),
-                Some(a) if a.is_empty() => errors.push(format!("review {} allowedModes must be a non-empty array", id)),
+                None => errors.push(format!(
+                    "review {} allowedModes must be a non-empty array",
+                    id
+                )),
+                Some(a) if a.is_empty() => errors.push(format!(
+                    "review {} allowedModes must be a non-empty array",
+                    id
+                )),
                 Some(a) => {
-                    if a.iter().any(|m| !m.as_str().map(|x| SEED_MODES.contains(&x)).unwrap_or(false)) {
+                    if a.iter()
+                        .any(|m| !m.as_str().map(|x| SEED_MODES.contains(&x)).unwrap_or(false))
+                    {
                         errors.push(format!("review {} allowedModes may only contain modes", id));
                     } else {
-                        let set: HashSet<String> = a.iter().map(|m| serde_json::to_string(m).unwrap()).collect();
+                        let set: HashSet<String> = a
+                            .iter()
+                            .map(|m| serde_json::to_string(m).unwrap())
+                            .collect();
                         if set.len() != a.len() {
-                            errors.push(format!("review {} allowedModes must not repeat a mode", id));
+                            errors
+                                .push(format!("review {} allowedModes must not repeat a mode", id));
                         } else if a.len() == SEED_MODES.len() {
-                            errors.push(format!("review {} allowedModes lists every mode; omit the field instead", id));
+                            errors.push(format!(
+                                "review {} allowedModes lists every mode; omit the field instead",
+                                id
+                            ));
                         }
                     }
                 }
             }
         }
     }
-    let well_tier_by_id: HashMap<String, String> =
-        wells.iter().filter_map(|w| Some((s(w.get("id"))?.to_string(), s(w.get("tier"))?.to_string()))).collect();
-    let review_status = |cid: &str| -> Option<&str> { reviews.get(cid).and_then(|r| s(r.get("status"))) };
-    let approved_count = concepts.iter().filter(|c| review_status(s(c.get("id")).unwrap_or("")) == Some("approved")).count();
+    let well_tier_by_id: HashMap<String, String> = wells
+        .iter()
+        .filter_map(|w| Some((s(w.get("id"))?.to_string(), s(w.get("tier"))?.to_string())))
+        .collect();
+    let review_status =
+        |cid: &str| -> Option<&str> { reviews.get(cid).and_then(|r| s(r.get("status"))) };
+    let approved_count = concepts
+        .iter()
+        .filter(|c| review_status(s(c.get("id")).unwrap_or("")) == Some("approved"))
+        .count();
     let approved_tiers: HashSet<String> = families
         .iter()
         .filter(|f| {
             f.get("concepts")
                 .and_then(|c| c.as_array())
-                .map(|a| a.iter().any(|c| review_status(s(c.get("id")).unwrap_or("")) == Some("approved")))
+                .map(|a| {
+                    a.iter()
+                        .any(|c| review_status(s(c.get("id")).unwrap_or("")) == Some("approved"))
+                })
                 .unwrap_or(false)
         })
         .filter_map(|f| well_tier_by_id.get(s(f.get("well")).unwrap_or("")))
@@ -492,16 +715,26 @@ pub struct CompositionCatalog {
 }
 
 /// JS: readCompositionCatalog
-pub fn read_composition_catalog(catalog_path: &str, reviews_path: &str) -> Option<CompositionCatalog> {
+pub fn read_composition_catalog(
+    catalog_path: &str,
+    reviews_path: &str,
+) -> Option<CompositionCatalog> {
     let catalog: Value = serde_json::from_str(&safe_read(catalog_path)?).ok()?;
     let review_data: Value = serde_json::from_str(&safe_read(reviews_path)?).ok()?;
     if review_data.is_null() || catalog.is_null() {
         return None;
     }
-    let reviews = obj_get(&review_data, "reviews").cloned().filter(|r| crate::staleness::js_truthy(r)).unwrap_or(Value::Object(Map::new()));
+    let reviews = obj_get(&review_data, "reviews")
+        .cloned()
+        .filter(crate::staleness::js_truthy)
+        .unwrap_or(Value::Object(Map::new()));
     let families: HashMap<String, Value> = obj_get(&catalog, "families")
         .and_then(|f| f.as_array())
-        .map(|a| a.iter().filter_map(|f| s(f.get("id")).map(|id| (id.to_string(), f.clone()))).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|f| s(f.get("id")).map(|id| (id.to_string(), f.clone())))
+                .collect()
+        })
         .unwrap_or_default();
     let compositions = obj_get(&catalog, "compositions")
         .and_then(|c| c.as_array())
@@ -513,10 +746,21 @@ pub fn read_composition_catalog(catalog_path: &str, reviews_path: &str) -> Optio
             let fam = families.get(s(c.get("familyId")).unwrap_or(""));
             let cid = s(c.get("id")).unwrap_or("");
             let review = reviews.get(cid).cloned().filter(|r| !r.is_null());
-            m.insert("familyLabel".into(), fam.and_then(|f| f.get("label")).cloned().filter(|v| crate::staleness::js_truthy(v)).unwrap_or(Value::Null));
+            m.insert(
+                "familyLabel".into(),
+                fam.and_then(|f| f.get("label"))
+                    .cloned()
+                    .filter(crate::staleness::js_truthy)
+                    .unwrap_or(Value::Null),
+            );
             m.insert(
                 "status".into(),
-                review.as_ref().and_then(|r| r.get("status")).cloned().filter(|v| crate::staleness::js_truthy(v)).unwrap_or(Value::String("pending".into())),
+                review
+                    .as_ref()
+                    .and_then(|r| r.get("status"))
+                    .cloned()
+                    .filter(crate::staleness::js_truthy)
+                    .unwrap_or(Value::String("pending".into())),
             );
             m.insert("review".into(), review.unwrap_or(Value::Null));
             Value::Object(m)

@@ -13,7 +13,7 @@ use crate::constants::{
     WCAG_LARGE_TEXT_PX,
 };
 use crate::js::{
-    self, ci, math_max, math_round, number_to_string, parse_float, parse_int, string_to_number,
+    self, math_max, math_round, number_to_string, parse_float, parse_int, string_to_number,
     to_fixed, WS,
 };
 use crate::js_ext_a::{num_truthy, slice_utf16_start, split_commas_outside_parens, utf16_length};
@@ -26,7 +26,8 @@ pub use impeccable_foundation::rules::types::*;
 
 macro_rules! re {
     ($name:ident, $pat:expr) => {
-        static $name: Lazy<Regex> = Lazy::new(|| Regex::new(&$pat).expect(stringify!($name)));
+        static $name: Lazy<Regex> =
+            Lazy::new(|| Regex::new(r#"[\s"'`{}]+"#).expect(stringify!($name)));
     };
 }
 
@@ -368,7 +369,10 @@ pub fn check_borders(
                 if far > 0.0 {
                     findings.push(RuleHit::new(
                         "side-tab",
-                        format!("border-{sn}: {w_s}px + border-radius: {}px", number_to_string(far)),
+                        format!(
+                            "border-{sn}: {w_s}px + border-radius: {}px",
+                            number_to_string(far)
+                        ),
                     ));
                 }
             }
@@ -378,8 +382,7 @@ pub fn check_borders(
                 format!("border-{sn}: {w_s}px + border-radius: {r_s}px"),
             ));
         } else if !opts.tab_context
-            && w >= 3.0
-            && w <= 12.0
+            && (3.0..=12.0).contains(&w)
             && is_rounded_away_from_side(opts.corners.as_ref(), i)
         {
             // A top or bottom band is the card tell only on a rounded card,
@@ -407,7 +410,7 @@ pub fn check_stripe_child(
     let Some(edge) = edge else {
         return Vec::new();
     };
-    if !(width >= 2.0 && width <= 12.0) {
+    if !(2.0..=12.0).contains(&width) {
         return Vec::new();
     }
     let Some(bg) = bg else {
@@ -503,8 +506,18 @@ fn in_state_variant(s: &str, start: usize) -> bool {
         let v = variant.trim_start_matches('!');
         matches!(
             v,
-            "hover" | "focus" | "focus-visible" | "focus-within" | "active" | "visited"
-                | "disabled" | "checked" | "open" | "enabled" | "invalid" | "placeholder"
+            "hover"
+                | "focus"
+                | "focus-visible"
+                | "focus-within"
+                | "active"
+                | "visited"
+                | "disabled"
+                | "checked"
+                | "open"
+                | "enabled"
+                | "invalid"
+                | "placeholder"
         ) || v.starts_with("group-")
             || v.starts_with("peer-")
             || v.starts_with("aria-")
@@ -547,9 +560,7 @@ fn is_heading_123(tag: &str) -> bool {
 /// full `check_colors` pass: the filled pill, the solid button, the gradient
 /// chip. Everything else in those tags is bare text.
 fn is_styled_control(opts: &ColorOpts, bg_image: &str) -> bool {
-    let own_bg = opts
-        .bg_color
-        .map_or(false, |c| c.a.map_or(false, |a| a > 0.5));
+    let own_bg = opts.bg_color.is_some_and(|c| c.a.is_some_and(|a| a > 0.5));
     let own_gradient = !bg_image.is_empty() && GRADIENT_CI.is_match(bg_image);
     opts.has_direct_text && (own_bg || own_gradient) && opts.font_size >= 9.0
 }
@@ -633,7 +644,7 @@ impl SafeTagTextSeen {
         claim: Option<PairClaim>,
         keep: &mut dyn FnMut(&RuleHit) -> bool,
     ) {
-        let on_screen = claim.map_or(true, |c| c.on_screen);
+        let on_screen = claim.is_none_or(|c| c.on_screen);
         hits.retain(|h| {
             let keys: Vec<(String, String)> =
                 keys_of(h).into_iter().map(|k| (h.id.clone(), k)).collect();
@@ -663,7 +674,8 @@ impl SafeTagTextSeen {
                 });
                 for r in replaced {
                     // Every key the replaced hit claimed goes with it.
-                    self.provisional.retain(|(_, owner, snippet)| !(r.0 == *owner && r.1 == *snippet));
+                    self.provisional
+                        .retain(|(_, owner, snippet)| !(r.0 == *owner && r.1 == *snippet));
                     self.superseded.push(r);
                 }
             }
@@ -744,7 +756,13 @@ pub fn contrast_severity(ratio: f64, threshold: f64) -> Option<String> {
 
 /// The words in a font family's name that say the face is drawn bold.
 const HEAVY_FACE_WORDS: &[&str] = &[
-    "bold", "semibold", "demibold", "extrabold", "ultrabold", "heavy", "black",
+    "bold",
+    "semibold",
+    "demibold",
+    "extrabold",
+    "ultrabold",
+    "heavy",
+    "black",
 ];
 
 /// Whether the first family in a computed `font-family` list is named as a
@@ -869,7 +887,7 @@ pub fn check_colors(opts: &ColorOpts) -> Vec<RuleHit> {
             // neutral secondary text.
             let large_and_saturated = opts.font_size >= 20.0
                 && lightness_saturation(&text_color).1 >= PURPLE_LARGE_TEXT_MIN_SATURATION;
-            if hue >= 260.0 && hue <= 310.0 && (is_heading_123(tag) || large_and_saturated) {
+            if (260.0..=310.0).contains(&hue) && (is_heading_123(tag) || large_and_saturated) {
                 findings.push(RuleHit::new(
                     "ai-color-palette",
                     format!(
@@ -908,7 +926,8 @@ pub fn check_colors(opts: &ColorOpts) -> Vec<RuleHit> {
         // reading the class.
         let ink_contradicts_gray = opts.detector_is_browser
             && opts.text_color.as_ref().is_some_and(|ink| {
-                lightness_saturation(ink).0 >= GRAY_INK_MAX_LIGHTNESS || has_chroma(Some(ink), Some(50.0))
+                lightness_saturation(ink).0 >= GRAY_INK_MAX_LIGHTNESS
+                    || has_chroma(Some(ink), Some(50.0))
             });
         if let (Some(g), Some(c), false) = (gray_match, color_bg_match, ink_contradicts_gray) {
             findings.push(RuleHit::new(
@@ -948,7 +967,11 @@ pub fn check_colors(opts: &ColorOpts) -> Vec<RuleHit> {
 fn ink_key(text: &Rgba) -> String {
     let alpha = text.alpha_or_one();
     if alpha < 1.0 {
-        format!("{}@{}", color_to_hex(Some(text)), (alpha * 1000.0).round() / 1000.0)
+        format!(
+            "{}@{}",
+            color_to_hex(Some(text)),
+            (alpha * 1000.0).round() / 1000.0
+        )
     } else {
         color_to_hex(Some(text))
     }
@@ -1019,7 +1042,9 @@ pub fn check_colors_deduped_shaped(
         if shaped {
             hits.retain(|h| {
                 !(seen.has_claimed(&h.id, &h.snippet)
-                    || surface_key.as_deref().is_some_and(|k| seen.has_claimed(&h.id, k)))
+                    || surface_key
+                        .as_deref()
+                        .is_some_and(|k| seen.has_claimed(&h.id, k)))
             });
             let keys_of = |h: &RuleHit| {
                 let mut keys = vec![format!("decorative {}", h.snippet)];
@@ -1074,7 +1099,11 @@ fn safe_tag_text_contrast(opts: &ColorOpts) -> Vec<RuleHit> {
         return Vec::new();
     }
     // Gradient-clipped text paints the gradient, not `color`.
-    if opts.bg_clip.as_deref().is_some_and(background_clips_to_text) {
+    if opts
+        .bg_clip
+        .as_deref()
+        .is_some_and(background_clips_to_text)
+    {
         return Vec::new();
     }
     let Some(text_color) = opts.text_color else {
@@ -1131,7 +1160,7 @@ fn resolved_bg_matches_text(opts: &ColorOpts, text_color: &Rgba) -> bool {
     }
     opts.effective_bg_stops
         .as_deref()
-        .map_or(false, |stops| stops.iter().any(same))
+        .is_some_and(|stops| stops.iter().any(same))
 }
 
 /// The channel distance under which two gradient stops are one colour.
@@ -1146,13 +1175,16 @@ pub fn gradient_stops_are_one_colour(image: &str) -> bool {
         return false;
     }
     let stops = crate::color::parse_gradient_colors(Some(image));
-    let Some(first) = stops.first() else { return false };
+    let Some(first) = stops.first() else {
+        return false;
+    };
     stops.len() >= 2
         && stops.iter().all(|c| {
             (c.r - first.r).abs() < GRADIENT_ONE_COLOUR_DELTA
                 && (c.g - first.g).abs() < GRADIENT_ONE_COLOUR_DELTA
                 && (c.b - first.b).abs() < GRADIENT_ONE_COLOUR_DELTA
-                && (c.alpha_or_one() - first.alpha_or_one()).abs() * 255.0 < GRADIENT_ONE_COLOUR_DELTA
+                && (c.alpha_or_one() - first.alpha_or_one()).abs() * 255.0
+                    < GRADIENT_ONE_COLOUR_DELTA
         })
 }
 
@@ -1216,10 +1248,10 @@ pub fn gradient_stops_all_readable(image: &str) -> bool {
 fn gradient_arg_is_colour(arg: &str) -> bool {
     let token = if arg.starts_with('#') {
         arg.split_whitespace().next().unwrap_or("")
-    } else if crate::color::COLOR_FUNCTION_NAMES
-        .iter()
-        .any(|name| arg.strip_prefix(name).is_some_and(|tail| tail.starts_with('(')))
-    {
+    } else if crate::color::COLOR_FUNCTION_NAMES.iter().any(|name| {
+        arg.strip_prefix(name)
+            .is_some_and(|tail| tail.starts_with('('))
+    }) {
         let mut depth = 0i32;
         let mut end = arg.len();
         for (i, ch) in arg.char_indices() {
@@ -1243,7 +1275,9 @@ fn gradient_arg_is_colour(arg: &str) -> bool {
 }
 
 fn is_transition_hint(arg: &str) -> bool {
-    !arg.is_empty() && !arg.contains(' ') && arg.starts_with(|c: char| c.is_ascii_digit() || c == '.' || c == '-')
+    !arg.is_empty()
+        && !arg.contains(' ')
+        && arg.starts_with(|c: char| c.is_ascii_digit() || c == '.' || c == '-')
 }
 
 fn gradient_arg_is_geometry(arg: &str) -> bool {
@@ -1253,10 +1287,13 @@ fn gradient_arg_is_geometry(arg: &str) -> bool {
         || arg.starts_with("in ")
         || arg.contains(" at ")
         || arg.contains(" in ")
-        || ["circle", "ellipse", "closest-", "farthest-"].iter().any(|w| arg.contains(w))
-        || ["deg", "rad", "grad", "turn"]
+        || ["circle", "ellipse", "closest-", "farthest-"]
             .iter()
-            .any(|u| arg.strip_suffix(u).is_some_and(|n| n.trim_start_matches('-').parse::<f64>().is_ok()))
+            .any(|w| arg.contains(w))
+        || ["deg", "rad", "grad", "turn"].iter().any(|u| {
+            arg.strip_suffix(u)
+                .is_some_and(|n| n.trim_start_matches('-').parse::<f64>().is_ok())
+        })
 }
 
 /// Whether a computed `background-clip` clips the background to the text:
@@ -1368,12 +1405,16 @@ fn contrast_findings(opts: &ColorOpts, text_color: &Rgba) -> Vec<RuleHit> {
     let inks: Vec<Rgba> = bgs
         .iter()
         .map(|b| match opts.visible_text {
-            Some(ink) if ink.a.map_or(false, |a| a < 1.0) => composite_color_over(&ink, b),
+            Some(ink) if ink.a.is_some_and(|a| a < 1.0) => composite_color_over(&ink, b),
             Some(ink) => ink,
             None => *text_color,
         })
         .collect();
-    let ratios: Vec<f64> = bgs.iter().zip(&inks).map(|(b, i)| contrast_ratio(i, b)).collect();
+    let ratios: Vec<f64> = bgs
+        .iter()
+        .zip(&inks)
+        .map(|(b, i)| contrast_ratio(i, b))
+        .collect();
     let mut worst_idx = 0usize;
     for i in 1..ratios.len() {
         if ratios[i] < ratios[worst_idx] {
@@ -1387,7 +1428,7 @@ fn contrast_findings(opts: &ColorOpts, text_color: &Rgba) -> Vec<RuleHit> {
     if ratio < threshold {
         let is_alpha_fallback_fp = !opts.detector_is_browser
             && opts.effective_bg.is_none()
-            && text_color.a.map_or(false, |a| a < 1.0);
+            && text_color.a.is_some_and(|a| a < 1.0);
         if !is_alpha_fallback_fp {
             let ratio_label = crate::color::ratio_label(ratio, threshold);
             let source = opts
@@ -1421,21 +1462,26 @@ fn contrast_findings(opts: &ColorOpts, text_color: &Rgba) -> Vec<RuleHit> {
 /// a lavender panel (interplanetaryfund.base44.app, best stop 2.45:1). A
 /// gradient with a translucent stop, a picture layer, or no stop the parser
 /// reads is not scored, and neither is a translucent ground.
-pub fn clipped_gradient_text_contrast(bg_image: &str, ground: &Rgba, threshold: f64) -> Option<RuleHit> {
-    if ground.alpha_or_one() < 0.999 || bg_image.contains("url(") || !bg_image.contains("gradient") {
+pub fn clipped_gradient_text_contrast(
+    bg_image: &str,
+    ground: &Rgba,
+    threshold: f64,
+) -> Option<RuleHit> {
+    if ground.alpha_or_one() < 0.999 || bg_image.contains("url(") || !bg_image.contains("gradient")
+    {
         return None;
     }
     let stops = crate::color::parse_gradient_colors(Some(bg_image));
     if stops.is_empty() || stops.iter().any(|s| s.alpha_or_one() < 0.999) {
         return None;
     }
-    let (best, ratio) = stops
-        .iter()
-        .map(|s| (*s, contrast_ratio(s, ground)))
-        .fold(None::<(Rgba, f64)>, |acc, cur| match acc {
+    let (best, ratio) = stops.iter().map(|s| (*s, contrast_ratio(s, ground))).fold(
+        None::<(Rgba, f64)>,
+        |acc, cur| match acc {
             Some(a) if a.1 >= cur.1 => Some(a),
             _ => Some(cur),
-        })?;
+        },
+    )?;
     if ratio >= threshold {
         return None;
     }
@@ -1483,7 +1529,7 @@ pub fn check_placeholder_colors(
         opts
     };
     let mut flat: Option<ColorOpts> = None;
-    if text_color.a.map_or(false, |a| a < 1.0) {
+    if text_color.a.is_some_and(|a| a < 1.0) {
         if let Some(bg) = opts.effective_bg {
             text_color = composite_color_over(&text_color, &bg);
         } else if let Some(stops) = opts.effective_bg_stops.as_ref().filter(|s| !s.is_empty()) {
@@ -1520,7 +1566,7 @@ pub fn check_hover_contrast(opts: &HoverContrastOpts) -> Vec<RuleHit> {
     {
         return Vec::new();
     }
-    if set_has(SAFE_TAGS, &opts.tag) && !opts.own_bg_alpha.map_or(false, |a| a > 0.5) {
+    if set_has(SAFE_TAGS, &opts.tag) && !opts.own_bg_alpha.is_some_and(|a| a > 0.5) {
         return Vec::new();
     }
     let text_color = opts.text_color.unwrap();
@@ -1578,10 +1624,10 @@ pub fn check_icon_tile(opts: &IconTileOpts) -> Vec<RuleHit> {
     }
     let w = opts.sibling_width;
     let h = opts.sibling_height;
-    if !(w >= 32.0 && w <= 128.0) {
+    if !(32.0..=128.0).contains(&w) {
         return Vec::new();
     }
-    if !(h >= 32.0 && h <= 128.0) {
+    if !(32.0..=128.0).contains(&h) {
         return Vec::new();
     }
     let ratio = w / h;
@@ -1592,11 +1638,11 @@ pub fn check_icon_tile(opts: &IconTileOpts) -> Vec<RuleHit> {
     // that faint still draws the tile.
     let bg_visible = opts
         .sibling_bg_color
-        .map_or(false, |c| c.a.map_or(false, |a| a >= ICON_TILE_MIN_BG_ALPHA))
+        .is_some_and(|c| c.a.is_some_and(|a| a >= ICON_TILE_MIN_BG_ALPHA))
         || opts
             .sibling_bg_image
             .as_deref()
-            .map_or(false, |s| !s.is_empty() && s != "none");
+            .is_some_and(|s| !s.is_empty() && s != "none");
     let border_visible = opts.sibling_border_width > 0.0;
     if !bg_visible && !border_visible {
         return Vec::new();
@@ -1838,7 +1884,7 @@ pub fn check_hero_eyebrow(opts: &HeroEyebrowOpts) -> Vec<RuleHit> {
     }
     let text = js::trim(opts.sibling_text.as_deref().unwrap_or(""));
     let text_len = utf16_length(text);
-    if text_len < 2 || text_len > 60 {
+    if !(2..=60).contains(&text_len) {
         return Vec::new();
     }
     if !(opts.sibling_font_size > 0.0 && opts.sibling_font_size <= 14.0) {
@@ -1853,7 +1899,8 @@ pub fn check_hero_eyebrow(opts: &HeroEyebrowOpts) -> Vec<RuleHit> {
     // text naming a year. At the fixed floor and above nothing changes.
     let em_floor_only = opts.sibling_letter_spacing < HERO_EYEBROW_TRACKING_PX;
     let dated_meta = em_floor_only
-        && (opts.sibling_holds_time || crate::checks::text_rules::KICKER_META_YEAR_RE.is_match(text));
+        && (opts.sibling_holds_time
+            || crate::checks::text_rules::KICKER_META_YEAR_RE.is_match(text));
     let is_classic_tracked = is_uppercased
         && !dated_meta
         && hero_eyebrow_tracked(
@@ -2072,7 +2119,7 @@ pub(crate) fn glow_is_perceptible(
     if lit_area > element_area * GLOW_MAX_AREA_RATIO {
         return false;
     }
-    surface_lift.map_or(true, |lift| lift >= GLOW_MIN_LIFT)
+    surface_lift.is_none_or(|lift| lift >= GLOW_MIN_LIFT)
 }
 
 /// How far the chromatic layers of one shadow value lift `surface` at the
@@ -2093,8 +2140,10 @@ fn glow_surface_lift(value: &str, surface: &Rgba, element_opacity: Option<f64>) 
             let color = info.color?;
             let vals = extract_shadow_lengths(layer, Some((info.start, info.end)));
             let blur = vals.get(2).copied().unwrap_or(0.0);
-            let offset = vals.first().copied().unwrap_or(0.0) != 0.0 || vals.get(1).copied().unwrap_or(0.0) != 0.0;
-            (blur * color.alpha_or_one() * opacity >= GLOW_MIN_STRENGTH_PX / 2.0).then_some((color, offset))
+            let offset = vals.first().copied().unwrap_or(0.0) != 0.0
+                || vals.get(1).copied().unwrap_or(0.0) != 0.0;
+            (blur * color.alpha_or_one() * opacity >= GLOW_MIN_STRENGTH_PX / 2.0)
+                .then_some((color, offset))
         })
         .filter(|(color, _)| has_chroma(Some(color), Some(30.0)))
         .map(|(color, offset)| {
@@ -2111,7 +2160,8 @@ fn glow_surface_lift(value: &str, surface: &Rgba, element_opacity: Option<f64>) 
                 && lightness_saturation(&color).0 < GLOW_SHADE_MAX_LIGHTNESS
                 && relative_luminance(&color) < relative_luminance(surface)
                 && has_chroma(Some(surface), Some(30.0))
-                && hue_distance(get_hue(Some(&color)), get_hue(Some(surface))) <= GLOW_SHADE_MAX_HUE_DISTANCE;
+                && hue_distance(get_hue(Some(&color)), get_hue(Some(surface)))
+                    <= GLOW_SHADE_MAX_HUE_DISTANCE;
             if shade {
                 return 0.0;
             }
@@ -2188,7 +2238,7 @@ fn glow_scan(
 pub fn check_glow(opts: &GlowOpts) -> Vec<RuleHit> {
     let on_dark_bg = opts
         .effective_bg
-        .map_or(false, |bg| relative_luminance(&bg) < 0.1);
+        .is_some_and(|bg| relative_luminance(&bg) < 0.1);
     let opacity = opts.element_opacity;
     let size = opts.element_size;
     let found = glow_scan(
@@ -2288,7 +2338,10 @@ pub fn type_roles_separated_by_weight(samples: &[TypeSample]) -> bool {
     // The most common body weight; a tie goes to the lighter one.
     let Some(body) = body_weights
         .iter()
-        .max_by(|a, b| a.1.cmp(&b.1).then(b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal)))
+        .max_by(|a, b| {
+            a.1.cmp(&b.1)
+                .then(b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal))
+        })
         .map(|(w, _)| *w)
     else {
         return false;
@@ -2502,14 +2555,28 @@ mod tests {
     #[test]
     fn one_colour_gradient_needs_every_stop_read() {
         assert!(gradient_stops_are_one_colour("linear-gradient(#111, #111)"));
-        assert!(gradient_stops_are_one_colour("linear-gradient(to right, rgb(17, 17, 17) 0%, 40%, #111 100%)"));
-        assert!(gradient_stops_are_one_colour("conic-gradient(from 90deg at 50% 50%, #111, #121212)"));
-        assert!(gradient_stops_are_one_colour("radial-gradient(circle at top, #111, #111)"));
-        assert!(!gradient_stops_are_one_colour("linear-gradient(#111, var(--accent), #111)"));
-        assert!(!gradient_stops_are_one_colour("linear-gradient(180deg, #111, red, #111)"));
-        assert!(!gradient_stops_are_one_colour("linear-gradient(#111, #f0f)"));
+        assert!(gradient_stops_are_one_colour(
+            "linear-gradient(to right, rgb(17, 17, 17) 0%, 40%, #111 100%)"
+        ));
+        assert!(gradient_stops_are_one_colour(
+            "conic-gradient(from 90deg at 50% 50%, #111, #121212)"
+        ));
+        assert!(gradient_stops_are_one_colour(
+            "radial-gradient(circle at top, #111, #111)"
+        ));
+        assert!(!gradient_stops_are_one_colour(
+            "linear-gradient(#111, var(--accent), #111)"
+        ));
+        assert!(!gradient_stops_are_one_colour(
+            "linear-gradient(180deg, #111, red, #111)"
+        ));
+        assert!(!gradient_stops_are_one_colour(
+            "linear-gradient(#111, #f0f)"
+        ));
         // A colour function the parse cannot read is a stop it dropped.
-        assert!(!gradient_stops_are_one_colour("linear-gradient(#111, rgb(var(--accent-rgb)), #111)"));
+        assert!(!gradient_stops_are_one_colour(
+            "linear-gradient(#111, rgb(var(--accent-rgb)), #111)"
+        ));
     }
 
     fn rgb(r: f64, g: f64, b: f64) -> Rgba {
@@ -2541,12 +2608,20 @@ mod tests {
     /// rule reads as it always did.
     #[test]
     fn hero_eyebrow_em_floor_passes_over_a_dated_meta_line() {
-        assert!(check_hero_eyebrow(&hero_opts("Engineering · 2 September 2026", "p", 1.2)).is_empty());
+        assert!(
+            check_hero_eyebrow(&hero_opts("Engineering · 2 September 2026", "p", 1.2)).is_empty()
+        );
         assert!(check_hero_eyebrow(&hero_opts("Sep 2, 2026", "time", 1.2)).is_empty());
         assert!(check_hero_eyebrow(&hero_opts("Sep 2", "time", 1.2)).is_empty());
-        assert_eq!(check_hero_eyebrow(&hero_opts("Now in public beta", "p", 1.2)).len(), 1);
+        assert_eq!(
+            check_hero_eyebrow(&hero_opts("Now in public beta", "p", 1.2)).len(),
+            1
+        );
         // Not a year: a version or a count stays an eyebrow.
-        assert_eq!(check_hero_eyebrow(&hero_opts("Version 3000 is here", "p", 1.2)).len(), 1);
+        assert_eq!(
+            check_hero_eyebrow(&hero_opts("Version 3000 is here", "p", 1.2)).len(),
+            1
+        );
         // At the fixed floor the date line reports, as it did before.
         assert_eq!(
             check_hero_eyebrow(&hero_opts("Engineering · 2 September 2026", "p", 1.8)).len(),
@@ -2578,11 +2653,23 @@ mod tests {
     fn gray_on_color_class_form_leaves_pale_tints_out() {
         assert_eq!(find_gray_on_color_bg("text-gray-500 bg-amber-100"), None);
         assert_eq!(find_gray_on_color_bg("text-gray-500 bg-blue-50"), None);
-        assert_eq!(find_gray_on_color_bg("bg-sky-100 text-slate-500 md:bg-sky-600"), Some("bg-sky-600"));
-        assert_eq!(find_gray_on_color_bg("text-gray-500 bg-amber-200"), Some("bg-amber-200"));
-        assert_eq!(find_gray_on_color_bg("text-gray-500 bg-emerald-500/10"), None);
+        assert_eq!(
+            find_gray_on_color_bg("bg-sky-100 text-slate-500 md:bg-sky-600"),
+            Some("bg-sky-600")
+        );
+        assert_eq!(
+            find_gray_on_color_bg("text-gray-500 bg-amber-200"),
+            Some("bg-amber-200")
+        );
+        assert_eq!(
+            find_gray_on_color_bg("text-gray-500 bg-emerald-500/10"),
+            None
+        );
         // The side-tab stripe-child reader still sees a pale fill.
-        assert_eq!(find_solid_chromatic_bg("bg-amber-100"), Some("bg-amber-100"));
+        assert_eq!(
+            find_solid_chromatic_bg("bg-amber-100"),
+            Some("bg-amber-100")
+        );
     }
 
     /// glowcase.app 321836: grey-brown on cream reads as near-neutral.
@@ -2594,11 +2681,16 @@ mod tests {
             assert!(!background_reads_as_colour(&hex(pale)), "{pale}");
         }
         // Pale colours with chroma, and the oracle's should-flag fills.
-        for colour in ["#fcd34d", "#ffff00", "#fde68a", "#1e3a8a", "#115e59", "#10b981"] {
+        for colour in [
+            "#fcd34d", "#ffff00", "#fde68a", "#1e3a8a", "#115e59", "#10b981",
+        ] {
             assert!(background_reads_as_colour(&hex(colour)), "{colour}");
         }
         let (l, c) = crate::color::rgb_to_oklch_lc(&hex("#feeed4"));
-        assert!((l - 0.955).abs() < 0.005 && (c - 0.038).abs() < 0.005, "{l} {c}");
+        assert!(
+            (l - 0.955).abs() < 0.005 && (c - 0.038).abs() < 0.005,
+            "{l} {c}"
+        );
     }
 
     #[test]
@@ -2625,10 +2717,22 @@ mod tests {
     /// veeza.ai: `hover:bg-emerald-400` read as the resting fill.
     #[test]
     fn gray_on_color_classes_skip_state_variants() {
-        assert_eq!(find_solid_chromatic_bg("text-slate-500 hover:bg-emerald-400"), None);
-        assert_eq!(find_solid_chromatic_bg("group-hover:bg-blue-500 bg-red-600"), Some("bg-red-600"));
-        assert_eq!(find_solid_chromatic_bg("md:bg-blue-600"), Some("bg-blue-600"));
-        assert_eq!(find_solid_chromatic_bg("dark:bg-indigo-700"), Some("bg-indigo-700"));
+        assert_eq!(
+            find_solid_chromatic_bg("text-slate-500 hover:bg-emerald-400"),
+            None
+        );
+        assert_eq!(
+            find_solid_chromatic_bg("group-hover:bg-blue-500 bg-red-600"),
+            Some("bg-red-600")
+        );
+        assert_eq!(
+            find_solid_chromatic_bg("md:bg-blue-600"),
+            Some("bg-blue-600")
+        );
+        assert_eq!(
+            find_solid_chromatic_bg("dark:bg-indigo-700"),
+            Some("bg-indigo-700")
+        );
         assert!(find_resting_gray_text("focus:text-gray-500 bg-blue-600").is_none());
         assert_eq!(
             find_resting_gray_text("text-gray-400 bg-blue-600").map(|m| m.as_str()),
@@ -2660,12 +2764,21 @@ mod tests {
         let white = Some(Rgba::new(255.0, 255.0, 255.0, 1.0));
         let gray = Some(Rgba::new(115.0, 115.0, 115.0, 1.0));
         assert!(!gray_class(opts(true, white)));
-        assert!(!gray_class(opts(true, Some(Rgba::new(220.0, 38.0, 38.0, 1.0)))));
+        assert!(!gray_class(opts(
+            true,
+            Some(Rgba::new(220.0, 38.0, 38.0, 1.0))
+        )));
         assert!(gray_class(opts(true, gray)));
         // A cool gray keeps the class: slate-400 grazes the saturation bar.
-        assert!(gray_class(opts(true, Some(Rgba::new(148.0, 163.0, 184.0, 1.0)))));
+        assert!(gray_class(opts(
+            true,
+            Some(Rgba::new(148.0, 163.0, 184.0, 1.0))
+        )));
         // Near-black is what an uncompiled utility inherits: no contradiction.
-        assert!(gray_class(opts(true, Some(Rgba::new(17.0, 24.0, 39.0, 1.0)))));
+        assert!(gray_class(opts(
+            true,
+            Some(Rgba::new(17.0, 24.0, 39.0, 1.0))
+        )));
         assert!(gray_class(opts(true, None)));
         assert!(gray_class(opts(false, white)));
     }
@@ -2734,7 +2847,12 @@ mod tests {
         ]);
         let hits = check_flat_type_hierarchy_samples(&otto);
         assert_eq!(hits.len(), 1, "{hits:?}");
-        assert!(hits[0].snippet.ends_with("target 1.25:1; weight separates headings from body text)"), "{hits:?}");
+        assert!(
+            hits[0]
+                .snippet
+                .ends_with("target 1.25:1; weight separates headings from body text)"),
+            "{hits:?}"
+        );
         assert_eq!(flat_type_hierarchy_severity(&otto), Some("advisory"));
 
         let co_trip = weighted(&[
@@ -2751,12 +2869,23 @@ mod tests {
 
         // One heading in five at body weight is still weight-separated; two
         // in five is not.
-        let mostly = weighted(&[("body", 14.0, 400.0, 20), ("h2", 16.0, 700.0, 4), ("h3", 15.0, 400.0, 1)]);
+        let mostly = weighted(&[
+            ("body", 14.0, 400.0, 20),
+            ("h2", 16.0, 700.0, 4),
+            ("h3", 15.0, 400.0, 1),
+        ]);
         assert!(type_roles_separated_by_weight(&mostly));
-        let split = weighted(&[("body", 14.0, 400.0, 20), ("h2", 16.0, 700.0, 3), ("h3", 15.0, 400.0, 2)]);
+        let split = weighted(&[
+            ("body", 14.0, 400.0, 20),
+            ("h2", 16.0, 700.0, 3),
+            ("h3", 15.0, 400.0, 2),
+        ]);
         assert!(!type_roles_separated_by_weight(&split));
         // Unread weights say nothing.
-        assert!(!type_roles_separated_by_weight(&samples(&[("body", 14.0), ("h2", 16.0)])));
+        assert!(!type_roles_separated_by_weight(&samples(&[
+            ("body", 14.0),
+            ("h2", 16.0)
+        ])));
         assert_eq!(parse_font_weight("bold"), 700.0);
         assert_eq!(parse_font_weight(" 600 "), 600.0);
         assert!(parse_font_weight("bolder").is_nan());
@@ -2786,7 +2915,10 @@ mod tests {
         h3_tie.extend([("h2", 16.0); 3]);
         h3_tie.extend([("h3", 15.0), ("h3", 22.0)]);
         let hits = check_flat_type_hierarchy_samples(&samples(&h3_tie));
-        assert!(hits.is_empty() || !hits[0].snippet.contains("h3"), "{hits:?}");
+        assert!(
+            hits.is_empty() || !hits[0].snippet.contains("h3"),
+            "{hits:?}"
+        );
     }
 
     /// observations-28 row 23: the ladder leaves out the headings a reader
@@ -2808,7 +2940,10 @@ mod tests {
         news.extend([("h3", 14.0); 10]);
         news.extend([("h3", 16.0); 10]);
         news.extend([("h3", 20.0); 10]);
-        assert!(check_flat_type_hierarchy_samples(&samples(&news)).is_empty(), "the h3 role drops out");
+        assert!(
+            check_flat_type_hierarchy_samples(&samples(&news)).is_empty(),
+            "the h3 role drops out"
+        );
         // With one h3 size settled, the ladder holds what a reader sees.
         news.push(("h3", 16.0));
         let hits = check_flat_type_hierarchy_samples(&samples(&news));
@@ -2819,7 +2954,10 @@ mod tests {
         label.extend([("body", 16.0); 26]);
         label.extend([("body", 15.0); 15]);
         label.extend([("h2", 15.0); 3]);
-        assert!(check_flat_type_hierarchy_samples(&samples(&label)).is_empty(), "h1 under body size");
+        assert!(
+            check_flat_type_hierarchy_samples(&samples(&label)).is_empty(),
+            "h1 under body size"
+        );
         // An h1 at the body size still counts.
         label[0] = ("h1", 16.0);
         assert_eq!(check_flat_type_hierarchy_samples(&samples(&label)).len(), 1);
@@ -2827,23 +2965,49 @@ mod tests {
         // A dropped level whose sizes would all keep the ramp flat changes
         // nothing: h2s tied at 17 and 18px, most of the headings, on a
         // body 16px, h3 16px, h1 18px ladder.
-        let mut tie = vec![("h1", 18.0), ("h2", 17.0), ("h2", 18.0), ("h2", 17.0), ("h2", 18.0), ("h3", 16.0)];
+        let mut tie = vec![
+            ("h1", 18.0),
+            ("h2", 17.0),
+            ("h2", 18.0),
+            ("h2", 17.0),
+            ("h2", 18.0),
+            ("h3", 16.0),
+        ];
         tie.extend([("body", 16.0); 12]);
         let hits = check_flat_type_hierarchy_samples(&samples(&tie));
         assert_eq!(hits.len(), 1, "the tied h2s keep it flat: {hits:?}");
-        assert!(hits[0].snippet.starts_with("Role sizes: body 16px, h3 16px, h1 18px"), "{hits:?}");
+        assert!(
+            hits[0]
+                .snippet
+                .starts_with("Role sizes: body 16px, h3 16px, h1 18px"),
+            "{hits:?}"
+        );
         // Tied h2s at 17 and 23px: 23px stands a 1.28 step above the 18px
         // h1, so the ladder does not show the page flat, and it declines.
         tie[2] = ("h2", 23.0);
         tie[4] = ("h2", 23.0);
-        assert!(check_flat_type_hierarchy_samples(&samples(&tie)).is_empty(), "a 23px h2 breaks the flatness");
+        assert!(
+            check_flat_type_hierarchy_samples(&samples(&tie)).is_empty(),
+            "a 23px h2 breaks the flatness"
+        );
 
-        let mut otto = vec![("h1", 16.0), ("h2", 16.0), ("h2", 26.0), ("h3", 16.0), ("h4", 12.0)];
+        let mut otto = vec![
+            ("h1", 16.0),
+            ("h2", 16.0),
+            ("h2", 26.0),
+            ("h3", 16.0),
+            ("h4", 12.0),
+        ];
         otto.extend([("body", 14.0); 357]);
         otto.extend([("body", 12.0); 46]);
         let hits = check_flat_type_hierarchy_samples(&samples(&otto));
         assert_eq!(hits.len(), 1, "a tied minority role stays out: {hits:?}");
-        assert!(hits[0].snippet.starts_with("Role sizes: h4 12px, body 14px, h1 16px, h3 16px"), "{hits:?}");
+        assert!(
+            hits[0]
+                .snippet
+                .starts_with("Role sizes: h4 12px, body 14px, h1 16px, h3 16px"),
+            "{hits:?}"
+        );
     }
 
     /// midilibre.fr 324492: 48 h2 teaser titles at 16px and 41 section
@@ -2855,7 +3019,10 @@ mod tests {
         page.extend([("h2", 16.0); 48]);
         page.extend([("h2", 24.0); 41]);
         page.extend([("h3", 18.0); 6]);
-        assert!(check_flat_type_hierarchy_samples(&samples(&page)).is_empty(), "the h2 level drops out");
+        assert!(
+            check_flat_type_hierarchy_samples(&samples(&page)).is_empty(),
+            "the h2 level drops out"
+        );
         // A clear majority still settles the level.
         let mut clear = vec![("h1", 16.0)];
         clear.extend([("body", 16.0); 300]);
@@ -2886,7 +3053,12 @@ mod tests {
 
     #[test]
     fn a_provisional_claim_gives_way_to_a_copy_on_screen() {
-        let hit = || RuleHit::new("low-contrast", "2.2:1 (need 4.5:1) — text #c9a3c8 on #ffffff".to_string());
+        let hit = || {
+            RuleHit::new(
+                "low-contrast",
+                "2.2:1 (need 4.5:1) — text #c9a3c8 on #ffffff".to_string(),
+            )
+        };
         let keys = |h: &RuleHit| vec![h.snippet.clone()];
         let claim = |owner: u64, on_screen: bool| Some(PairClaim { owner, on_screen });
         let mut seen = SafeTagTextSeen::default();
@@ -2899,7 +3071,10 @@ mod tests {
         let mut waived = vec![hit()];
         seen.keep_first_keyed_claiming(&mut waived, &keys, claim(3, true), &mut |_| false);
         assert!(waived.is_empty());
-        assert!(seen.take_superseded().is_empty(), "a waived copy replaces nothing");
+        assert!(
+            seen.take_superseded().is_empty(),
+            "a waived copy replaces nothing"
+        );
         let mut readable = vec![hit()];
         seen.keep_first_keyed_claiming(&mut readable, &keys, claim(4, true), &mut |_| true);
         assert_eq!(readable.len(), 1);
@@ -2911,7 +3086,10 @@ mod tests {
         let mut only = vec![hit()];
         lone.keep_first_keyed_claiming(&mut only, &keys, claim(6, false), &mut |_| true);
         assert_eq!(only.len(), 1);
-        assert!(lone.take_superseded().is_empty(), "a cut copy nobody replaces stands");
+        assert!(
+            lone.take_superseded().is_empty(),
+            "a cut copy nobody replaces stands"
+        );
     }
 
     #[test]
@@ -2936,8 +3114,14 @@ mod tests {
             }
         };
         let mut seen = SafeTagTextSeen::default();
-        assert_eq!(check_colors_deduped(&span(0.7), &mut seen, &mut |_| true).len(), 1);
-        assert_eq!(check_colors_deduped(&span(0.8), &mut seen, &mut |_| true).len(), 1);
+        assert_eq!(
+            check_colors_deduped(&span(0.7), &mut seen, &mut |_| true).len(),
+            1
+        );
+        assert_eq!(
+            check_colors_deduped(&span(0.8), &mut seen, &mut |_| true).len(),
+            1
+        );
         assert!(check_colors_deduped(&span(0.8), &mut seen, &mut |_| true).is_empty());
     }
 
@@ -2993,9 +3177,16 @@ mod tests {
         assert!(!low(&opts("span", "text, text")));
         assert!(low(&opts("h4", "text, border-box")));
         // Glyphs whose fill the adapter says is transparent take none either.
-        let unread = ColorOpts { bg_clip: Some("border-box".into()), ink_unread: true, ..opts("em", "") };
+        let unread = ColorOpts {
+            bg_clip: Some("border-box".into()),
+            ink_unread: true,
+            ..opts("em", "")
+        };
         assert!(!low(&unread));
-        assert!(low(&ColorOpts { ink_unread: false, ..unread }));
+        assert!(low(&ColorOpts {
+            ink_unread: false,
+            ..unread
+        }));
     }
 
     #[test]
@@ -3011,8 +3202,12 @@ mod tests {
             same_color_surface_is_unread: guard,
             ..Default::default()
         };
-        assert!(check_colors(&opts(false)).iter().any(|h| h.id == "low-contrast"));
-        assert!(!check_colors(&opts(true)).iter().any(|h| h.id == "low-contrast"));
+        assert!(check_colors(&opts(false))
+            .iter()
+            .any(|h| h.id == "low-contrast"));
+        assert!(!check_colors(&opts(true))
+            .iter()
+            .any(|h| h.id == "low-contrast"));
     }
 
     #[test]
@@ -3023,9 +3218,15 @@ mod tests {
         assert!(is_icon_font_family("Brand Icons, sans-serif"));
         assert!(!is_icon_font_family("Inter, sans-serif"));
         assert!(!is_icon_font_family("sans-serif, 'Material Icons'"));
-        assert!(is_icon_ligature_text("arrow_forward", "Material Symbols Outlined"));
+        assert!(is_icon_ligature_text(
+            "arrow_forward",
+            "Material Symbols Outlined"
+        ));
         assert!(is_icon_ligature_text("counter_1", "Material Icons"));
-        assert!(!is_icon_ligature_text("Arrow forward", "Material Symbols Outlined"));
+        assert!(!is_icon_ligature_text(
+            "Arrow forward",
+            "Material Symbols Outlined"
+        ));
         assert!(!is_icon_ligature_text("arrow_forward", "Inter"));
         assert!(is_close_letter_text(" x "));
         assert!(!is_close_letter_text("xl"));
@@ -3205,23 +3406,41 @@ mod tests {
         // light.
         assert!(glow("rgba(0, 29, 56, 0.4) 0px 12px 28px 0px", teal).is_empty());
         // The same blur and alpha in a light cyan lifts it.
-        assert_eq!(glow("rgba(103, 232, 249, 0.6) 0px 12px 28px 0px", teal).len(), 1);
+        assert_eq!(
+            glow("rgba(103, 232, 249, 0.6) 0px 12px 28px 0px", teal).len(),
+            1
+        );
         // Neon on near-black is unchanged.
         let ink = Rgba::new(10.0, 10.0, 10.0, 1.0);
-        assert_eq!(glow("rgba(0, 169, 255, 0.6) 0px 0px 24px 0px", ink).len(), 1);
+        assert_eq!(
+            glow("rgba(0, 169, 255, 0.6) 0px 0px 24px 0px", ink).len(),
+            1
+        );
         // A blue halo on a white map tints it: bright enough to read as
         // light, so it keeps the distance (run 1004's map markers).
         let white = Rgba::new(255.0, 255.0, 255.0, 1.0);
-        assert_eq!(glow("rgba(59, 130, 246, 0.6) 0px 0px 24px 0px", white).len(), 1);
+        assert_eq!(
+            glow("rgba(59, 130, 246, 0.6) 0px 0px 24px 0px", white).len(),
+            1
+        );
         // A dark shadow in a hue of its own is a coloured shadow: rose-950
         // and purple-950 on the teal band.
-        assert_eq!(glow("rgba(76, 5, 25, 0.9) 0px 12px 40px 0px", teal).len(), 1);
-        assert_eq!(glow("rgba(59, 7, 100, 0.9) 0px 12px 40px 0px", teal).len(), 1);
+        assert_eq!(
+            glow("rgba(76, 5, 25, 0.9) 0px 12px 40px 0px", teal).len(),
+            1
+        );
+        assert_eq!(
+            glow("rgba(59, 7, 100, 0.9) 0px 12px 40px 0px", teal).len(),
+            1
+        );
         // A zero-offset navy halo is not cast: not shade, whatever its hue.
         assert_eq!(glow("rgba(0, 29, 56, 0.4) 0px 0px 28px 0px", teal).len(), 1);
         // On a neutral surface no hue says shade: the distance decides, as
         // before.
-        assert_eq!(glow("rgba(0, 29, 56, 0.6) 0px 8px 24px 0px", white).len(), 1);
+        assert_eq!(
+            glow("rgba(0, 29, 56, 0.6) 0px 8px 24px 0px", white).len(),
+            1
+        );
     }
 
     #[test]
@@ -3239,12 +3458,21 @@ mod tests {
         // A 24px halo at 60% alpha around a 197x40 button: the treatment the
         // rule is for.
         assert_eq!(
-            glow("rgba(0, 169, 255, 0.6) 0px 0px 24px 0px", 1.0, Some((197.0, 40.0))).len(),
+            glow(
+                "rgba(0, 169, 255, 0.6) 0px 0px 24px 0px",
+                1.0,
+                Some((197.0, 40.0))
+            )
+            .len(),
             1
         );
         // 10% alpha over 20px of blur is 2.0px of light on a 393x42 card.
-        assert!(glow("rgba(149, 100, 255, 0.1) 0px 4px 20px 0px", 1.0, Some((393.0, 42.0)))
-            .is_empty());
+        assert!(glow(
+            "rgba(149, 100, 255, 0.1) 0px 4px 20px 0px",
+            1.0,
+            Some((393.0, 42.0))
+        )
+        .is_empty());
         // A 3x23px typing caret, caught mid-blink at 56% opacity.
         assert!(glow(
             "rgba(155, 123, 232, 0.38) 0px 0px 9.9px 1.5px",
@@ -3261,14 +3489,26 @@ mod tests {
         )
         .is_empty());
         // A 6px status LED with an 8px halo.
-        assert!(glow("rgba(92, 189, 104, 0.5) 0px 0px 8px 0px", 1.0, Some((6.0, 6.0))).is_empty());
+        assert!(glow(
+            "rgba(92, 189, 104, 0.5) 0px 0px 8px 0px",
+            1.0,
+            Some((6.0, 6.0))
+        )
+        .is_empty());
         // A negative spread that swallows the blur: no light leaves the box.
-        assert!(
-            glow("rgba(52, 211, 153, 0.4) 0px 0px 40px -22px", 1.0, Some((280.0, 147.0)))
-                .is_empty()
-        );
+        assert!(glow(
+            "rgba(52, 211, 153, 0.4) 0px 0px 40px -22px",
+            1.0,
+            Some((280.0, 147.0))
+        )
+        .is_empty());
         // An element with nothing painted.
-        assert!(glow("rgba(0, 169, 255, 0.6) 0px 0px 24px 0px", 1.0, Some((0.0, 0.0))).is_empty());
+        assert!(glow(
+            "rgba(0, 169, 255, 0.6) 0px 0px 24px 0px",
+            1.0,
+            Some((0.0, 0.0))
+        )
+        .is_empty());
         // Without layout the blur and the alpha decide on their own.
         assert_eq!(
             glow("rgba(92, 189, 104, 0.5) 0px 0px 8px 0px", 1.0, None).len(),
@@ -3390,10 +3630,14 @@ mod tests {
             bg_image: Some("none".to_string()),
             ..Default::default()
         };
-        assert!(check_colors(&opts(false)).iter().any(|h| h.id == "low-contrast"));
+        assert!(check_colors(&opts(false))
+            .iter()
+            .any(|h| h.id == "low-contrast"));
         let glyph = check_colors(&opts(true));
         assert!(
-            glyph.iter().all(|h| h.id != "low-contrast" && h.id != "gray-on-color"),
+            glyph
+                .iter()
+                .all(|h| h.id != "low-contrast" && h.id != "gray-on-color"),
             "{glyph:?}"
         );
     }
@@ -3447,7 +3691,10 @@ mod tests {
         // #707: a `/10` opacity tint is not a solid chromatic fill.
         assert!(hits("text-slate-300 hover:bg-red-500/10").is_empty());
         assert!(hits("text-slate-300 bg-red-500/10").is_empty());
-        assert_eq!(hits("text-slate-300 bg-red-500"), vec!["text-slate-300 on bg-red-500"]);
+        assert_eq!(
+            hits("text-slate-300 bg-red-500"),
+            vec!["text-slate-300 on bg-red-500"]
+        );
         // A later solid class still pairs when an earlier one is a tint.
         assert_eq!(
             hits("text-slate-300 bg-red-500/10 bg-teal-600"),
@@ -3513,7 +3760,10 @@ mod tests {
         assert!(ids(Rgba::new(65.0, 60.0, 56.0, 1.0), green).is_empty());
         // gray-600 on a blue panel is still gray.
         assert_eq!(
-            ids(Rgba::new(75.0, 85.0, 99.0, 1.0), Rgba::new(37.0, 99.0, 235.0, 1.0)),
+            ids(
+                Rgba::new(75.0, 85.0, 99.0, 1.0),
+                Rgba::new(37.0, 99.0, 235.0, 1.0)
+            ),
             vec!["gray-on-color".to_string(), "low-contrast".to_string()]
         );
         let class_hits = |class: &str| {
@@ -3564,7 +3814,8 @@ mod tests {
             effective_bg_stops: None,
             ..opts.clone()
         };
-        let none = check_placeholder_colors(&unresolved, "Name", Rgba::new(187.0, 187.0, 187.0, 1.0));
+        let none =
+            check_placeholder_colors(&unresolved, "Name", Rgba::new(187.0, 187.0, 187.0, 1.0));
         assert!(none.is_empty(), "{none:?}");
         // Translucent black over a light gradient: flatten per stop, then score.
         let gradient = ColorOpts {
@@ -3575,11 +3826,7 @@ mod tests {
             ]),
             ..opts.clone()
         };
-        let wash = check_placeholder_colors(
-            &gradient,
-            "Name",
-            Rgba::new(0.0, 0.0, 0.0, 0.2),
-        );
+        let wash = check_placeholder_colors(&gradient, "Name", Rgba::new(0.0, 0.0, 0.0, 0.2));
         assert_eq!(wash.len(), 1, "{wash:?}");
         assert_eq!(wash[0].id, "low-contrast");
     }
@@ -3633,8 +3880,18 @@ mod tests {
     #[test]
     fn a_waived_hit_claims_neither_key() {
         let mut seen = SafeTagTextSeen::default();
-        let hit = || vec![RuleHit::new("low-contrast", "1.7:1 (need 3:1) — text #ffffff on #fbbf24".to_string())];
-        let keys = |h: &RuleHit| vec![h.snippet.clone(), "text #ffffff over gradient on div.w-14 [12]".to_string()];
+        let hit = || {
+            vec![RuleHit::new(
+                "low-contrast",
+                "1.7:1 (need 3:1) — text #ffffff on #fbbf24".to_string(),
+            )]
+        };
+        let keys = |h: &RuleHit| {
+            vec![
+                h.snippet.clone(),
+                "text #ffffff over gradient on div.w-14 [12]".to_string(),
+            ]
+        };
         let mut hits = hit();
         seen.keep_first_keyed(&mut hits, &keys, &mut |_h: &RuleHit| false);
         assert!(hits.is_empty());
@@ -3728,12 +3985,29 @@ mod tests {
         let hit = near.iter().find(|h| h.id == "low-contrast").expect("hit");
         assert!(hit.is_advisory(), "{hit:?}");
         let far = check_colors(&white_panel(gray(125.0), 14.0, 400.0)); // #7d7d7d 4.12:1
-        assert_eq!(far.iter().find(|h| h.id == "low-contrast").unwrap().severity, None);
+        assert_eq!(
+            far.iter()
+                .find(|h| h.id == "low-contrast")
+                .unwrap()
+                .severity,
+            None
+        );
         // r3-08 keeps bold display text under the large-text margin failing.
         let display = check_colors(&white_panel(gray(158.0), 40.0, 700.0)); // #9e9e9e 2.68:1
-        assert_eq!(display.iter().find(|h| h.id == "low-contrast").unwrap().severity, None);
+        assert_eq!(
+            display
+                .iter()
+                .find(|h| h.id == "low-contrast")
+                .unwrap()
+                .severity,
+            None
+        );
         let display_near = check_colors(&white_panel(gray(149.0), 40.0, 700.0)); // #959595 2.99:1
-        assert!(display_near.iter().find(|h| h.id == "low-contrast").unwrap().is_advisory());
+        assert!(display_near
+            .iter()
+            .find(|h| h.id == "low-contrast")
+            .unwrap()
+            .is_advisory());
         let hover = check_hover_contrast(&HoverContrastOpts {
             tag: "button".to_string(),
             text_color: Some(gray(120.0)),
@@ -3759,21 +4033,39 @@ mod tests {
         // Decorative first: advisory, and a second decorative copy dedupes.
         let a = check_colors_deduped_shaped(&link, &mut seen, None, &|| true, &mut keep);
         assert!(a.len() == 1 && a[0].is_advisory(), "{a:?}");
-        assert!(check_colors_deduped_shaped(&link, &mut seen, None, &|| true, &mut keep).is_empty());
+        assert!(
+            check_colors_deduped_shaped(&link, &mut seen, None, &|| true, &mut keep).is_empty()
+        );
         // The failing copy after it still reports, and then speaks for both.
         let b = check_colors_deduped_shaped(&link, &mut seen, None, &|| false, &mut keep);
         assert!(b.len() == 1 && !b[0].is_advisory(), "{b:?}");
-        assert!(check_colors_deduped_shaped(&link, &mut seen, None, &|| false, &mut keep).is_empty());
+        assert!(
+            check_colors_deduped_shaped(&link, &mut seen, None, &|| false, &mut keep).is_empty()
+        );
         let mut seen2 = SafeTagTextSeen::default();
-        assert_eq!(check_colors_deduped_shaped(&link, &mut seen2, None, &|| false, &mut keep).len(), 1);
-        assert!(check_colors_deduped_shaped(&link, &mut seen2, None, &|| true, &mut keep).is_empty());
+        assert_eq!(
+            check_colors_deduped_shaped(&link, &mut seen2, None, &|| false, &mut keep).len(),
+            1
+        );
+        assert!(
+            check_colors_deduped_shaped(&link, &mut seen2, None, &|| true, &mut keep).is_empty()
+        );
         // The verdict is asked only of an element that failed.
         let readable = ColorOpts {
             text_color: Some(Rgba::new(20.0, 20.0, 20.0, 1.0)),
             ..link.clone()
         };
         let asked = std::cell::Cell::new(false);
-        check_colors_deduped_shaped(&readable, &mut seen, None, &|| { asked.set(true); true }, &mut keep);
+        check_colors_deduped_shaped(
+            &readable,
+            &mut seen,
+            None,
+            &|| {
+                asked.set(true);
+                true
+            },
+            &mut keep,
+        );
         assert!(!asked.get());
     }
 }

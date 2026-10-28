@@ -14,13 +14,32 @@ use std::collections::BTreeMap;
 pub const PRODUCT_NAMES: [&str; 3] = ["PRODUCT.md", "Product.md", "product.md"];
 pub const DESIGN_NAMES: [&str; 3] = ["DESIGN.md", "Design.md", "design.md"];
 pub const FALLBACK_DIRS: [&str; 2] = [".agents/context", "docs"];
-pub const MONOREPO_MARKER_FILES: [&str; 4] = ["pnpm-workspace.yaml", "turbo.json", "nx.json", "lerna.json"];
+pub const MONOREPO_MARKER_FILES: [&str; 4] =
+    ["pnpm-workspace.yaml", "turbo.json", "nx.json", "lerna.json"];
 pub const MONOREPO_FALLBACK_PROJECT_DIRS: [&str; 2] = ["apps", "packages"];
 pub const WORKSPACE_DISCOVERY_IGNORED_DIRS: [&str; 12] = [
-    "node_modules", ".git", "dist", "build", ".next", ".nuxt", ".svelte-kit", ".turbo", ".cache", "coverage",
-    "vendor", "vendors",
+    "node_modules",
+    ".git",
+    "dist",
+    "build",
+    ".next",
+    ".nuxt",
+    ".svelte-kit",
+    ".turbo",
+    ".cache",
+    "coverage",
+    "vendor",
+    "vendors",
 ];
-const VISUAL_SOURCE_DIRS: [&str; 7] = ["src", "app", "pages", "components", "site", "public", "styles"];
+const VISUAL_SOURCE_DIRS: [&str; 7] = [
+    "src",
+    "app",
+    "pages",
+    "components",
+    "site",
+    "public",
+    "styles",
+];
 const STYLE_EXTENSIONS: [&str; 5] = [".css", ".scss", ".sass", ".less", ".styl"];
 const UI_EXTENSIONS: [&str; 7] = [".html", ".htm", ".jsx", ".tsx", ".vue", ".svelte", ".astro"];
 const VISUAL_SCAN_FILE_LIMIT: usize = 250;
@@ -105,20 +124,33 @@ pub fn load_context(cwd: &str, options: &TargetOptions, env: &Env) -> Ctx {
     let product = resolved.product_path.as_deref().and_then(safe_read);
     let design = resolved.design_path.as_deref().and_then(safe_read);
     let platform = extract_platform(product.as_deref());
-    let target = if has_target_option(options) { options.target_path.as_deref() } else { None };
+    let target = if has_target_option(options) {
+        options.target_path.as_deref()
+    } else {
+        None
+    };
     let sr = resolve_surface_brief(&resolved.project_root, target);
     let brief = sr.brief.clone();
     Ctx {
         has_product: product.as_deref().map(|p| !p.is_empty()).unwrap_or(false),
-        product_path: resolved.product_path.as_deref().map(|p| jsp::relative(&abs_cwd, &abs_cwd, p)),
+        product_path: resolved
+            .product_path
+            .as_deref()
+            .map(|p| jsp::relative(&abs_cwd, &abs_cwd, p)),
         has_design: design.as_deref().map(|d| !d.is_empty()).unwrap_or(false),
-        design_path: resolved.design_path.as_deref().map(|p| jsp::relative(&abs_cwd, &abs_cwd, p)),
+        design_path: resolved
+            .design_path
+            .as_deref()
+            .map(|p| jsp::relative(&abs_cwd, &abs_cwd, p)),
         context_dir: resolved.context_dir.clone(),
         product_context_dir: resolved.product_path.as_deref().map(jsp::dirname),
         design_context_dir: resolved.design_path.as_deref().map(jsp::dirname),
         has_surface_brief: brief.is_some(),
         surface_brief: brief.as_ref().map(|b| b.text.clone()),
-        surface_brief_path: brief.as_ref().and_then(|b| b.path.as_deref()).map(|p| jsp::relative(&abs_cwd, &abs_cwd, p)),
+        surface_brief_path: brief
+            .as_ref()
+            .and_then(|b| b.path.as_deref())
+            .map(|p| jsp::relative(&abs_cwd, &abs_cwd, p)),
         surface_brief_reason: sr.reason,
         surface_brief_candidates: sr
             .candidates
@@ -153,11 +185,19 @@ pub fn resolve_context(cwd: &str, options: &TargetOptions, env: &Env) -> Resolve
     let mut product_path = project_context_dir
         .as_deref()
         .and_then(|d| first_existing(d, &PRODUCT_NAMES))
-        .or_else(|| root_context_dir.as_deref().and_then(|d| first_existing(d, &PRODUCT_NAMES)));
+        .or_else(|| {
+            root_context_dir
+                .as_deref()
+                .and_then(|d| first_existing(d, &PRODUCT_NAMES))
+        });
     let mut design_path = project_context_dir
         .as_deref()
         .and_then(|d| first_existing(d, &DESIGN_NAMES))
-        .or_else(|| root_context_dir.as_deref().and_then(|d| first_existing(d, &DESIGN_NAMES)));
+        .or_else(|| {
+            root_context_dir
+                .as_deref()
+                .and_then(|d| first_existing(d, &DESIGN_NAMES))
+        });
     let mut env_context_dir: Option<String> = None;
     if product_path.is_none() && design_path.is_none() {
         env_context_dir = resolve_env_context_dir(&abs_cwd, env);
@@ -171,7 +211,9 @@ pub fn resolve_context(cwd: &str, options: &TargetOptions, env: &Env) -> Resolve
     } else if let Some(d) = &design_path {
         jsp::dirname(d)
     } else {
-        env_context_dir.clone().unwrap_or_else(|| project.project_root.clone())
+        env_context_dir
+            .clone()
+            .unwrap_or_else(|| project.project_root.clone())
     };
     Resolved {
         context_dir,
@@ -214,22 +256,37 @@ pub struct TargetSelection {
 
 /// JS: resolveTargetSelection. Offers only workspaces with a UI signal
 /// (#1014); see `discover_ui_target_candidates`.
-pub fn resolve_target_selection(cwd: &str, options: &TargetOptions, env: &Env) -> Option<TargetSelection> {
+pub fn resolve_target_selection(
+    cwd: &str,
+    options: &TargetOptions,
+    env: &Env,
+) -> Option<TargetSelection> {
     target_selection(cwd, options, env, true)
 }
 
 /// The same selection over every workspace, unfiltered. `doctor` sweeps all of
 /// them, UI or not.
-pub fn resolve_workspace_selection(cwd: &str, options: &TargetOptions, env: &Env) -> Option<TargetSelection> {
+pub fn resolve_workspace_selection(
+    cwd: &str,
+    options: &TargetOptions,
+    env: &Env,
+) -> Option<TargetSelection> {
     target_selection(cwd, options, env, false)
 }
 
-fn target_selection(cwd: &str, options: &TargetOptions, env: &Env, ui_only: bool) -> Option<TargetSelection> {
+fn target_selection(
+    cwd: &str,
+    options: &TargetOptions,
+    env: &Env,
+    ui_only: bool,
+) -> Option<TargetSelection> {
     if has_target_option(options) {
         return None;
     }
     let project = resolve_project(cwd, &TargetOptions::default(), env);
-    if !project.is_monorepo || jsp::resolve(&project.project_root, &[]) != jsp::resolve(&project.repo_root, &[]) {
+    if !project.is_monorepo
+        || jsp::resolve(&project.project_root, &[]) != jsp::resolve(&project.repo_root, &[])
+    {
         return None;
     }
     let (cands, skipped_non_ui) = if ui_only {
@@ -299,13 +356,15 @@ pub fn resolve_project(cwd: &str, options: &TargetOptions, env: &Env) -> Project
     }
     match repo_root {
         None => Project {
-            project_root: nearest_target_context_root(&abs_cwd, &target_dir).unwrap_or_else(|| abs_cwd.clone()),
+            project_root: nearest_target_context_root(&abs_cwd, &target_dir)
+                .unwrap_or_else(|| abs_cwd.clone()),
             repo_root: abs_cwd,
             is_monorepo: false,
             target_dir,
         },
         Some(root) => Project {
-            project_root: resolve_workspace_project_root(&root, &target_dir).unwrap_or_else(|| root.clone()),
+            project_root: resolve_workspace_project_root(&root, &target_dir)
+                .unwrap_or_else(|| root.clone()),
             repo_root: root,
             is_monorepo: true,
             target_dir,
@@ -366,7 +425,11 @@ fn resolve_env_context_dir(cwd: &str, env: &Env) -> Option<String> {
     if t.is_empty() {
         return None;
     }
-    Some(if jsp::is_absolute(t) { t.to_string() } else { jsp::resolve(cwd, &[t]) })
+    Some(if jsp::is_absolute(t) {
+        t.to_string()
+    } else {
+        jsp::resolve(cwd, &[t])
+    })
 }
 
 /// JS: context.mjs#resolveTargetPath. A bare workspace name (or a
@@ -413,11 +476,17 @@ fn find_unique_bare_target(cwd: &str, target_path: &str, env: &Env) -> Option<St
 }
 
 fn resolve_target_dir(cwd: &str, options: &TargetOptions) -> String {
-    let Some(tp) = options.target_path.as_deref() else { return cwd.to_string() };
+    let Some(tp) = options.target_path.as_deref() else {
+        return cwd.to_string();
+    };
     if js_trim(tp).is_empty() {
         return cwd.to_string();
     }
-    let abs = if jsp::is_absolute(tp) { tp.to_string() } else { jsp::resolve(cwd, &[tp]) };
+    let abs = if jsp::is_absolute(tp) {
+        tp.to_string()
+    } else {
+        jsp::resolve(cwd, &[tp])
+    };
     match std::fs::metadata(&abs) {
         Ok(md) => {
             if md.is_dir() {
@@ -458,10 +527,16 @@ fn find_monorepo_root(start: &str, env: &Env) -> Option<String> {
 }
 
 fn is_monorepo_root(dir: &str) -> bool {
-    if read_project_patterns(dir).iter().any(|p| !normalize_workspace_pattern(p).starts_with('!')) {
+    if read_project_patterns(dir)
+        .iter()
+        .any(|p| !normalize_workspace_pattern(p).starts_with('!'))
+    {
         return true;
     }
-    if !MONOREPO_MARKER_FILES.iter().any(|f| exists(&jsp::join(&[dir, f]))) {
+    if !MONOREPO_MARKER_FILES
+        .iter()
+        .any(|f| exists(&jsp::join(&[dir, f])))
+    {
         return false;
     }
     has_fallback_workspace_children(dir)
@@ -470,8 +545,13 @@ fn is_monorepo_root(dir: &str) -> bool {
 fn has_fallback_workspace_children(dir: &str) -> bool {
     for name in MONOREPO_FALLBACK_PROJECT_DIRS {
         let base = jsp::join(&[dir, name]);
-        let Some(entries) = read_dir_entries(&base) else { continue };
-        if entries.iter().any(|e| e.is_dir && !is_ignored_workspace_discovery_dir(&e.name)) {
+        let Some(entries) = read_dir_entries(&base) else {
+            continue;
+        };
+        if entries
+            .iter()
+            .any(|e| e.is_dir && !is_ignored_workspace_discovery_dir(&e.name))
+        {
             return true;
         }
     }
@@ -498,14 +578,21 @@ pub fn discover_target_candidates(repo_root: &str, env: &Env) -> Vec<TargetCandi
 /// monorepo the heuristic misreads still gets a choice.
 pub fn discover_ui_target_candidates(repo_root: &str, env: &Env) -> (Vec<TargetCandidate>, usize) {
     let all = discover_candidate_roots(repo_root);
-    let kept: Vec<CandidateRoot> = all.iter().filter(|c| c.explicit || has_ui_signal(&c.root)).cloned().collect();
+    let kept: Vec<CandidateRoot> = all
+        .iter()
+        .filter(|c| c.explicit || has_ui_signal(&c.root))
+        .cloned()
+        .collect();
     let (kept, skipped) = if kept.is_empty() {
         (all, 0)
     } else {
         let skipped = all.len() - kept.len();
         (kept, skipped)
     };
-    let cands = kept.into_iter().map(|c| build_target_candidate(repo_root, c.rel, c.root, env)).collect();
+    let cands = kept
+        .into_iter()
+        .map(|c| build_target_candidate(repo_root, c.rel, c.root, env))
+        .collect();
     (cands, skipped)
 }
 
@@ -541,10 +628,15 @@ fn discover_candidate_roots(repo_root: &str) -> Vec<CandidateRoot> {
             }
         }
     }
-    if MONOREPO_MARKER_FILES.iter().any(|f| exists(&jsp::join(&[repo_root, f]))) {
+    if MONOREPO_MARKER_FILES
+        .iter()
+        .any(|f| exists(&jsp::join(&[repo_root, f])))
+    {
         for name in MONOREPO_FALLBACK_PROJECT_DIRS {
             let base = jsp::join(&[repo_root, name]);
-            let Some(entries) = read_dir_entries(&base) else { continue };
+            let Some(entries) = read_dir_entries(&base) else {
+                continue;
+            };
             for e in entries {
                 if !e.is_dir || is_ignored_workspace_discovery_dir(&e.name) {
                     continue;
@@ -561,16 +653,31 @@ fn discover_candidate_roots(repo_root: &str) -> Vec<CandidateRoot> {
         .filter(|rel| is_selectable_candidate(repo_root, rel, &groups))
         .map(|rel| {
             let (root, explicit) = roots.get(&rel).cloned().unwrap();
-            CandidateRoot { rel, root, explicit }
+            CandidateRoot {
+                rel,
+                root,
+                explicit,
+            }
         })
         .collect();
     entries.sort_by(|a, b| locale_compare(&a.rel, &b.rel));
     entries
 }
 
-fn build_target_candidate(repo_root: &str, rel: String, root: String, env: &Env) -> TargetCandidate {
+fn build_target_candidate(
+    repo_root: &str,
+    rel: String,
+    root: String,
+    env: &Env,
+) -> TargetCandidate {
     let target_example = find_target_example(repo_root, &root);
-    let ctx = resolve_context(repo_root, &TargetOptions { target_path: Some(target_example.clone()) }, env);
+    let ctx = resolve_context(
+        repo_root,
+        &TargetOptions {
+            target_path: Some(target_example.clone()),
+        },
+        env,
+    );
     TargetCandidate {
         name: jsp::basename(&root),
         path: rel,
@@ -585,10 +692,37 @@ fn build_target_candidate(repo_root: &str, rel: String, root: String, env: &Env)
 /// Dependencies that mark a workspace as rendering a UI. Matched against the
 /// keys of `dependencies`, `devDependencies`, and `peerDependencies`.
 const UI_DEPENDENCIES: [&str; 32] = [
-    "react", "react-dom", "react-native", "@react-native/metro-config", "expo", "next", "gatsby",
-    "@remix-run/react", "react-router", "vue", "nuxt", "svelte", "@sveltejs/kit", "solid-js", "@solidjs/start",
-    "preact", "lit", "astro", "@angular/core", "@builder.io/qwik", "ember-source", "alpinejs", "htmx.org", "vite",
-    "storybook", "@11ty/eleventy", "@docusaurus/core", "vitepress", "electron", "@tauri-apps/api", "@ionic/core",
+    "react",
+    "react-dom",
+    "react-native",
+    "@react-native/metro-config",
+    "expo",
+    "next",
+    "gatsby",
+    "@remix-run/react",
+    "react-router",
+    "vue",
+    "nuxt",
+    "svelte",
+    "@sveltejs/kit",
+    "solid-js",
+    "@solidjs/start",
+    "preact",
+    "lit",
+    "astro",
+    "@angular/core",
+    "@builder.io/qwik",
+    "ember-source",
+    "alpinejs",
+    "htmx.org",
+    "vite",
+    "storybook",
+    "@11ty/eleventy",
+    "@docusaurus/core",
+    "vitepress",
+    "electron",
+    "@tauri-apps/api",
+    "@ionic/core",
     "@stencil/core",
 ];
 const UI_DEPENDENCY_PREFIXES: [&str; 3] = ["@storybook/", "@remix-run/", "@react-router/"];
@@ -609,7 +743,17 @@ const UI_ENTRY_PATHS: [&str; 10] = [
     "angular.json",
 ];
 /// Directories listed one level deep (never recursed) for a UI or style file.
-const UI_SHALLOW_DIRS: [&str; 9] = ["", "src", "app", "pages", "components", "public", "static", "styles", "templates"];
+const UI_SHALLOW_DIRS: [&str; 9] = [
+    "",
+    "src",
+    "app",
+    "pages",
+    "components",
+    "public",
+    "static",
+    "styles",
+    "templates",
+];
 
 static FLUTTER_PUBSPEC_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?m)^\s*(sdk:\s*flutter\b|flutter:\s*(#.*)?$)").unwrap());
@@ -629,9 +773,12 @@ fn is_flutter_pubspec(body: &str) -> bool {
 pub fn has_ui_signal(root: &str) -> bool {
     if let Some(pkg) = read_json(&jsp::join(&[root, "package.json"])) {
         for field in ["dependencies", "devDependencies", "peerDependencies"] {
-            let Some(deps) = pkg.get(field).and_then(|v| v.as_object()) else { continue };
+            let Some(deps) = pkg.get(field).and_then(|v| v.as_object()) else {
+                continue;
+            };
             if deps.keys().any(|k| {
-                UI_DEPENDENCIES.contains(&k.as_str()) || UI_DEPENDENCY_PREFIXES.iter().any(|p| k.starts_with(p))
+                UI_DEPENDENCIES.contains(&k.as_str())
+                    || UI_DEPENDENCY_PREFIXES.iter().any(|p| k.starts_with(p))
             }) {
                 return true;
             }
@@ -640,22 +787,33 @@ pub fn has_ui_signal(root: &str) -> bool {
     if first_existing(root, &all_context_names()).is_some() {
         return true;
     }
-    if UI_ENTRY_PATHS.iter().any(|rel| exists(&jsp::join(&[root, rel]))) {
+    if UI_ENTRY_PATHS
+        .iter()
+        .any(|rel| exists(&jsp::join(&[root, rel])))
+    {
         return true;
     }
-    if safe_read(&jsp::join(&[root, "pubspec.yaml"])).is_some_and(|body| is_flutter_pubspec(&body)) {
+    if safe_read(&jsp::join(&[root, "pubspec.yaml"])).is_some_and(|body| is_flutter_pubspec(&body))
+    {
         return true;
     }
     UI_SHALLOW_DIRS.iter().any(|rel| {
-        let dir = if rel.is_empty() { root.to_string() } else { jsp::join(&[root, rel]) };
-        let Some(entries) = read_dir_entries(&dir) else { return false };
+        let dir = if rel.is_empty() {
+            root.to_string()
+        } else {
+            jsp::join(&[root, rel])
+        };
+        let Some(entries) = read_dir_entries(&dir) else {
+            return false;
+        };
         entries.iter().any(|e| {
             let ext = jsp::extname(&e.name).to_lowercase();
             if e.is_dir {
                 return rel.is_empty() && (ext == ".xcodeproj" || ext == ".xcworkspace");
             }
             e.is_file
-                && (UI_EXTENSIONS.contains(&ext.as_str()) || STYLE_EXTENSIONS.contains(&ext.as_str()))
+                && (UI_EXTENSIONS.contains(&ext.as_str())
+                    || STYLE_EXTENSIONS.contains(&ext.as_str()))
                 && !RE_MIN.is_match(&e.name.to_lowercase())
         })
     })
@@ -678,19 +836,35 @@ pub fn locale_compare(a: &str, b: &str) -> std::cmp::Ordering {
     let kb: Vec<(u8, u32)> = b.chars().map(key).collect();
     ka.cmp(&kb).then_with(|| {
         // lowercase before uppercase at the tertiary level
-        let la: Vec<u8> = a.chars().map(|c| if c.is_ascii_uppercase() { 1 } else { 0 }).collect();
-        let lb: Vec<u8> = b.chars().map(|c| if c.is_ascii_uppercase() { 1 } else { 0 }).collect();
+        let la: Vec<u8> = a
+            .chars()
+            .map(|c| if c.is_ascii_uppercase() { 1 } else { 0 })
+            .collect();
+        let lb: Vec<u8> = b
+            .chars()
+            .map(|c| if c.is_ascii_uppercase() { 1 } else { 0 })
+            .collect();
         la.cmp(&lb)
     })
 }
 
-fn context_source_status(file_path: Option<&str>, repo_root: &str, project_root: &str) -> &'static str {
-    let Some(fp) = file_path else { return "missing" };
+fn context_source_status(
+    file_path: Option<&str>,
+    repo_root: &str,
+    project_root: &str,
+) -> &'static str {
+    let Some(fp) = file_path else {
+        return "missing";
+    };
     let abs = jsp::resolve(fp, &[]);
     let abs_project = jsp::resolve(project_root, &[]);
     let abs_repo = jsp::resolve(repo_root, &[]);
     if is_path_inside_or_equal(&abs, &abs_project) {
-        return if jsp::dirname(&abs) == abs_project { "child" } else { "fallback" };
+        return if jsp::dirname(&abs) == abs_project {
+            "child"
+        } else {
+            "fallback"
+        };
     }
     if abs_project != abs_repo && is_path_inside_or_equal(&abs, &abs_repo) {
         return "inherited";
@@ -743,15 +917,26 @@ fn discover_roots_for_pattern(repo_root: &str, raw: &str) -> Vec<String> {
     expand_simple_pattern(repo_root, &segments, 0, repo_root)
 }
 
-fn expand_simple_pattern(repo_root: &str, segs: &[&str], index: usize, current: &str) -> Vec<String> {
+fn expand_simple_pattern(
+    repo_root: &str,
+    segs: &[&str],
+    index: usize,
+    current: &str,
+) -> Vec<String> {
     if index >= segs.len() {
-        return if exists(current) { vec![current.to_string()] } else { vec![] };
+        return if exists(current) {
+            vec![current.to_string()]
+        } else {
+            vec![]
+        };
     }
     let seg = segs[index];
     if !seg.contains('*') {
         return expand_simple_pattern(repo_root, segs, index + 1, &jsp::join(&[current, seg]));
     }
-    let Some(entries) = read_dir_entries(current) else { return vec![] };
+    let Some(entries) = read_dir_entries(current) else {
+        return vec![];
+    };
     let mut roots = Vec::new();
     for e in entries {
         if !e.is_dir || is_ignored_workspace_discovery_dir(&e.name) {
@@ -760,7 +945,12 @@ fn expand_simple_pattern(repo_root: &str, segs: &[&str], index: usize, current: 
         if !segment_matches(seg, &e.name) {
             continue;
         }
-        roots.extend(expand_simple_pattern(repo_root, segs, index + 1, &jsp::join(&[current, &e.name])));
+        roots.extend(expand_simple_pattern(
+            repo_root,
+            segs,
+            index + 1,
+            &jsp::join(&[current, &e.name]),
+        ));
     }
     roots
 }
@@ -777,7 +967,9 @@ fn direct_child_dirs(dir: &str) -> Vec<String> {
 }
 
 fn walk_dirs(root: &str, visit: &mut dyn FnMut(&str)) {
-    let Some(entries) = read_dir_entries(root) else { return };
+    let Some(entries) = read_dir_entries(root) else {
+        return;
+    };
     for e in entries {
         if !e.is_dir || is_ignored_workspace_discovery_dir(&e.name) {
             continue;
@@ -829,7 +1021,8 @@ fn resolve_workspace_project_root(repo_root: &str, target_dir: &str) -> Option<S
             return Some(repo_root.to_string());
         }
         for pattern in &patterns {
-            if let Some(pr) = project_root_from_workspace_pattern(repo_root, &rel_segments, pattern) {
+            if let Some(pr) = project_root_from_workspace_pattern(repo_root, &rel_segments, pattern)
+            {
                 return Some(pr);
             }
         }
@@ -851,7 +1044,9 @@ fn is_selectable_candidate(repo_root: &str, rel: &str, groups: &[Vec<String>]) -
         return false;
     }
     for pattern in impeccable {
-        if let Some(boundary) = project_root_from_workspace_pattern(repo_root, &rel_segments, pattern) {
+        if let Some(boundary) =
+            project_root_from_workspace_pattern(repo_root, &rel_segments, pattern)
+        {
             let mut parts = vec![repo_root];
             parts.extend(rel_segments.iter());
             return jsp::resolve(&boundary, &[]) == jsp::resolve(&jsp::join(&parts), &[]);
@@ -874,7 +1069,10 @@ fn nearest_target_context_root(abs_cwd: &str, target_dir: &str) -> Option<String
     if !is_path_inside(target_dir, abs_cwd) {
         return None;
     }
-    let root_fallbacks: Vec<String> = FALLBACK_DIRS.iter().map(|r| jsp::resolve(abs_cwd, &[r])).collect();
+    let root_fallbacks: Vec<String> = FALLBACK_DIRS
+        .iter()
+        .map(|r| jsp::resolve(abs_cwd, &[r]))
+        .collect();
     let mut dir = jsp::resolve(target_dir, &[]);
     while !dir.is_empty() && dir != abs_cwd {
         if !root_fallbacks.contains(&dir) && resolve_local_context_dir(&dir).is_some() {
@@ -893,7 +1091,9 @@ fn nearest_project_like_root(repo_root: &str, target_dir: &str) -> Option<String
     let mut dir = jsp::resolve(target_dir, &[]);
     let stop = jsp::resolve(repo_root, &[]);
     while !dir.is_empty() && dir != stop {
-        if first_existing(&dir, &all_context_names()).is_some() || exists(&jsp::join(&[&dir, "package.json"])) {
+        if first_existing(&dir, &all_context_names()).is_some()
+            || exists(&jsp::join(&[&dir, "package.json"]))
+        {
             return Some(dir);
         }
         let parent = jsp::dirname(&dir);
@@ -905,7 +1105,11 @@ fn nearest_project_like_root(repo_root: &str, target_dir: &str) -> Option<String
     None
 }
 
-fn nearest_package_root_between(repo_root: &str, target_dir: &str, stop_dir: &str) -> Option<String> {
+fn nearest_package_root_between(
+    repo_root: &str,
+    target_dir: &str,
+    stop_dir: &str,
+) -> Option<String> {
     let mut dir = jsp::resolve(target_dir, &[]);
     let stop = jsp::resolve(stop_dir, &[]);
     let root = jsp::resolve(repo_root, &[]);
@@ -966,15 +1170,22 @@ pub fn read_project_pattern_groups(repo_root: &str) -> Vec<Vec<String>> {
 }
 
 fn read_project_patterns(repo_root: &str) -> Vec<String> {
-    read_project_pattern_groups(repo_root).into_iter().flatten().collect()
+    read_project_pattern_groups(repo_root)
+        .into_iter()
+        .flatten()
+        .collect()
 }
 
 /// JS: readImpeccableProjectRoots
 pub fn read_impeccable_project_roots(repo_root: &str) -> Vec<String> {
     let mut patterns = Vec::new();
     for name in ["config.json", "config.local.json"] {
-        let Some(cfg) = read_json(&jsp::join(&[repo_root, ".impeccable", name])) else { continue };
-        let Some(arr) = cfg.get("projectRoots").and_then(|v| v.as_array()) else { continue };
+        let Some(cfg) = read_json(&jsp::join(&[repo_root, ".impeccable", name])) else {
+            continue;
+        };
+        let Some(arr) = cfg.get("projectRoots").and_then(|v| v.as_array()) else {
+            continue;
+        };
         for entry in arr {
             if let Some(s) = entry.as_str() {
                 let t = js_trim(s);
@@ -1004,8 +1215,12 @@ fn value_strings(v: &Value) -> Vec<String> {
 }
 
 fn read_package_workspaces(repo_root: &str) -> Vec<String> {
-    let Some(pkg) = read_json(&jsp::join(&[repo_root, "package.json"])) else { return vec![] };
-    let Some(ws) = pkg.get("workspaces") else { return vec![] };
+    let Some(pkg) = read_json(&jsp::join(&[repo_root, "package.json"])) else {
+        return vec![];
+    };
+    let Some(ws) = pkg.get("workspaces") else {
+        return vec![];
+    };
     if ws.is_array() {
         return value_strings(ws);
     }
@@ -1018,20 +1233,25 @@ fn read_package_workspaces(repo_root: &str) -> Vec<String> {
 }
 
 fn read_lerna_workspaces(repo_root: &str) -> Vec<String> {
-    let Some(lerna) = read_json(&jsp::join(&[repo_root, "lerna.json"])) else { return vec![] };
+    let Some(lerna) = read_json(&jsp::join(&[repo_root, "lerna.json"])) else {
+        return vec![];
+    };
     match lerna.get("packages") {
         Some(p) if p.is_array() => value_strings(p),
         _ => vec![],
     }
 }
 
-static PACKAGES_FLOW_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^packages:\s*\[(.*)\]\s*$").unwrap());
+static PACKAGES_FLOW_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^packages:\s*\[(.*)\]\s*$").unwrap());
 static PACKAGES_BLOCK_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^packages:\s*$").unwrap());
 static YAML_KEY_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[A-Za-z0-9_-]+:\s*").unwrap());
 static YAML_ITEM_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^-\s*(.+)$").unwrap());
 
 fn read_pnpm_workspaces(repo_root: &str) -> Vec<String> {
-    let Some(body) = safe_read(&jsp::join(&[repo_root, "pnpm-workspace.yaml"])) else { return vec![] };
+    let Some(body) = safe_read(&jsp::join(&[repo_root, "pnpm-workspace.yaml"])) else {
+        return vec![];
+    };
     let mut patterns = Vec::new();
     let mut in_packages = false;
     for line in body.split('\n') {
@@ -1068,7 +1288,11 @@ fn strip_yaml_inline_comment(line: &str) -> String {
     for i in 0..chars.len() {
         let ch = chars[i];
         if (ch == '"' || ch == '\'') && (i == 0 || chars[i - 1] != '\\') {
-            quote = if quote == Some(ch) { None } else { quote.or(Some(ch)) };
+            quote = if quote == Some(ch) {
+                None
+            } else {
+                quote.or(Some(ch))
+            };
             continue;
         }
         if ch == '#' && quote.is_none() {
@@ -1086,7 +1310,11 @@ fn parse_yaml_flow_list(body: &str) -> Vec<String> {
     for i in 0..chars.len() {
         let ch = chars[i];
         if (ch == '"' || ch == '\'') && (i == 0 || chars[i - 1] != '\\') {
-            quote = if quote == Some(ch) { None } else { quote.or(Some(ch)) };
+            quote = if quote == Some(ch) {
+                None
+            } else {
+                quote.or(Some(ch))
+            };
             current.push(ch);
             continue;
         }
@@ -1124,7 +1352,11 @@ pub fn strip_one_quote_each_end(t: &str) -> String {
     s.to_string()
 }
 
-fn project_root_from_workspace_pattern(repo_root: &str, rel_segments: &[&str], raw: &str) -> Option<String> {
+fn project_root_from_workspace_pattern(
+    repo_root: &str,
+    rel_segments: &[&str],
+    raw: &str,
+) -> Option<String> {
     let pattern = normalize_workspace_pattern(raw);
     if pattern.is_empty() || pattern.starts_with('!') {
         return None;
@@ -1149,7 +1381,11 @@ fn project_root_from_workspace_pattern(repo_root: &str, rel_segments: &[&str], r
     Some(jsp::join(&parts))
 }
 
-fn project_root_from_double_star_pattern(repo_root: &str, rel_segments: &[&str], segs: &[&str]) -> Option<String> {
+fn project_root_from_double_star_pattern(
+    repo_root: &str,
+    rel_segments: &[&str],
+    segs: &[&str],
+) -> Option<String> {
     let first_glob = segs.iter().position(|s| s.contains('*'));
     let prefix: Vec<&str> = match first_glob {
         None => segs.to_vec(),
@@ -1200,7 +1436,9 @@ fn segment_matches(pattern_segment: &str, rel_segment: &str) -> bool {
         }
     }
     re.push('$');
-    Regex::new(&re).map(|r| r.is_match(rel_segment)).unwrap_or(false)
+    Regex::new(&re)
+        .map(|r| r.is_match(rel_segment))
+        .unwrap_or(false)
 }
 
 // ─── extractSectionValue / extractPlatform ─────────────────────────────────
@@ -1235,12 +1473,18 @@ fn is_heading_line(s: &str) -> bool {
     if hashes == 0 || hashes > 6 {
         return false;
     }
-    s[hashes..].chars().next().map(|c| c.is_whitespace()).unwrap_or(false)
+    s[hashes..]
+        .chars()
+        .next()
+        .map(|c| c.is_whitespace())
+        .unwrap_or(false)
 }
 
 /// JS: extractPlatform
 pub fn extract_platform(product: Option<&str>) -> Option<String> {
-    let value = extract_section_value(product, "Platform").unwrap_or_default().to_lowercase();
+    let value = extract_section_value(product, "Platform")
+        .unwrap_or_default()
+        .to_lowercase();
     if value.is_empty() {
         return None;
     }
@@ -1267,12 +1511,18 @@ static RE_BLOCK_COMMENT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?s)/\*.*?\*/")
 static RE_HTML_COMMENT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?s)<!--.*?-->").unwrap());
 static RE_LINE_COMMENT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^\s*//.*$").unwrap());
 static RE_CUSTOM_PROP: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)--[a-z0-9_-]+\s*:").unwrap());
-static RE_VISUAL_DECL: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)(?-u:\b)(?:color|background(?:-color)?|border(?:-color)?|font-family)\s*:").unwrap());
-static RE_TOKEN_NAME: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?-u:\b)(?:tokens?|theme|design-system)(?-u:\b)").unwrap());
-static RE_STYLE_LINK: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)<style(?-u:\b)|<link[^>]+stylesheet").unwrap());
-static RE_CLASS_ATTR: Lazy<Regex> = Lazy::new(|| Regex::new("(?i)class(?:Name)?\\s*=\\s*[\"'`]([^\"'`]+)[\"'`]").unwrap());
-static RE_STYLED: Lazy<Regex> = Lazy::new(|| Regex::new("(?i)class(?:Name)?\\s*=|style\\s*=|styled\\(|css`").unwrap());
+static RE_VISUAL_DECL: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)(?-u:\b)(?:color|background(?:-color)?|border(?:-color)?|font-family)\s*:")
+        .unwrap()
+});
+static RE_TOKEN_NAME: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?-u:\b)(?:tokens?|theme|design-system)(?-u:\b)").unwrap());
+static RE_STYLE_LINK: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)<style(?-u:\b)|<link[^>]+stylesheet").unwrap());
+static RE_CLASS_ATTR: Lazy<Regex> =
+    Lazy::new(|| Regex::new("(?i)class(?:Name)?\\s*=\\s*[\"'`]([^\"'`]+)[\"'`]").unwrap());
+static RE_STYLED: Lazy<Regex> =
+    Lazy::new(|| Regex::new("(?i)class(?:Name)?\\s*=|style\\s*=|styled\\(|css`").unwrap());
 static RE_MIN: Lazy<Regex> = Lazy::new(|| Regex::new(r"\.min\.[a-z]+$").unwrap());
 
 fn js_slice_utf16(s: &str, n: usize) -> &str {
@@ -1319,7 +1569,9 @@ pub fn has_visual_implementation(project_root: &str) -> bool {
         if n >= VISUAL_SCAN_FILE_LIMIT {
             return false;
         }
-        let Some(raw) = safe_read(file_path) else { return false };
+        let Some(raw) = safe_read(file_path) else {
+            return false;
+        };
         let body = js_slice_utf16(&raw, 64 * 1024);
         let e1 = RE_BLOCK_COMMENT.replace_all(body, "");
         let e2 = RE_HTML_COMMENT.replace_all(&e1, "");
@@ -1350,7 +1602,9 @@ pub fn has_visual_implementation(project_root: &str) -> bool {
                     if t.is_empty() {
                         1
                     } else {
-                        t.split(|c: char| c.is_whitespace()).filter(|s| !s.is_empty()).count()
+                        t.split(|c: char| c.is_whitespace())
+                            .filter(|s| !s.is_empty())
+                            .count()
                     }
                 })
                 .sum();
@@ -1378,7 +1632,9 @@ pub fn has_visual_implementation(project_root: &str) -> bool {
         if scanned >= VISUAL_SCAN_FILE_LIMIT {
             break;
         }
-        let Some(entries) = read_dir_entries(&dir) else { continue };
+        let Some(entries) = read_dir_entries(&dir) else {
+            continue;
+        };
         for e in entries {
             if e.is_dir {
                 if depth >= VISUAL_SCAN_DEPTH_LIMIT
@@ -1388,7 +1644,8 @@ pub fn has_visual_implementation(project_root: &str) -> bool {
                     continue;
                 }
                 queue.push_back((jsp::join(&[&dir, &e.name]), depth + 1));
-            } else if e.is_file && inspect(&jsp::join(&[&dir, &e.name]), &mut scanned, &mut styled) {
+            } else if e.is_file && inspect(&jsp::join(&[&dir, &e.name]), &mut scanned, &mut styled)
+            {
                 return true;
             }
             if scanned >= VISUAL_SCAN_FILE_LIMIT {
@@ -1411,7 +1668,10 @@ mod ui_target_tests {
                 "impeccable-ui-targets-{}-{}-{}",
                 tag,
                 std::process::id(),
-                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
             ));
             std::fs::create_dir_all(&p).unwrap();
             Tmp(p)
@@ -1433,24 +1693,54 @@ mod ui_target_tests {
 
     fn env() -> Env {
         Env::from([
-            ("HOME".to_string(), "/nonexistent-impeccable-home".to_string()),
-            ("USERPROFILE".to_string(), "/nonexistent-impeccable-home".to_string()),
+            (
+                "HOME".to_string(),
+                "/nonexistent-impeccable-home".to_string(),
+            ),
+            (
+                "USERPROFILE".to_string(),
+                "/nonexistent-impeccable-home".to_string(),
+            ),
         ])
     }
 
     /// A Turborepo-style tree: three apps (one API), two UI packages, and
     /// three tooling packages.
     fn monorepo(t: &Tmp) {
-        t.put("package.json", r#"{"name":"mono","private":true,"workspaces":["apps/*","packages/*","tooling/*"]}"#);
-        t.put("apps/web/package.json", r#"{"name":"web","dependencies":{"next":"15.0.0","react":"19.0.0"}}"#);
-        t.put("apps/web/app/page.tsx", "export default function Page() { return null; }\n");
-        t.put("apps/api/package.json", r#"{"name":"api","dependencies":{"hono":"4.0.0"}}"#);
+        t.put(
+            "package.json",
+            r#"{"name":"mono","private":true,"workspaces":["apps/*","packages/*","tooling/*"]}"#,
+        );
+        t.put(
+            "apps/web/package.json",
+            r#"{"name":"web","dependencies":{"next":"15.0.0","react":"19.0.0"}}"#,
+        );
+        t.put(
+            "apps/web/app/page.tsx",
+            "export default function Page() { return null; }\n",
+        );
+        t.put(
+            "apps/api/package.json",
+            r#"{"name":"api","dependencies":{"hono":"4.0.0"}}"#,
+        );
         t.put("apps/api/src/index.ts", "export {};\n");
         t.put("apps/static/package.json", r#"{"name":"static"}"#);
-        t.put("apps/static/index.html", "<!doctype html><title>s</title>\n");
-        t.put("packages/ui/package.json", r#"{"name":"@m/ui","peerDependencies":{"react":"^19"}}"#);
-        t.put("packages/stories/package.json", r#"{"name":"stories","devDependencies":{"@storybook/react":"8.0.0"}}"#);
-        t.put("packages/tsconfig/package.json", r#"{"name":"@m/tsconfig"}"#);
+        t.put(
+            "apps/static/index.html",
+            "<!doctype html><title>s</title>\n",
+        );
+        t.put(
+            "packages/ui/package.json",
+            r#"{"name":"@m/ui","peerDependencies":{"react":"^19"}}"#,
+        );
+        t.put(
+            "packages/stories/package.json",
+            r#"{"name":"stories","devDependencies":{"@storybook/react":"8.0.0"}}"#,
+        );
+        t.put(
+            "packages/tsconfig/package.json",
+            r#"{"name":"@m/tsconfig"}"#,
+        );
         t.put(
             "packages/eslint-config/package.json",
             r#"{"name":"@m/eslint-config","dependencies":{"eslint-plugin-react":"7.0.0"}}"#,
@@ -1486,19 +1776,34 @@ mod ui_target_tests {
             "name: flutter_app\ndependencies:\n  flutter:\n    sdk: flutter\n",
         );
         // A pure Dart package is not a UI (review on #1047).
-        t.put("packages/models/pubspec.yaml", "name: models\ndependencies:\n  json_annotation: ^4.0.0\n");
+        t.put(
+            "packages/models/pubspec.yaml",
+            "name: models\ndependencies:\n  json_annotation: ^4.0.0\n",
+        );
         t.put("packages/models/lib/models.dart", "class User {}\n");
         assert!(!has_ui_signal(&at("packages/models")));
         t.put("apps/flutter/lib/main.dart", "void main() {}\n");
         t.put("apps/ios/ios/Podfile", "platform :ios, '15.0'\n");
         t.put("apps/swift/Demo.xcodeproj/project.pbxproj", "// pbx\n");
-        t.put("apps/android/app/src/main/AndroidManifest.xml", "<manifest/>\n");
+        t.put(
+            "apps/android/app/src/main/AndroidManifest.xml",
+            "<manifest/>\n",
+        );
         t.put("apps/documented/PRODUCT.md", "# P\n");
-        for app in ["apps/flutter", "apps/ios", "apps/swift", "apps/android", "apps/documented"] {
+        for app in [
+            "apps/flutter",
+            "apps/ios",
+            "apps/swift",
+            "apps/android",
+            "apps/documented",
+        ] {
             assert!(has_ui_signal(&at(app)), "{}", app);
         }
         // No tree walk: styles nested below the first level do not count.
-        t.put("packages/deep/src/a/b/theme.css", ":root { --a: #fff; --b: #000; --c: #f00; }\n");
+        t.put(
+            "packages/deep/src/a/b/theme.css",
+            ":root { --a: #fff; --b: #000; --c: #f00; }\n",
+        );
         assert!(!has_ui_signal(&at("packages/deep")));
         assert!(!has_ui_signal(&at("apps/api")));
         assert!(!has_ui_signal(&at("packages/tsconfig")));
@@ -1511,13 +1816,17 @@ mod ui_target_tests {
         let t = Tmp::new("filter");
         monorepo(&t);
         let (cands, skipped) = discover_ui_target_candidates(&t.root(), &env());
-        assert_eq!(paths(&cands), ["apps/static", "apps/web", "packages/stories", "packages/ui"]);
+        assert_eq!(
+            paths(&cands),
+            ["apps/static", "apps/web", "packages/stories", "packages/ui"]
+        );
         assert_eq!(skipped, 4);
         // The unfiltered list (doctor, bare-name resolution) is unchanged.
         assert_eq!(discover_target_candidates(&t.root(), &env()).len(), 8);
         let sel = resolve_target_selection(&t.root(), &TargetOptions::default(), &env()).unwrap();
         assert_eq!((sel.target_candidates.len(), sel.skipped_non_ui), (4, 4));
-        let all = resolve_workspace_selection(&t.root(), &TargetOptions::default(), &env()).unwrap();
+        let all =
+            resolve_workspace_selection(&t.root(), &TargetOptions::default(), &env()).unwrap();
         assert_eq!((all.target_candidates.len(), all.skipped_non_ui), (8, 0));
     }
 
@@ -1525,7 +1834,10 @@ mod ui_target_tests {
     fn native_app_beside_a_web_app_stays_listed() {
         let t = Tmp::new("native");
         monorepo(&t);
-        t.put("apps/mobile/pubspec.yaml", "name: mobile\nflutter:\n  uses-material-design: true\n");
+        t.put(
+            "apps/mobile/pubspec.yaml",
+            "name: mobile\nflutter:\n  uses-material-design: true\n",
+        );
         t.put("apps/mobile/lib/main.dart", "void main() {}\n");
         let (cands, skipped) = discover_ui_target_candidates(&t.root(), &env());
         assert!(paths(&cands).contains(&"apps/mobile"));
@@ -1537,7 +1849,10 @@ mod ui_target_tests {
     fn explicit_project_roots_are_never_filtered() {
         let t = Tmp::new("explicit");
         monorepo(&t);
-        t.put(".impeccable/config.json", r#"{"projectRoots":["tooling/*"]}"#);
+        t.put(
+            ".impeccable/config.json",
+            r#"{"projectRoots":["tooling/*"]}"#,
+        );
         let (cands, skipped) = discover_ui_target_candidates(&t.root(), &env());
         let p = paths(&cands);
         assert!(p.contains(&"tooling/scripts"));
@@ -1550,12 +1865,17 @@ mod ui_target_tests {
     fn negated_project_roots_still_hide_a_workspace() {
         let t = Tmp::new("negated");
         monorepo(&t);
-        t.put(".impeccable/config.json", r#"{"projectRoots":["!packages/stories","!apps/static"]}"#);
+        t.put(
+            ".impeccable/config.json",
+            r#"{"projectRoots":["!packages/stories","!apps/static"]}"#,
+        );
         let (cands, skipped) = discover_ui_target_candidates(&t.root(), &env());
         assert_eq!(paths(&cands), ["apps/web", "packages/ui"]);
         assert_eq!(skipped, 4);
         let all = discover_target_candidates(&t.root(), &env());
-        assert!(!paths(&all).iter().any(|p| *p == "packages/stories" || *p == "apps/static"));
+        assert!(!paths(&all)
+            .iter()
+            .any(|p| *p == "packages/stories" || *p == "apps/static"));
     }
 
     #[test]

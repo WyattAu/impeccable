@@ -29,7 +29,11 @@ fn hash32(s: &str) -> u32 {
 
 fn hsl_to_rgb(h_deg: f64, s: f64, l: f64) -> [u8; 3] {
     let h = ((h_deg % 360.0) + 360.0) % 360.0 / 360.0;
-    let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
+    let q = if l < 0.5 {
+        l * (1.0 + s)
+    } else {
+        l + s - l * s
+    };
     let p = 2.0 * l - q;
     let hue = |t: f64| -> f64 {
         let mut tt = t;
@@ -51,7 +55,11 @@ fn hsl_to_rgb(h_deg: f64, s: f64, l: f64) -> [u8; 3] {
         p
     };
     let round = |c: f64| -> u8 { js_round(c * 255.0) as u8 };
-    [round(hue(h + 1.0 / 3.0)), round(hue(h)), round(hue(h - 1.0 / 3.0))]
+    [
+        round(hue(h + 1.0 / 3.0)),
+        round(hue(h)),
+        round(hue(h - 1.0 / 3.0)),
+    ]
 }
 
 /// Math.round: half up toward +inf
@@ -105,7 +113,13 @@ fn svg_fake(prompt: &str, w: f64, h: f64) -> String {
     let stops: String = colors
         .iter()
         .enumerate()
-        .map(|(i, c)| format!("<stop offset=\"{}%\" stop-color=\"{}\"/>", num(js_round(i as f64 / (n as f64 - 1.0) * 100.0)), c))
+        .map(|(i, c)| {
+            format!(
+                "<stop offset=\"{}%\" stop-color=\"{}\"/>",
+                num(js_round(i as f64 / (n as f64 - 1.0) * 100.0)),
+                c
+            )
+        })
         .collect();
     let per_line = (12.0f64).max((w / 26.0).floor()) as usize;
     let words: Vec<&str> = {
@@ -132,7 +146,11 @@ fn svg_fake(prompt: &str, w: f64, h: f64) -> String {
     if !cur.is_empty() && lines.len() < 11 {
         lines.push(cur);
     }
-    let escape = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
+    let escape = |s: &str| {
+        s.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+    };
     let font_size = js_round(w / 24.0);
     let start_y = h / 2.0 - ((lines.len() as f64 - 1.0) * font_size * 1.3) / 2.0;
     let text: String = lines
@@ -169,7 +187,11 @@ fn crc32(data: &[u8]) -> u32 {
     for b in data {
         c ^= *b as u32;
         for _ in 0..8 {
-            c = if c & 1 == 1 { 0xedb88320 ^ (c >> 1) } else { c >> 1 };
+            c = if c & 1 == 1 {
+                0xedb88320 ^ (c >> 1)
+            } else {
+                c >> 1
+            };
         }
     }
     c ^ 0xffffffff
@@ -238,7 +260,11 @@ fn png_fake_background(prompt: &str, w: usize, h: usize, transparent: bool) -> V
 
 fn parse_size(s: &str) -> (usize, usize) {
     if let Some((a, b)) = s.split_once('x') {
-        if !a.is_empty() && !b.is_empty() && a.chars().all(|c| c.is_ascii_digit()) && b.chars().all(|c| c.is_ascii_digit()) {
+        if !a.is_empty()
+            && !b.is_empty()
+            && a.chars().all(|c| c.is_ascii_digit())
+            && b.chars().all(|c| c.is_ascii_digit())
+        {
             return (a.parse().unwrap_or(1536), b.parse().unwrap_or(1024));
         }
     }
@@ -280,9 +306,17 @@ fn sniffed_type(bytes: &[u8]) -> Option<&'static str> {
 /// rather than uploaded or kept as an image. `redirects` is how many the
 /// request may follow. The error is a short reason with no OS-specific text;
 /// the caller names the URL.
-pub(crate) fn fetch_image(url: &str, timeout: std::time::Duration, redirects: u32) -> Result<(Vec<u8>, &'static str), String> {
+pub(crate) fn fetch_image(
+    url: &str,
+    timeout: std::time::Duration,
+    redirects: u32,
+) -> Result<(Vec<u8>, &'static str), String> {
     use std::io::Read;
-    let agent = crate::http::agent_builder().timeout_connect(timeout).timeout(timeout).redirects(redirects).build();
+    let agent = crate::http::agent_builder()
+        .timeout_connect(timeout)
+        .timeout(timeout)
+        .redirects(redirects)
+        .build();
     let response = match agent.get(url).call() {
         Ok(r) => r,
         Err(ureq::Error::Status(code, _)) => return Err(format!("HTTP {}", code)),
@@ -292,7 +326,12 @@ pub(crate) fn fetch_image(url: &str, timeout: std::time::Duration, redirects: u3
         return Err(format!("HTTP {}", response.status()));
     }
     let mut bytes = Vec::new();
-    if response.into_reader().take(MAX_IMAGE_BYTES + 1).read_to_end(&mut bytes).is_err() {
+    if response
+        .into_reader()
+        .take(MAX_IMAGE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .is_err()
+    {
         return Err("the response was cut short".into());
     }
     if bytes.len() as u64 > MAX_IMAGE_BYTES {
@@ -301,15 +340,30 @@ pub(crate) fn fetch_image(url: &str, timeout: std::time::Duration, redirects: u3
     if bytes.is_empty() {
         return Err("the response was empty".into());
     }
-    sniffed_type(&bytes).map(|t| (bytes, t)).ok_or_else(|| "the response is not a png, webp, or jpeg image".into())
+    sniffed_type(&bytes)
+        .map(|t| (bytes, t))
+        .ok_or_else(|| "the response is not a png, webp, or jpeg image".into())
 }
 
 /// The multipart file name for a URL ref: its last path segment.
 fn url_file_name(url: &str) -> String {
-    let rest = url_path(url).split_once("://").map(|(_, r)| r).unwrap_or("");
-    let segment = rest.split_once('/').map(|(_, p)| p.rsplit('/').next().unwrap_or("")).unwrap_or("");
-    let name: String = segment.chars().filter(|c| !c.is_control() && *c != '"' && *c != '\\').collect();
-    if name.is_empty() { "ref".to_string() } else { name }
+    let rest = url_path(url)
+        .split_once("://")
+        .map(|(_, r)| r)
+        .unwrap_or("");
+    let segment = rest
+        .split_once('/')
+        .map(|(_, p)| p.rsplit('/').next().unwrap_or(""))
+        .unwrap_or("");
+    let name: String = segment
+        .chars()
+        .filter(|c| !c.is_control() && *c != '"' && *c != '\\')
+        .collect();
+    if name.is_empty() {
+        "ref".to_string()
+    } else {
+        name
+    }
 }
 
 pub fn run(args: &[String], io: &mut Io) -> i32 {
@@ -318,12 +372,19 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
 
 fn run_with_api_base(args: &[String], io: &mut Io, api_base: &str) -> i32 {
     let background = arg(args, "background");
-    if args.iter().any(|a| a == "--background") && !matches!(background.as_deref(), Some("transparent" | "opaque" | "auto")) {
+    if args.iter().any(|a| a == "--background")
+        && !matches!(
+            background.as_deref(),
+            Some("transparent" | "opaque" | "auto")
+        )
+    {
         io.err("generate-image: --background must be transparent, opaque, or auto.\n");
         return 1;
     }
     let transparent = background.as_deref() == Some("transparent");
-    if background.is_some() && arg(args, "out").is_some_and(|out| !out.to_ascii_lowercase().ends_with(".png")) {
+    if background.is_some()
+        && arg(args, "out").is_some_and(|out| !out.to_ascii_lowercase().ends_with(".png"))
+    {
         io.err("generate-image: --background requires a .png --out path.\n");
         return 1;
     }
@@ -339,7 +400,11 @@ fn run_with_api_base(args: &[String], io: &mut Io, api_base: &str) -> i32 {
             }
         }
     };
-    if env.get("IMPECCABLE_IMAGE_GEN_FAKE").map(|v| !v.is_empty()).unwrap_or(false) {
+    if env
+        .get("IMPECCABLE_IMAGE_GEN_FAKE")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false)
+    {
         let prompt = match arg(args, "prompt-file") {
             Some(pf) => match read_prompt_file(io, &pf) {
                 Ok(p) => Some(p),
@@ -364,7 +429,10 @@ fn run_with_api_base(args: &[String], io: &mut Io, api_base: &str) -> i32 {
             io.err(&format!("Error: {}\n", node_read_error(&out, &e)));
             return 1;
         }
-        io.out(&format!("IMAGE: {} ({}x{}, fake synthetic comp, $0.00, no API call)\n", out, w, h));
+        io.out(&format!(
+            "IMAGE: {} ({}x{}, fake synthetic comp, $0.00, no API call)\n",
+            out, w, h
+        ));
         note_generated_slot(io, &out);
         return 0;
     }
@@ -402,7 +470,13 @@ fn run_with_api_base(args: &[String], io: &mut Io, api_base: &str) -> i32 {
         let boundary = format!("----impeccable{:x}", crate::util::now_ms() as u64);
         let mut body: Vec<u8> = Vec::new();
         let mut field = |name: &str, value: &str| {
-            body.extend_from_slice(format!("--{}\r\nContent-Disposition: form-data; name=\"{}\"\r\n\r\n{}\r\n", boundary, name, value).as_bytes());
+            body.extend_from_slice(
+                format!(
+                    "--{}\r\nContent-Disposition: form-data; name=\"{}\"\r\n\r\n{}\r\n",
+                    boundary, name, value
+                )
+                .as_bytes(),
+            );
         };
         field("model", &model);
         field("prompt", &prompt);
@@ -451,7 +525,10 @@ fn run_with_api_base(args: &[String], io: &mut Io, api_base: &str) -> i32 {
         agent
             .post(&format!("{api_base}/images/edits"))
             .set("Authorization", &format!("Bearer {}", key))
-            .set("Content-Type", &format!("multipart/form-data; boundary={}", boundary))
+            .set(
+                "Content-Type",
+                &format!("multipart/form-data; boundary={}", boundary),
+            )
             .send_bytes(&body)
     } else {
         let mut m = Map::new();
@@ -483,11 +560,19 @@ fn run_with_api_base(args: &[String], io: &mut Io, api_base: &str) -> i32 {
     };
     if !(200..300).contains(&status) {
         let snippet: String = text.chars().take(300).collect();
-        io.err(&format!("generate-image: API error {}: {}\n", status, snippet));
+        io.err(&format!(
+            "generate-image: API error {}: {}\n",
+            status, snippet
+        ));
         return 1;
     }
     let json: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
-    let b64 = json.get("data").and_then(|d| d.get(0)).and_then(|d| d.get("b64_json")).and_then(|b| b.as_str()).filter(|s| !s.is_empty());
+    let b64 = json
+        .get("data")
+        .and_then(|d| d.get(0))
+        .and_then(|d| d.get("b64_json"))
+        .and_then(|b| b.as_str())
+        .filter(|s| !s.is_empty());
     let Some(b64) = b64 else {
         io.err("generate-image: no image in response\n");
         return 1;
@@ -502,7 +587,10 @@ fn run_with_api_base(args: &[String], io: &mut Io, api_base: &str) -> i32 {
     let embedded;
     {
         let mut sub_io = Io::captured("", io.cwd.clone(), io.env.clone()).0;
-        let ret = crate::embed_prompt::run(&[out.clone(), "--prompt".to_string(), prompt.clone()], &mut sub_io);
+        let ret = crate::embed_prompt::run(
+            &[out.clone(), "--prompt".to_string(), prompt.clone()],
+            &mut sub_io,
+        );
         embedded = ret == 0;
         if !embedded {
             io.err("generate-image: failed to embed prompt in the image\n");
@@ -510,16 +598,25 @@ fn run_with_api_base(args: &[String], io: &mut Io, api_base: &str) -> i32 {
         let mut m = Map::new();
         m.insert("prompt".into(), Value::String(prompt.clone()));
         m.insert("createdAt".into(), Value::String(iso_now()));
-        m.insert("tool".into(), Value::String("impeccable generate-image".into()));
+        m.insert(
+            "tool".into(),
+            Value::String("impeccable generate-image".into()),
+        );
         m.insert("model".into(), Value::String(model.clone()));
         if let Some(background) = &background {
             m.insert("background".into(), Value::String(background.clone()));
             m.insert("outputFormat".into(), Value::String("png".into()));
         }
         if !refs.is_empty() {
-            m.insert("refs".into(), Value::Array(refs.iter().cloned().map(Value::String).collect()));
+            m.insert(
+                "refs".into(),
+                Value::Array(refs.iter().cloned().map(Value::String).collect()),
+            );
         }
-        let _ = std::fs::write(abs(&format!("{}.json", out)), json_pretty(&Value::Object(m)));
+        let _ = std::fs::write(
+            abs(&format!("{}.json", out)),
+            json_pretty(&Value::Object(m)),
+        );
     }
     note_generated_slot(io, &out);
     io.out(&format!(
@@ -528,7 +625,11 @@ fn run_with_api_base(args: &[String], io: &mut Io, api_base: &str) -> i32 {
         size,
         quality,
         model,
-        if embedded { "prompt embedded + sidecar" } else { "sidecar" },
+        if embedded {
+            "prompt embedded + sidecar"
+        } else {
+            "sidecar"
+        },
         out
     ));
     0
@@ -580,13 +681,26 @@ mod tests {
         let _proxy_lock = crate::http::PROXY_ENV_LOCK.lock().unwrap();
         let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
         let api_base = format!("http://{}", server.server_addr());
-        let temp = std::env::temp_dir().join(format!("impeccable-image-{}-{}", std::process::id(), server.server_addr().to_ip().unwrap().port()));
+        let temp = std::env::temp_dir().join(format!(
+            "impeccable-image-{}-{}",
+            std::process::id(),
+            server.server_addr().to_ip().unwrap().port()
+        ));
         std::fs::create_dir_all(&temp).unwrap();
         std::fs::write(temp.join("ref.png"), png_fake("reference", 16, 16)).unwrap();
         let handle = std::thread::spawn(move || {
-            let mut request = server.recv_timeout(Duration::from_secs(10)).unwrap().expect("image request");
+            let mut request = server
+                .recv_timeout(Duration::from_secs(10))
+                .unwrap()
+                .expect("image request");
             let path = request.url().to_string();
-            let content_type = request.headers().iter().find(|h| h.field.equiv("Content-Type")).unwrap().value.to_string();
+            let content_type = request
+                .headers()
+                .iter()
+                .find(|h| h.field.equiv("Content-Type"))
+                .unwrap()
+                .value
+                .to_string();
             let mut body = String::new();
             // Multipart carries binary PNG bytes; preserve ASCII fields for inspection.
             let mut bytes = Vec::new();
@@ -597,7 +711,17 @@ mod tests {
         });
         let env = Env::from([("OPENAI_API_KEY".into(), "test-key".into())]);
         let (mut io, captured) = Io::captured("", temp.clone(), env);
-        let mut args: Vec<String> = ["--prompt", "Comp regression", "--out", "comp.png", "--quality", "high"].iter().map(|s| s.to_string()).collect();
+        let mut args: Vec<String> = [
+            "--prompt",
+            "Comp regression",
+            "--out",
+            "comp.png",
+            "--quality",
+            "high",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
         if edit {
             args.extend(["--ref".into(), "ref.png".into()]);
         }
@@ -609,7 +733,8 @@ mod tests {
         }
         let exit = run_with_api_base(&args, &mut io, &api_base);
         let (path, content_type, body) = handle.join().unwrap();
-        let sidecar: Value = serde_json::from_slice(&std::fs::read(temp.join("comp.png.json")).unwrap()).unwrap();
+        let sidecar: Value =
+            serde_json::from_slice(&std::fs::read(temp.join("comp.png.json")).unwrap()).unwrap();
         let image = std::fs::read(temp.join("comp.png")).unwrap();
         std::fs::remove_dir_all(&temp).unwrap();
         assert_eq!(exit, 0);
@@ -658,25 +783,44 @@ mod tests {
     /// Serves `GET` requests from `routes` (path -> status, content type,
     /// body) and answers one `POST` with a generated image; returns every
     /// request it saw as (method, path, body).
-    fn serve(server: tiny_http::Server, routes: Vec<(&'static str, u16, &'static str, Vec<u8>)>, requests: usize) -> std::thread::JoinHandle<Vec<(String, String, String)>> {
+    fn serve(
+        server: tiny_http::Server,
+        routes: Vec<(&'static str, u16, &'static str, Vec<u8>)>,
+        requests: usize,
+    ) -> std::thread::JoinHandle<Vec<(String, String, String)>> {
         std::thread::spawn(move || {
             let mut seen = Vec::new();
             while seen.len() < requests {
-                let Some(mut request) = server.recv_timeout(Duration::from_secs(10)).unwrap() else { break };
+                let Some(mut request) = server.recv_timeout(Duration::from_secs(10)).unwrap()
+                else {
+                    break;
+                };
                 let mut bytes = Vec::new();
                 request.as_reader().read_to_end(&mut bytes).unwrap();
                 let (method, path) = (request.method().to_string(), request.url().to_string());
-                seen.push((method.clone(), path.clone(), String::from_utf8_lossy(&bytes).into_owned()));
+                seen.push((
+                    method.clone(),
+                    path.clone(),
+                    String::from_utf8_lossy(&bytes).into_owned(),
+                ));
                 if method == "POST" {
                     request.respond(tiny_http::Response::from_string(r#"{"data":[{"b64_json":"iVBORw0KGgoAAAANSUhEUgAAAAQAAAABCAYAAAD5PA/NAAAAGklEQVR4nGP4////f7mAigYGBgaG/////wMAUdQJXhk2RAEAAAAASUVORK5CYII="}]}"#)).unwrap();
                 } else if let Some((_, status, ty, body)) = routes.iter().find(|r| r.0 == path) {
-                    let mut response = tiny_http::Response::from_data(body.clone()).with_status_code(*status);
+                    let mut response =
+                        tiny_http::Response::from_data(body.clone()).with_status_code(*status);
                     if !ty.is_empty() {
-                        response = response.with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], ty.as_bytes()).unwrap());
+                        response = response.with_header(
+                            tiny_http::Header::from_bytes(&b"Content-Type"[..], ty.as_bytes())
+                                .unwrap(),
+                        );
                     }
                     request.respond(response).unwrap();
                 } else {
-                    request.respond(tiny_http::Response::from_string("not found").with_status_code(404)).unwrap();
+                    request
+                        .respond(
+                            tiny_http::Response::from_string("not found").with_status_code(404),
+                        )
+                        .unwrap();
                 }
             }
             seen
@@ -684,7 +828,8 @@ mod tests {
     }
 
     fn temp(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("impeccable-image-{}-{}", name, std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("impeccable-image-{}-{}", name, std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -703,32 +848,111 @@ mod tests {
             vec![
                 // The bytes decide the type, whatever the header and the
                 // URL's extension say (or do not say).
-                ("/cards/world.webp?v=2", 200, "image/webp; charset=binary", webp),
-                ("/cards/world-hero.png", 200, "application/octet-stream", png_fake("hero", 8, 8)),
-                ("/cards/blob", 200, "", vec![0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]),
-                ("/cards/mislabeled.webp", 200, "image/webp", png_fake("mislabeled", 8, 8)),
+                (
+                    "/cards/world.webp?v=2",
+                    200,
+                    "image/webp; charset=binary",
+                    webp,
+                ),
+                (
+                    "/cards/world-hero.png",
+                    200,
+                    "application/octet-stream",
+                    png_fake("hero", 8, 8),
+                ),
+                (
+                    "/cards/blob",
+                    200,
+                    "",
+                    vec![0xff, 0xd8, 0xff, 0xe0, 1, 2, 3],
+                ),
+                (
+                    "/cards/mislabeled.webp",
+                    200,
+                    "image/webp",
+                    png_fake("mislabeled", 8, 8),
+                ),
             ],
             5,
         );
-        let (board, hero, blob, mislabeled) = (format!("{base}/cards/world.webp?v=2"), format!("{base}/cards/world-hero.png"), format!("{base}/cards/blob"), format!("{base}/cards/mislabeled.webp"));
+        let (board, hero, blob, mislabeled) = (
+            format!("{base}/cards/world.webp?v=2"),
+            format!("{base}/cards/world-hero.png"),
+            format!("{base}/cards/blob"),
+            format!("{base}/cards/mislabeled.webp"),
+        );
         let env = Env::from([("OPENAI_API_KEY".into(), "test-key".into())]);
         let (mut io, captured) = Io::captured("", dir.clone(), env);
-        let args: Vec<String> = ["--prompt", "Comp with cards", "--out", "comp.png", "--ref", &board, "--ref", "local.png", "--ref", &hero, "--ref", &blob, "--ref", &mislabeled].iter().map(|s| s.to_string()).collect();
+        let args: Vec<String> = [
+            "--prompt",
+            "Comp with cards",
+            "--out",
+            "comp.png",
+            "--ref",
+            &board,
+            "--ref",
+            "local.png",
+            "--ref",
+            &hero,
+            "--ref",
+            &blob,
+            "--ref",
+            &mislabeled,
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
         let exit = run_with_api_base(&args, &mut io, &base);
         let seen = handle.join().unwrap();
         let stderr = String::from_utf8(captured.stderr.borrow().clone()).unwrap();
         assert_eq!(exit, 0, "{stderr}");
         let paths: Vec<(&str, &str)> = seen.iter().map(|r| (r.0.as_str(), r.1.as_str())).collect();
-        assert_eq!(paths, vec![("GET", "/cards/world.webp?v=2"), ("GET", "/cards/world-hero.png"), ("GET", "/cards/blob"), ("GET", "/cards/mislabeled.webp"), ("POST", "/images/edits")]);
+        assert_eq!(
+            paths,
+            vec![
+                ("GET", "/cards/world.webp?v=2"),
+                ("GET", "/cards/world-hero.png"),
+                ("GET", "/cards/blob"),
+                ("GET", "/cards/mislabeled.webp"),
+                ("POST", "/images/edits")
+            ]
+        );
         let body = &seen[4].2;
-        assert!(body.contains("name=\"image[]\"; filename=\"world.webp\"\r\nContent-Type: image/webp\r\n\r\nRIFF"), "{body}");
-        assert!(body.contains("name=\"image[]\"; filename=\"local.png\"\r\nContent-Type: image/png\r\n"), "{body}");
-        assert!(body.contains("name=\"image[]\"; filename=\"world-hero.png\"\r\nContent-Type: image/png\r\n"), "{body}");
-        assert!(body.contains("name=\"image[]\"; filename=\"blob\"\r\nContent-Type: image/jpeg\r\n"), "{body}");
-        assert!(body.contains("name=\"image[]\"; filename=\"mislabeled.webp\"\r\nContent-Type: image/png\r\n"), "{body}");
+        assert!(
+            body.contains(
+                "name=\"image[]\"; filename=\"world.webp\"\r\nContent-Type: image/webp\r\n\r\nRIFF"
+            ),
+            "{body}"
+        );
+        assert!(
+            body.contains(
+                "name=\"image[]\"; filename=\"local.png\"\r\nContent-Type: image/png\r\n"
+            ),
+            "{body}"
+        );
+        assert!(
+            body.contains(
+                "name=\"image[]\"; filename=\"world-hero.png\"\r\nContent-Type: image/png\r\n"
+            ),
+            "{body}"
+        );
+        assert!(
+            body.contains("name=\"image[]\"; filename=\"blob\"\r\nContent-Type: image/jpeg\r\n"),
+            "{body}"
+        );
+        assert!(
+            body.contains(
+                "name=\"image[]\"; filename=\"mislabeled.webp\"\r\nContent-Type: image/png\r\n"
+            ),
+            "{body}"
+        );
         // The sidecar records each ref as it was given: the URL itself.
-        let sidecar: Value = serde_json::from_slice(&std::fs::read(dir.join("comp.png.json")).unwrap()).unwrap();
-        assert_eq!(sidecar["refs"], serde_json::json!([board, "local.png", hero, blob, mislabeled]));
+        let sidecar: Value =
+            serde_json::from_slice(&std::fs::read(dir.join("comp.png.json")).unwrap()).unwrap();
+        assert_eq!(
+            sidecar["refs"],
+            serde_json::json!([board, "local.png", hero, blob, mislabeled])
+        );
         assert!(dir.join("comp.png").exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -739,11 +963,31 @@ mod tests {
         let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
         let base = format!("http://{}", server.server_addr());
         let dir = temp("url-ref-fail");
-        let handle = serve(server, vec![("/cards/page.html", 200, "text/html", b"<html>blocked</html>".to_vec()), ("/cards/world.webp", 200, "image/webp", b"<html>sign in</html>".to_vec())], 3);
+        let handle = serve(
+            server,
+            vec![
+                (
+                    "/cards/page.html",
+                    200,
+                    "text/html",
+                    b"<html>blocked</html>".to_vec(),
+                ),
+                (
+                    "/cards/world.webp",
+                    200,
+                    "image/webp",
+                    b"<html>sign in</html>".to_vec(),
+                ),
+            ],
+            3,
+        );
         let run_ref = |url: &str| {
             let env = Env::from([("OPENAI_API_KEY".into(), "test-key".into())]);
             let (mut io, captured) = Io::captured("", dir.clone(), env);
-            let args: Vec<String> = ["--prompt", "p", "--out", "comp.png", "--ref", url].iter().map(|s| s.to_string()).collect();
+            let args: Vec<String> = ["--prompt", "p", "--out", "comp.png", "--ref", url]
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
             let exit = run_with_api_base(&args, &mut io, &base);
             let err = String::from_utf8(captured.stderr.borrow().clone()).unwrap();
             let out = String::from_utf8(captured.stdout.borrow().clone()).unwrap();
@@ -780,24 +1024,43 @@ mod tests {
         let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
         let url = format!("http://{}/cards/world.webp", server.server_addr());
         let dir = temp("url-ref-fake");
-        let env = Env::from([("IMPECCABLE_IMAGE_GEN_FAKE".into(), "1".into()), ("OPENAI_API_KEY".into(), "test-key".into())]);
+        let env = Env::from([
+            ("IMPECCABLE_IMAGE_GEN_FAKE".into(), "1".into()),
+            ("OPENAI_API_KEY".into(), "test-key".into()),
+        ]);
         let (mut io, captured) = Io::captured("", dir.clone(), env);
-        let args: Vec<String> = ["--prompt", "p", "--out", "comp.png", "--ref", &url].iter().map(|s| s.to_string()).collect();
+        let args: Vec<String> = ["--prompt", "p", "--out", "comp.png", "--ref", &url]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         assert_eq!(run(&args, &mut io), 0);
-        assert!(String::from_utf8(captured.stdout.borrow().clone()).unwrap().contains("fake synthetic comp"));
-        assert!(server.recv_timeout(Duration::from_millis(300)).unwrap().is_none());
+        assert!(String::from_utf8(captured.stdout.borrow().clone())
+            .unwrap()
+            .contains("fake synthetic comp"));
+        assert!(server
+            .recv_timeout(Duration::from_millis(300))
+            .unwrap()
+            .is_none());
         assert!(dir.join("comp.png").exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn url_file_names_and_types() {
-        assert_eq!(url_file_name("https://x.test/cards/a-hero.webp?v=1#f"), "a-hero.webp");
+        assert_eq!(
+            url_file_name("https://x.test/cards/a-hero.webp?v=1#f"),
+            "a-hero.webp"
+        );
         assert_eq!(url_file_name("https://x.test/"), "ref");
         assert_eq!(url_file_name("https://x.test"), "ref");
         assert_eq!(sniffed_type(b"<html>"), None);
         assert_eq!(sniffed_type(b"RIFF\x10\0\0\0WEBPVP8 "), Some("image/webp"));
-        assert!(is_url("http://a") && is_url("https://a") && !is_url("refs/a.png") && !is_url("ftp://a"));
+        assert!(
+            is_url("http://a")
+                && is_url("https://a")
+                && !is_url("refs/a.png")
+                && !is_url("ftp://a")
+        );
     }
 
     #[test]

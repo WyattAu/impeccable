@@ -49,7 +49,12 @@ pub fn parse_cdp_endpoint(value: &str) -> Result<CdpEndpoint, String> {
     }
     if value.bytes().all(|b| b.is_ascii_digit()) {
         let port = parse_port(value)?;
-        return Ok(CdpEndpoint { host: "127.0.0.1".into(), port, browser_path: None, page_id: None });
+        return Ok(CdpEndpoint {
+            host: "127.0.0.1".into(),
+            port,
+            browser_path: None,
+            page_id: None,
+        });
     }
     let lower = value.to_ascii_lowercase();
     let (rest, websocket) = if let Some(r) = strip_prefix_ci(value, &lower, "ws://") {
@@ -74,17 +79,28 @@ pub fn parse_cdp_endpoint(value: &str) -> Result<CdpEndpoint, String> {
         ));
     }
     let port = parse_port(&port)?;
-    let mut endpoint = CdpEndpoint { host, port, browser_path: None, page_id: None };
+    let mut endpoint = CdpEndpoint {
+        host,
+        port,
+        browser_path: None,
+        page_id: None,
+    };
     let path = path.split(['?', '#']).next().unwrap_or("");
     if path.is_empty() || path == "/" {
         return Ok(endpoint);
     }
     if websocket {
-        if let Some(id) = path.strip_prefix("/devtools/page/").filter(|id| valid_id(id)) {
+        if let Some(id) = path
+            .strip_prefix("/devtools/page/")
+            .filter(|id| valid_id(id))
+        {
             endpoint.page_id = Some(id.to_string());
             return Ok(endpoint);
         }
-        if path.strip_prefix("/devtools/browser/").is_some_and(valid_id) {
+        if path
+            .strip_prefix("/devtools/browser/")
+            .is_some_and(valid_id)
+        {
             endpoint.browser_path = Some(path.to_string());
             return Ok(endpoint);
         }
@@ -99,13 +115,18 @@ fn strip_prefix_ci<'a>(value: &'a str, lower: &str, prefix: &str) -> Option<&'a 
 }
 
 fn valid_id(id: &str) -> bool {
-    !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    !id.is_empty()
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 fn parse_port(s: &str) -> Result<u16, String> {
     match s.parse::<u32>() {
         Ok(p) if (1..=65535).contains(&p) => Ok(p as u16),
-        _ => Err(format!("Error: --cdp port must be between 1 and 65535; got {s}\n")),
+        _ => Err(format!(
+            "Error: --cdp port must be between 1 and 65535; got {s}\n"
+        )),
     }
 }
 
@@ -149,12 +170,23 @@ mod tests {
 
     #[test]
     fn ports_and_hosts() {
-        assert_eq!(ok("9222"), CdpEndpoint { host: "127.0.0.1".into(), port: 9222, browser_path: None, page_id: None });
+        assert_eq!(
+            ok("9222"),
+            CdpEndpoint {
+                host: "127.0.0.1".into(),
+                port: 9222,
+                browser_path: None,
+                page_id: None
+            }
+        );
         assert_eq!(ok("localhost:9333").authority(), "localhost:9333");
         assert_eq!(ok("http://127.0.0.1:9222/").authority(), "127.0.0.1:9222");
         assert_eq!(ok("127.1.2.3:9222").host, "127.1.2.3");
         let v6 = ok("[::1]:9222");
-        assert_eq!((v6.host.as_str(), v6.authority()), ("::1", "[::1]:9222".to_string()));
+        assert_eq!(
+            (v6.host.as_str(), v6.authority()),
+            ("::1", "[::1]:9222".to_string())
+        );
     }
 
     #[test]
@@ -170,7 +202,10 @@ mod tests {
     fn refuses_other_machines_and_shapes() {
         for (v, needle) in [
             ("10.0.0.5:9222", "not 10.0.0.5"),
-            ("ws://example.com:9222/devtools/browser/x", "not example.com"),
+            (
+                "ws://example.com:9222/devtools/browser/x",
+                "not example.com",
+            ),
             ("0.0.0.0:9222", "not 0.0.0.0"),
             ("[2001:db8::1]:9222", "not 2001:db8::1"),
             ("", "requires a DevTools port"),
@@ -179,7 +214,10 @@ mod tests {
             ("70000", "between 1 and 65535"),
             ("https://127.0.0.1:9222", "takes a port"),
             ("ws://127.0.0.1:9222/json", "expects a DevTools port"),
-            ("ws://127.0.0.1:9222/devtools/page/", "expects a DevTools port"),
+            (
+                "ws://127.0.0.1:9222/devtools/page/",
+                "expects a DevTools port",
+            ),
         ] {
             let err = parse_cdp_endpoint(v).expect_err(v);
             assert!(err.contains(needle), "{v}: {err}");

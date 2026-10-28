@@ -452,8 +452,14 @@ mod tests {
     fn an_agent_initiated_generate_plans_exactly_like_a_users() {
         let lane = generate_instructions(&generate_event(Some("agent")), "impeccable");
         let user = generate_instructions(&generate_event(None), "impeccable");
-        assert_eq!(lane, user, "the lane is a different way in, not a different design");
-        assert!(lane.contains("read reference/bolder.md before planning"), "{lane}");
+        assert_eq!(
+            lane, user,
+            "the lane is a different way in, not a different design"
+        );
+        assert!(
+            lane.contains("read reference/bolder.md before planning"),
+            "{lane}"
+        );
         assert!(lane.contains("live.md section 4"), "{lane}");
         assert!(lane.contains("parameter knobs per section 7"), "{lane}");
     }
@@ -465,26 +471,47 @@ mod tests {
             m.insert("type".into(), json!("discard"));
             m.insert("id".into(), json!("ab12cd34"));
             m.insert("_acceptResult".into(), result);
-            m.insert("_completionAck".into(), json!({ "ok": true, "type": "error" }));
+            m.insert(
+                "_completionAck".into(),
+                json!({ "ok": true, "type": "error" }),
+            );
             m
         };
         let refused = instructions_for_event(
-            &event(json!({ "handled": false, "file": "src/App.tsx", "error": "Original not found" })),
+            &event(
+                json!({ "handled": false, "file": "src/App.tsx", "error": "Original not found" }),
+            ),
             "impeccable",
         )
         .unwrap();
-        assert!(refused.starts_with("Discard did NOT restore the source: Original not found."), "{refused}");
+        assert!(
+            refused.starts_with("Discard did NOT restore the source: Original not found."),
+            "{refused}"
+        );
         assert!(!refused.contains("Original restored"), "{refused}");
-        assert!(refused.contains("impeccable live-complete --id ab12cd34 --discarded"), "{refused}");
+        assert!(
+            refused.contains("impeccable live-complete --id ab12cd34 --discarded"),
+            "{refused}"
+        );
         let locked = instructions_for_event(
             &event(json!({ "handled": false, "mode": "error", "file": "src/App.tsx", "error": "source_locked" })),
             "impeccable",
         )
         .unwrap();
-        assert!(locked.contains("Re-run impeccable live-accept --id ab12cd34 --discard"), "{locked}");
+        assert!(
+            locked.contains("Re-run impeccable live-accept --id ab12cd34 --discard"),
+            "{locked}"
+        );
         assert!(locked.contains("do NOT hand-edit"), "{locked}");
-        assert!(locked.contains("impeccable live-complete --id ab12cd34 --discarded"), "{locked}");
-        let restored = instructions_for_event(&event(json!({ "handled": true, "file": "src/App.tsx" })), "impeccable").unwrap();
+        assert!(
+            locked.contains("impeccable live-complete --id ab12cd34 --discarded"),
+            "{locked}"
+        );
+        let restored = instructions_for_event(
+            &event(json!({ "handled": true, "file": "src/App.tsx" })),
+            "impeccable",
+        )
+        .unwrap();
         assert!(restored.starts_with("Original restored"), "{restored}");
     }
 }

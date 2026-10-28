@@ -40,7 +40,11 @@ pub fn platform_tag() -> Option<(&'static str, &'static str)> {
 
 /// Where the binary for `(os, arch)` lives inside a skill directory.
 pub fn binary_path(skill_dir: &str, os: &str, arch: &str) -> String {
-    let name = if os == "windows" { "impeccable.exe" } else { "impeccable" };
+    let name = if os == "windows" {
+        "impeccable.exe"
+    } else {
+        "impeccable"
+    };
     jsp::join(&[skill_dir, "scripts", "bin", &format!("{os}-{arch}"), name])
 }
 
@@ -49,7 +53,10 @@ pub fn binary_path(skill_dir: &str, os: &str, arch: &str) -> String {
 /// extension and detector tags.
 pub fn asset_url(base: &str, version: &str, os: &str, arch: &str) -> String {
     let ext = if os == "windows" { ".exe" } else { "" };
-    format!("{}/engine-v{version}/impeccable-{os}-{arch}{ext}", base.trim_end_matches('/'))
+    format!(
+        "{}/engine-v{version}/impeccable-{os}-{arch}{ext}",
+        base.trim_end_matches('/')
+    )
 }
 
 /// Fetch one release binary, verified against its `.sha256` sidecar. Fails
@@ -110,7 +117,9 @@ pub fn install_engine_binaries(sys: &Sys, io: &mut Io, skill_dirs: &[String]) {
     for skill_dir in skill_dirs {
         ensure_executable_scripts(skill_dir);
     }
-    let Some((os, arch)) = platform_tag() else { return };
+    let Some((os, arch)) = platform_tag() else {
+        return;
+    };
     let base = sys
         .env
         .get("IMPECCABLE_DOWNLOAD_BASE")
@@ -120,7 +129,9 @@ pub fn install_engine_binaries(sys: &Sys, io: &mut Io, skill_dirs: &[String]) {
     let mut cache: HashMap<String, Result<Vec<u8>, String>> = HashMap::new();
     for skill_dir in skill_dirs {
         let version_file = jsp::join(&[skill_dir, "scripts", "VERSION"]);
-        let Ok(raw) = util::read_text(&version_file) else { continue };
+        let Ok(raw) = util::read_text(&version_file) else {
+            continue;
+        };
         let version = raw.trim();
         if version.is_empty() {
             continue;
@@ -173,7 +184,10 @@ mod tests {
             asset_url(DEFAULT_DOWNLOAD_BASE, "1.2.3", "darwin", "arm64"),
             "https://github.com/pbakaus/impeccable/releases/download/engine-v1.2.3/impeccable-darwin-arm64"
         );
-        assert_eq!(asset_url("http://x/", "1", "windows", "x64"), "http://x/engine-v1/impeccable-windows-x64.exe");
+        assert_eq!(
+            asset_url("http://x/", "1", "windows", "x64"),
+            "http://x/engine-v1/impeccable-windows-x64.exe"
+        );
         // The sibling binary path is joined with the host's path semantics
         // (backslashes on Windows); only the asset name is platform-keyed.
         assert_eq!(

@@ -27,13 +27,16 @@ fn temp_root(name: &str) -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let dir = std::env::temp_dir().join(format!("impeccable-{name}-{}-{nanos}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("impeccable-{name}-{}-{nanos}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("temp root");
     // Like Node's `realpathSync`: no `\\?\` verbatim prefix on Windows, so the
     // `/`-joined paths these tests build under this root still resolve (the
     // kernel takes a verbatim path literally and rejects a forward slash).
     let real = dir.canonicalize().unwrap().to_string_lossy().into_owned();
-    real.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(real)
+    real.strip_prefix(r"\\?\")
+        .map(str::to_string)
+        .unwrap_or(real)
 }
 
 fn write(path: &str, content: &str) {
@@ -55,7 +58,10 @@ fn create_fake_universal_bundle(root: &str, providers: &[&str]) -> String {
             &format!("{skill_dir}/SKILL.md"),
             &format!("---\nname: impeccable\nversion: 9.9.9-local\n---\n\nLocal deterministic bundle for {provider}.\n"),
         );
-        write(&format!("{skill_dir}/scripts/context.mjs"), "console.log(\"local bundle context\");\n");
+        write(
+            &format!("{skill_dir}/scripts/context.mjs"),
+            "console.log(\"local bundle context\");\n",
+        );
         // Real bundles ship the launcher; a user-scope Claude hook counts as
         // current only when the launcher it names exists.
         write(&format!("{skill_dir}/scripts/impeccable"), "#!/bin/sh\n");
@@ -145,7 +151,11 @@ fn run_cli(args: &[&str], cwd: &str, env: &HashMap<String, String>) -> Run {
     drop(io);
     let stdout = String::from_utf8_lossy(&captured.stdout.borrow()).into_owned();
     let stderr = String::from_utf8_lossy(&captured.stderr.borrow()).into_owned();
-    Run { stdout, stderr, code }
+    Run {
+        stdout,
+        stderr,
+        code,
+    }
 }
 
 fn base_env(home: &str, tmp: &str, bundle: &str) -> HashMap<String, String> {
@@ -318,19 +328,29 @@ fn local_bundle_uses_mkdtemp_staging_under_tmpdir() {
     let staging = bundle::download_and_extract_bundle(&sys).unwrap();
     assert!(staging.starts_with(&tmp), "{staging} not under {tmp}");
     let basename = staging.rsplit(['/', '\\']).next().unwrap();
-    assert!(basename.starts_with("impeccable-local-bundle-"), "{basename}");
+    assert!(
+        basename.starts_with("impeccable-local-bundle-"),
+        "{basename}"
+    );
     // Random mkdtemp suffix, not the old `-<pid>-<millis>` form.
     let suffix = &basename["impeccable-local-bundle-".len()..];
     assert!(
-        !suffix.split('-').all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit())),
+        !suffix
+            .split('-')
+            .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit())),
         "staging dir still uses the pid-timestamp form: {basename}"
     );
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        assert_eq!(std::fs::metadata(&staging).unwrap().permissions().mode() & 0o777, 0o700);
+        assert_eq!(
+            std::fs::metadata(&staging).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
     }
-    assert!(std::path::Path::new(&format!("{staging}/.claude/skills/impeccable/SKILL.md")).exists());
+    assert!(
+        std::path::Path::new(&format!("{staging}/.claude/skills/impeccable/SKILL.md")).exists()
+    );
     std::fs::remove_dir_all(&root).ok();
 }
 
@@ -351,7 +371,10 @@ fn local_bundle_failure_removes_the_staging_dir() {
         .filter_map(|e| e.ok())
         .map(|e| e.file_name().to_string_lossy().into_owned())
         .collect();
-    assert!(leftovers.is_empty(), "staging not cleaned up: {leftovers:?}");
+    assert!(
+        leftovers.is_empty(),
+        "staging not cleaned up: {leftovers:?}"
+    );
     std::fs::remove_dir_all(&root).ok();
 }
 
@@ -365,7 +388,10 @@ fn claude_project_and_user_scopes_use_claude_agents_dir() {
     std::fs::create_dir_all(&tmp).unwrap();
     std::fs::create_dir_all(&home).unwrap();
     let bundle_dir = create_fake_universal_bundle(&root, &[".claude"]);
-    write(&format!("{home}/.claude/agents/impeccable-finish-reviewer.md"), "stale copy\n");
+    write(
+        &format!("{home}/.claude/agents/impeccable-finish-reviewer.md"),
+        "stale copy\n",
+    );
 
     let env: HashMap<String, String> = HashMap::from([
         ("HOME".to_string(), home.clone()),
@@ -373,15 +399,23 @@ fn claude_project_and_user_scopes_use_claude_agents_dir() {
     ]);
     let sys = sys_for(&tmp, &env);
     let project_results =
-        bundle::copy_provider_agents(&sys, &bundle_dir, &tmp, &[".claude"], Some(Scope::Project)).unwrap();
+        bundle::copy_provider_agents(&sys, &bundle_dir, &tmp, &[".claude"], Some(Scope::Project))
+            .unwrap();
     let user_results =
-        bundle::copy_provider_agents(&sys, &bundle_dir, &home, &[".claude"], Some(Scope::User)).unwrap();
+        bundle::copy_provider_agents(&sys, &bundle_dir, &home, &[".claude"], Some(Scope::User))
+            .unwrap();
 
     assert_eq!(project_results.len(), 1);
     assert!(project_results[0].shadowed.is_empty());
     assert_eq!(user_results.len(), 1);
-    assert!(read(&format!("{tmp}/.claude/agents/impeccable-finish-reviewer.md")).contains("Claude reviewer body."));
-    assert!(read(&format!("{home}/.claude/agents/impeccable-finish-reviewer.md")).contains("Claude reviewer body."));
+    assert!(read(&format!(
+        "{tmp}/.claude/agents/impeccable-finish-reviewer.md"
+    ))
+    .contains("Claude reviewer body."));
+    assert!(read(&format!(
+        "{home}/.claude/agents/impeccable-finish-reviewer.md"
+    ))
+    .contains("Claude reviewer body."));
     std::fs::remove_dir_all(&root).ok();
 }
 
@@ -399,16 +433,28 @@ fn claude_install_and_update_backfill_bundled_agents() {
     let env = base_env(&home, &tmpdir, &bundle_root);
     let agent_path = format!("{tmp}/.claude/agents/impeccable-finish-reviewer.md");
 
-    let r = run_cli(&["install", "-y", "--no-hooks", "--providers=claude"], &tmp, &env);
+    let r = run_cli(
+        &["install", "-y", "--no-hooks", "--providers=claude"],
+        &tmp,
+        &env,
+    );
     assert_eq!(r.code, 0, "{}\n{}", r.stdout, r.stderr);
-    assert!(r.stdout.contains("Installed Claude Code agents into:"), "{}", r.stdout);
+    assert!(
+        r.stdout.contains("Installed Claude Code agents into:"),
+        "{}",
+        r.stdout
+    );
     assert!(std::path::Path::new(&agent_path).exists());
 
     std::fs::remove_file(&agent_path).unwrap();
     let r = run_cli(&["update", "-y", "--no-hooks"], &tmp, &env);
     assert_eq!(r.code, 0, "{}\n{}", r.stdout, r.stderr);
     assert!(r.stdout.contains("Updated"), "{}", r.stdout);
-    assert!(r.stdout.contains("Installed Claude Code agents into:"), "{}", r.stdout);
+    assert!(
+        r.stdout.contains("Installed Claude Code agents into:"),
+        "{}",
+        r.stdout
+    );
     assert!(std::path::Path::new(&agent_path).exists());
     std::fs::remove_dir_all(&root).ok();
 }
@@ -432,13 +478,29 @@ fn dsh_install_and_update_use_relocated_home_without_touching_project_skills() {
     let installed = jsp::join(&[&dsh_home, "skills", "impeccable", "SKILL.md"]);
     let source = jsp::join(&[&bundle, ".dsh", "skills", "impeccable", "SKILL.md"]);
 
-    let r = run_cli(&["install", "-y", "--providers=deepseek-harness", "--scope=global"], &project, &env);
+    let r = run_cli(
+        &[
+            "install",
+            "-y",
+            "--providers=deepseek-harness",
+            "--scope=global",
+        ],
+        &project,
+        &env,
+    );
     assert_eq!(r.code, 0, "{}\n{}", r.stdout, r.stderr);
     assert_eq!(read(&installed), read(&source));
     assert!(!std::path::Path::new(&jsp::join(&[&home, ".dsh"])).exists());
 
-    write(&source, "---\nname: impeccable\nversion: 9.9.10-local\n---\n\nUpdated DSH fixture.\n");
-    let r = run_cli(&["update", "-y", "--providers=dsh", "--scope=global"], &project, &env);
+    write(
+        &source,
+        "---\nname: impeccable\nversion: 9.9.10-local\n---\n\nUpdated DSH fixture.\n",
+    );
+    let r = run_cli(
+        &["update", "-y", "--providers=dsh", "--scope=global"],
+        &project,
+        &env,
+    );
     assert_eq!(r.code, 0, "{}\n{}", r.stdout, r.stderr);
     assert_eq!(read(&installed), read(&source));
     assert_eq!(read(&project_skill), "project skill must stay untouched");
@@ -462,16 +524,30 @@ fn check_accepts_current_copilot_user_agents_in_home_rooted_checkout() {
     let env = base_env(&home, &tmpdir, &bundle_root);
 
     let r = run_cli(
-        &["install", "-y", "--scope=global", "--no-hooks", "--providers=github"],
+        &[
+            "install",
+            "-y",
+            "--scope=global",
+            "--no-hooks",
+            "--providers=github",
+        ],
         &home,
         &env,
     );
     assert_eq!(r.code, 0, "{}\n{}", r.stdout, r.stderr);
-    assert!(std::path::Path::new(&format!("{home}/.copilot/agents/impeccable-finish-reviewer.agent.md")).exists());
+    assert!(std::path::Path::new(&format!(
+        "{home}/.copilot/agents/impeccable-finish-reviewer.agent.md"
+    ))
+    .exists());
     assert!(!std::path::Path::new(&format!("{home}/.github/agents")).exists());
 
     let r = run_cli(&["check"], &home, &env);
-    assert!(r.stdout.contains("Skills are up to date"), "{}\n{}", r.stdout, r.stderr);
+    assert!(
+        r.stdout.contains("Skills are up to date"),
+        "{}\n{}",
+        r.stdout,
+        r.stderr
+    );
     assert!(!r.stdout.contains("Updates available"), "{}", r.stdout);
     std::fs::remove_dir_all(&root).ok();
 }
@@ -491,7 +567,13 @@ fn check_ignores_unrelated_harness_skill_in_home_rooted_tree() {
     let env = base_env(&home, &tmpdir, &bundle_root);
 
     let r = run_cli(
-        &["install", "-y", "--scope=global", "--no-hooks", "--providers=claude"],
+        &[
+            "install",
+            "-y",
+            "--scope=global",
+            "--no-hooks",
+            "--providers=claude",
+        ],
         &home,
         &env,
     );
@@ -502,11 +584,21 @@ fn check_ignores_unrelated_harness_skill_in_home_rooted_tree() {
     );
 
     let r = run_cli(&["check"], &home, &env);
-    assert!(r.stdout.contains("Skills are up to date"), "{}\n{}", r.stdout, r.stderr);
+    assert!(
+        r.stdout.contains("Skills are up to date"),
+        "{}\n{}",
+        r.stdout,
+        r.stderr
+    );
     assert!(!r.stdout.contains("Updates available"), "{}", r.stdout);
 
     let r = run_cli(&["update", "--global", "-y", "--no-hooks"], &home, &env);
-    assert!(r.stdout.contains("Skills are up to date"), "{}\n{}", r.stdout, r.stderr);
+    assert!(
+        r.stdout.contains("Skills are up to date"),
+        "{}\n{}",
+        r.stdout,
+        r.stderr
+    );
     std::fs::remove_dir_all(&root).ok();
 }
 
@@ -523,7 +615,13 @@ fn check_ignores_leftover_pi_project_layout_in_home_rooted_tree() {
     let env = base_env(&home, &tmpdir, &bundle_root);
 
     let r = run_cli(
-        &["install", "-y", "--scope=global", "--no-hooks", "--providers=pi"],
+        &[
+            "install",
+            "-y",
+            "--scope=global",
+            "--no-hooks",
+            "--providers=pi",
+        ],
         &home,
         &env,
     );
@@ -535,11 +633,21 @@ fn check_ignores_leftover_pi_project_layout_in_home_rooted_tree() {
     );
 
     let r = run_cli(&["check"], &home, &env);
-    assert!(r.stdout.contains("Skills are up to date"), "{}\n{}", r.stdout, r.stderr);
+    assert!(
+        r.stdout.contains("Skills are up to date"),
+        "{}\n{}",
+        r.stdout,
+        r.stderr
+    );
     assert!(!r.stdout.contains("Updates available"), "{}", r.stdout);
 
     let r = run_cli(&["update", "--global", "-y", "--no-hooks"], &home, &env);
-    assert!(r.stdout.contains("Skills are up to date"), "{}\n{}", r.stdout, r.stderr);
+    assert!(
+        r.stdout.contains("Skills are up to date"),
+        "{}\n{}",
+        r.stdout,
+        r.stderr
+    );
     std::fs::remove_dir_all(&root).ok();
 }
 
@@ -556,21 +664,39 @@ fn check_sees_home_rooted_project_scope_pi_install() {
     let env = base_env(&home, &tmpdir, &bundle_root);
 
     let r = run_cli(
-        &["install", "-y", "--scope=project", "--no-hooks", "--providers=pi"],
+        &[
+            "install",
+            "-y",
+            "--scope=project",
+            "--no-hooks",
+            "--providers=pi",
+        ],
         &home,
         &env,
     );
     assert_eq!(r.code, 0, "{}\n{}", r.stdout, r.stderr);
     assert!(std::path::Path::new(&format!("{home}/.pi/skills/impeccable/SKILL.md")).exists());
-    assert!(!std::path::Path::new(&format!("{home}/.pi/agent/skills/impeccable/SKILL.md")).exists());
+    assert!(
+        !std::path::Path::new(&format!("{home}/.pi/agent/skills/impeccable/SKILL.md")).exists()
+    );
     write(
         &format!("{home}/.pi/agent/skills/other/SKILL.md"),
         "---\nname: other\n---\nLeftover user-layout skill.\n",
     );
 
     let r = run_cli(&["check"], &home, &env);
-    assert!(!r.stdout.contains("not installed"), "{}\n{}", r.stdout, r.stderr);
-    assert!(r.stdout.contains("Skills are up to date"), "{}\n{}", r.stdout, r.stderr);
+    assert!(
+        !r.stdout.contains("not installed"),
+        "{}\n{}",
+        r.stdout,
+        r.stderr
+    );
+    assert!(
+        r.stdout.contains("Skills are up to date"),
+        "{}\n{}",
+        r.stdout,
+        r.stderr
+    );
     assert!(!r.stdout.contains("Updates available"), "{}", r.stdout);
     std::fs::remove_dir_all(&root).ok();
 }
@@ -588,7 +714,13 @@ fn check_reports_stale_impeccable_in_home_rooted_tree() {
     let env = base_env(&home, &tmpdir, &bundle_root);
 
     let r = run_cli(
-        &["install", "-y", "--scope=global", "--no-hooks", "--providers=claude"],
+        &[
+            "install",
+            "-y",
+            "--scope=global",
+            "--no-hooks",
+            "--providers=claude",
+        ],
         &home,
         &env,
     );
@@ -599,7 +731,12 @@ fn check_reports_stale_impeccable_in_home_rooted_tree() {
     );
 
     let r = run_cli(&["check"], &home, &env);
-    assert!(r.stdout.contains("Updates available"), "{}\n{}", r.stdout, r.stderr);
+    assert!(
+        r.stdout.contains("Updates available"),
+        "{}\n{}",
+        r.stdout,
+        r.stderr
+    );
     std::fs::remove_dir_all(&root).ok();
 }
 
@@ -620,7 +757,13 @@ fn inferred_home_rooted_updates_refresh_stale_or_missing_copilot_user_agents() {
     let project_agent = format!("{home}/.github/agents/impeccable-finish-reviewer.agent.md");
 
     let r = run_cli(
-        &["install", "-y", "--scope=global", "--no-hooks", "--providers=github"],
+        &[
+            "install",
+            "-y",
+            "--scope=global",
+            "--no-hooks",
+            "--providers=github",
+        ],
         &home,
         &env,
     );
@@ -655,7 +798,14 @@ fn manifest_names_launcher(manifest: &str, home: &str, provider: &str) -> bool {
             _ => false,
         }
     }
-    let p = jsp::join(&[home, provider, "skills", "impeccable", "scripts", "impeccable"]);
+    let p = jsp::join(&[
+        home,
+        provider,
+        "skills",
+        "impeccable",
+        "scripts",
+        "impeccable",
+    ]);
     let escaped = p.replace('\\', "\\\\");
     let value: Value = serde_json::from_str(&read(manifest)).unwrap();
     any_string(&value, &|s: &str| s.contains(&p) || s.contains(&escaped))
@@ -671,30 +821,53 @@ fn global_install_rewrites_grok_project_hooks_to_the_global_skill_path() {
         std::fs::create_dir_all(d).unwrap();
     }
     std::fs::create_dir_all(format!("{tmp}/.git")).unwrap();
-    let bundle_root = create_fake_universal_bundle(&tmp, &[".claude", ".agents", ".cursor", ".grok"]);
+    let bundle_root =
+        create_fake_universal_bundle(&tmp, &[".claude", ".agents", ".cursor", ".grok"]);
     let env = base_env(&home, &tmpdir, &bundle_root);
 
     let r = run_cli(
-        &["install", "-y", "--providers=claude,codex,cursor,grok", "--scope=global"],
+        &[
+            "install",
+            "-y",
+            "--providers=claude,codex,cursor,grok",
+            "--scope=global",
+        ],
         &tmp,
         &env,
     );
     assert_eq!(r.code, 0, "{}\n{}", r.stdout, r.stderr);
     assert!(
-        r.stdout.contains("Installed impeccable into: .claude, .agents, .cursor, .grok (global)"),
+        r.stdout
+            .contains("Installed impeccable into: .claude, .agents, .cursor, .grok (global)"),
         "{}",
         r.stdout
     );
     for provider in [".claude", ".agents", ".cursor", ".grok"] {
-        assert!(std::path::Path::new(&format!("{home}/{provider}/skills/impeccable/SKILL.md")).exists());
-        assert!(!std::path::Path::new(&format!("{tmp}/{provider}/skills/impeccable/SKILL.md")).exists());
+        assert!(
+            std::path::Path::new(&format!("{home}/{provider}/skills/impeccable/SKILL.md")).exists()
+        );
+        assert!(
+            !std::path::Path::new(&format!("{tmp}/{provider}/skills/impeccable/SKILL.md")).exists()
+        );
     }
     // Launcher-era adaptation: the JS asserted the rewritten hook.mjs path;
     // the engine writes the launcher form pointing at the same global root.
-    assert!(manifest_names_launcher(&format!("{home}/.claude/settings.json"), &home, ".claude"));
+    assert!(manifest_names_launcher(
+        &format!("{home}/.claude/settings.json"),
+        &home,
+        ".claude"
+    ));
     assert!(!std::path::Path::new(&format!("{home}/.claude/settings.local.json")).exists());
-    assert!(manifest_names_launcher(&format!("{tmp}/.codex/hooks.json"), &home, ".agents"));
-    assert!(manifest_names_launcher(&format!("{tmp}/.cursor/hooks.json"), &home, ".cursor"));
+    assert!(manifest_names_launcher(
+        &format!("{tmp}/.codex/hooks.json"),
+        &home,
+        ".agents"
+    ));
+    assert!(manifest_names_launcher(
+        &format!("{tmp}/.cursor/hooks.json"),
+        &home,
+        ".cursor"
+    ));
     let grok_manifest = format!("{tmp}/.grok/hooks/impeccable.json");
     let grok_hooks = read(&grok_manifest);
     assert!(
@@ -702,7 +875,8 @@ fn global_install_rewrites_grok_project_hooks_to_the_global_skill_path() {
         "grok hook not rewritten to the global skill path: {grok_hooks}"
     );
     assert!(
-        !grok_hooks.contains("\\\".grok/skills/impeccable/scripts/hook.mjs\\\"") && !grok_hooks.contains("hook.mjs"),
+        !grok_hooks.contains("\\\".grok/skills/impeccable/scripts/hook.mjs\\\"")
+            && !grok_hooks.contains("hook.mjs"),
         "grok hook still points at the project-relative bundle command: {grok_hooks}"
     );
     std::fs::remove_dir_all(&root).ok();
@@ -729,7 +903,10 @@ fn global_install_rewrites_github_project_hook_to_the_global_skill_path() {
     assert_eq!(r.code, 0, "{}\n{}", r.stdout, r.stderr);
     let manifest = read(&format!("{project}/.github/hooks/impeccable.json"));
     let expected = if cfg!(windows) {
-        format!("{}/.github/skills/impeccable/scripts/impeccable", home.replace('\\', "/"))
+        format!(
+            "{}/.github/skills/impeccable/scripts/impeccable",
+            home.replace('\\', "/")
+        )
     } else {
         "$HOME/.github/skills/impeccable/scripts/impeccable".to_string()
     };
@@ -771,9 +948,18 @@ fn windows_global_github_hook_uses_userprofile_when_shell_home_differs() {
         "{}/.github/skills/impeccable/scripts/impeccable",
         home.replace('\\', "/")
     );
-    assert!(manifest.contains(&expected), "global GitHub hook did not name USERPROFILE: {manifest}");
-    assert!(!manifest.contains("$HOME"), "global GitHub hook still depends on Git Bash HOME: {manifest}");
-    assert!(!manifest.contains(&shell_home.replace('\\', "/")), "global GitHub hook names the wrong HOME: {manifest}");
+    assert!(
+        manifest.contains(&expected),
+        "global GitHub hook did not name USERPROFILE: {manifest}"
+    );
+    assert!(
+        !manifest.contains("$HOME"),
+        "global GitHub hook still depends on Git Bash HOME: {manifest}"
+    );
+    assert!(
+        !manifest.contains(&shell_home.replace('\\', "/")),
+        "global GitHub hook names the wrong HOME: {manifest}"
+    );
     std::fs::remove_dir_all(&root).ok();
 }
 
@@ -791,7 +977,10 @@ fn user_scope_update_writes_claude_user_settings() {
         &format!("{home}/.claude/skills/impeccable/SKILL.md"),
         "---\nname: impeccable\nversion: 1.0.0\n---\n",
     );
-    write(&format!("{home}/.claude/settings.json"), r#"{"model":"claude-sonnet-5"}"#);
+    write(
+        &format!("{home}/.claude/settings.json"),
+        r#"{"model":"claude-sonnet-5"}"#,
+    );
     write(
         &format!("{home}/.claude/settings.local.json"),
         r#"{"hooks":{"PostToolUse":[{"matcher":"Edit","hooks":[{"type":"command","command":"node \"~/.claude/skills/impeccable/scripts/hook.mjs\""}]}]}}"#,
@@ -874,7 +1063,14 @@ fn user_scope_update_migrates_the_project_cursor_gate() {
             &format!("{home}/.cursor/skills/impeccable/SKILL.md"),
             "---\nname: impeccable\nversion: 1.0.0\n---\n",
         );
-        let launcher = jsp::join(&[&home, ".cursor", "skills", "impeccable", "scripts", "impeccable"]);
+        let launcher = jsp::join(&[
+            &home,
+            ".cursor",
+            "skills",
+            "impeccable",
+            "scripts",
+            "impeccable",
+        ]);
         let gate = format!("[ ! -f '{launcher}' ] || '{launcher}' hook-before-edit");
         let project_manifest = format!("{project}/.cursor/hooks.json");
         write(
@@ -909,19 +1105,38 @@ fn user_scope_update_migrates_the_project_cursor_gate() {
         assert!(!ours.is_empty(), "{}", read(&project_manifest));
         for (event, command) in &ours {
             assert_eq!(event, "postToolUse", "{}", read(&project_manifest));
-            assert!(command.contains(&slash_norm(&launcher)) && command.ends_with(" hook"), "{command}");
+            assert!(
+                command.contains(&slash_norm(&launcher)) && command.ends_with(" hook"),
+                "{command}"
+            );
         }
         let project_value: Value = serde_json::from_str(&read(&project_manifest)).unwrap();
-        assert_eq!(project_value["hooks"]["preToolUse"], json!([{ "command": "./audit.sh", "matcher": "Shell" }]));
-        assert_eq!(project_value["hooks"]["postToolUse"][0]["matcher"], "^Write$");
+        assert_eq!(
+            project_value["hooks"]["preToolUse"],
+            json!([{ "command": "./audit.sh", "matcher": "Shell" }])
+        );
+        assert_eq!(
+            project_value["hooks"]["postToolUse"][0]["matcher"],
+            "^Write$"
+        );
 
         let home_ours = cursor_impeccable_events(&home_manifest);
-        assert!(!home_ours.is_empty() && home_ours.iter().all(|(event, _)| event == "postToolUse"), "{}", read(&home_manifest));
+        assert!(
+            !home_ours.is_empty() && home_ours.iter().all(|(event, _)| event == "postToolUse"),
+            "{}",
+            read(&home_manifest)
+        );
         if home_foreign {
             let after: Value = serde_json::from_str(&read(&home_manifest)).unwrap();
             assert_eq!(after["theme"], "mine");
-            assert_eq!(after["hooks"]["preToolUse"], json!([{ "command": "./guard.sh", "matcher": "Shell" }]));
-            assert_eq!(after["hooks"]["stop"], json!([{ "command": "./notify.sh" }]));
+            assert_eq!(
+                after["hooks"]["preToolUse"],
+                json!([{ "command": "./guard.sh", "matcher": "Shell" }])
+            );
+            assert_eq!(
+                after["hooks"]["stop"],
+                json!([{ "command": "./notify.sh" }])
+            );
         }
         std::fs::remove_dir_all(&root).ok();
     }
@@ -951,7 +1166,11 @@ fn user_scope_update_honors_the_projects_declined_hook_consent() {
     let r = run_cli(&["update", "-y", "--user"], &project, &env);
     assert_eq!(r.code, 0, "{}\n{}", r.stdout, r.stderr);
 
-    assert!(!std::path::Path::new(&format!("{project}/.cursor/hooks.json")).exists(), "{}", read(&format!("{project}/.cursor/hooks.json")));
+    assert!(
+        !std::path::Path::new(&format!("{project}/.cursor/hooks.json")).exists(),
+        "{}",
+        read(&format!("{project}/.cursor/hooks.json"))
+    );
     assert!(!std::path::Path::new(&format!("{home}/.cursor/hooks.json")).exists());
     std::fs::remove_dir_all(&root).ok();
 }
@@ -979,7 +1198,14 @@ fn user_scope_update_writes_the_cursor_hook_into_the_project() {
     assert_eq!(r.code, 0, "{}\n{}", r.stdout, r.stderr);
 
     let project_manifest = format!("{project}/.cursor/hooks.json");
-    let launcher = slash_norm(&jsp::join(&[&home, ".cursor", "skills", "impeccable", "scripts", "impeccable"]));
+    let launcher = slash_norm(&jsp::join(&[
+        &home,
+        ".cursor",
+        "skills",
+        "impeccable",
+        "scripts",
+        "impeccable",
+    ]));
     let ours = cursor_impeccable_events(&project_manifest);
     assert!(!ours.is_empty(), "{}", read(&project_manifest));
     for (event, command) in &ours {
@@ -1018,7 +1244,11 @@ fn existing_user_install_ignores_project_hook_when_user_hook_is_missing() {
 
     let second = run_cli(&args, &project, &env);
     assert_eq!(second.code, 0, "{}\n{}", second.stdout, second.stderr);
-    assert!(manifest_names_launcher(&format!("{home}/.claude/settings.json"), &home, ".claude"));
+    assert!(manifest_names_launcher(
+        &format!("{home}/.claude/settings.json"),
+        &home,
+        ".claude"
+    ));
     assert!(!std::path::Path::new(&format!("{home}/.claude/settings.local.json")).exists());
     assert!(!std::path::Path::new(&format!("{project}/.claude/settings.local.json")).exists());
     std::fs::remove_dir_all(&root).ok();
@@ -1040,7 +1270,11 @@ fn repeat_user_install_prunes_duplicate_project_hook_when_user_hook_exists() {
 
     let first = run_cli(&args, &project, &env);
     assert_eq!(first.code, 0, "{}\n{}", first.stdout, first.stderr);
-    assert!(manifest_names_launcher(&format!("{home}/.claude/settings.json"), &home, ".claude"));
+    assert!(manifest_names_launcher(
+        &format!("{home}/.claude/settings.json"),
+        &home,
+        ".claude"
+    ));
     let project_local = format!("{project}/.claude/settings.local.json");
     write(
         &project_local,
@@ -1049,9 +1283,16 @@ fn repeat_user_install_prunes_duplicate_project_hook_when_user_hook_exists() {
 
     let second = run_cli(&args, &project, &env);
     assert_eq!(second.code, 0, "{}\n{}", second.stdout, second.stderr);
-    assert!(manifest_names_launcher(&format!("{home}/.claude/settings.json"), &home, ".claude"));
+    assert!(manifest_names_launcher(
+        &format!("{home}/.claude/settings.json"),
+        &home,
+        ".claude"
+    ));
     let local = read(&project_local);
-    assert!(!local.contains("impeccable"), "duplicate project hook survived a repeat install: {local}");
+    assert!(
+        !local.contains("impeccable"),
+        "duplicate project hook survived a repeat install: {local}"
+    );
     let local_json: Value = serde_json::from_str(&local).unwrap();
     assert_eq!(local_json["permissions"]["allow"][0], "Bash(ls)");
     std::fs::remove_dir_all(&root).ok();
@@ -1090,12 +1331,21 @@ fn repeat_user_install_replaces_legacy_user_hook_before_pruning_project_hook() {
     let second = run_cli(&args, &project, &env);
     assert_eq!(second.code, 0, "{}\n{}", second.stdout, second.stderr);
     let user = read(&user_settings);
-    assert!(manifest_names_launcher(&user_settings, &home, ".claude"), "user hook was not made current: {user}");
-    assert!(!user.contains("hook.mjs"), "legacy user hook survived: {user}");
+    assert!(
+        manifest_names_launcher(&user_settings, &home, ".claude"),
+        "user hook was not made current: {user}"
+    );
+    assert!(
+        !user.contains("hook.mjs"),
+        "legacy user hook survived: {user}"
+    );
     let user_json: Value = serde_json::from_str(&user).unwrap();
     assert_eq!(user_json["model"], "claude-sonnet-5");
     let local = read(&project_local);
-    assert!(!local.contains("impeccable"), "duplicate project hook survived: {local}");
+    assert!(
+        !local.contains("impeccable"),
+        "duplicate project hook survived: {local}"
+    );
     std::fs::remove_dir_all(&root).ok();
 }
 
@@ -1112,7 +1362,10 @@ fn user_hook_with_missing_launcher_is_not_current() {
         &serde_json::json!({"hooks":{"PostToolUse":[{"hooks":[{"type":"command","command":command}]}]}}).to_string(),
     );
     assert!(!impeccable_skills::hook_manifest::user_claude_hook_is_current_for(&home, false));
-    write(&format!("{home}/.claude/skills/impeccable/scripts/impeccable"), "#!/bin/sh\n");
+    write(
+        &format!("{home}/.claude/skills/impeccable/scripts/impeccable"),
+        "#!/bin/sh\n",
+    );
     assert!(impeccable_skills::hook_manifest::user_claude_hook_is_current_for(&home, false));
     // A legacy entry beside the current one still needs a rewrite.
     write(
@@ -1157,6 +1410,9 @@ fn merge_hook_manifests_replaces_legacy_windows_path_claude_hooks() {
     let stop = merged["hooks"]["Stop"].as_array().unwrap();
     assert_eq!(post.len(), 1, "legacy Windows guard duplicated: {post:?}");
     assert_eq!(stop.len(), 1, "legacy Windows guard duplicated: {stop:?}");
-    assert_eq!(post[0]["hooks"][0]["command"], Value::String(fresh_command.clone()));
+    assert_eq!(
+        post[0]["hooks"][0]["command"],
+        Value::String(fresh_command.clone())
+    );
     assert_eq!(stop[0]["hooks"][0]["command"], Value::String(fresh_command));
 }

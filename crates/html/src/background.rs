@@ -254,9 +254,14 @@ fn gradient_tile_misses(style: &StyleValues, bg_image: &str, font_size: f64) -> 
     if !GRADIENT_RE.is_match(bg_image) || URL_CALL_RE.is_match(bg_image) {
         return false;
     }
-    let first_layer = split_top_level_commas(bg_image).into_iter().next().unwrap_or_default();
+    let first_layer = split_top_level_commas(bg_image)
+        .into_iter()
+        .next()
+        .unwrap_or_default();
     let size = match js::trim(sv(style, "backgroundSize")) {
-        "" => geo::parse_shorthand_layer(&first_layer).size.unwrap_or_default(),
+        "" => geo::parse_shorthand_layer(&first_layer)
+            .size
+            .unwrap_or_default(),
         declared => declared.to_string(),
     };
     let repeat = geo::repeat_from(sv(style, "backgroundRepeat"), bg_image);
@@ -314,7 +319,9 @@ fn walk_surface(
             return out;
         }
         if has_gradient_or_url {
-            if q.font_size.is_some_and(|f| gradient_tile_misses(style, bg_image, f)) {
+            if q.font_size
+                .is_some_and(|f| gradient_tile_misses(style, bg_image, f))
+            {
                 out.skipped_images.push(cur.id());
                 current = cur.parent_element();
                 continue;
@@ -418,7 +425,11 @@ fn gradient_stops_walk(
             continue;
         }
         let skipped = (q.skip_image)(&cur);
-        let bg_image = if skipped { "none" } else { sv(style, "backgroundImage") };
+        let bg_image = if skipped {
+            "none"
+        } else {
+            sv(style, "backgroundImage")
+        };
         if !bg_image.is_empty() && bg_image != "none" && URL_CALL_RE.is_match(bg_image) {
             return None;
         }

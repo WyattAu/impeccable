@@ -12,7 +12,9 @@
 
 use super::dom::{direct_text, tag_lower, Dom, ElId, Rect};
 use crate::checks::measures::resolve_length_px;
-use crate::checks::text_rules::{is_monospace_family, MONOSPACE_ADVANCE_EM, NON_RENDERED_TAGS, PROPORTIONAL_ADVANCE_EM};
+use crate::checks::text_rules::{
+    is_monospace_family, MONOSPACE_ADVANCE_EM, NON_RENDERED_TAGS, PROPORTIONAL_ADVANCE_EM,
+};
 use crate::js::{self, parse_float};
 
 /// Phrasing content: the tags whose text flows in the line boxes of the block
@@ -31,7 +33,11 @@ pub fn overflow_x(dom: &dyn Dom, el: ElId) -> String {
     if !x.is_empty() {
         return x;
     }
-    dom.style(el, "overflow").split_whitespace().next().unwrap_or("").to_string()
+    dom.style(el, "overflow")
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+        .to_string()
 }
 
 /// `overflow-y`, from the shorthand when the capture recorded no longhand:
@@ -49,7 +55,10 @@ pub fn overflow_y(dom: &dyn Dom, el: ElId) -> String {
 
 /// Whether `el` clips or scrolls its content on the x axis.
 pub fn clips_x(dom: &dyn Dom, el: ElId) -> bool {
-    matches!(overflow_x(dom, el).as_str(), "hidden" | "clip" | "auto" | "scroll")
+    matches!(
+        overflow_x(dom, el).as_str(),
+        "hidden" | "clip" | "auto" | "scroll"
+    )
 }
 
 /// An element that generates no box and paints nothing: a script inside a
@@ -69,9 +78,9 @@ fn is_inline_phrasing(dom: &dyn Dom, el: ElId) -> bool {
 /// nothing), so all of its text runs in `el`'s own line boxes: a paragraph
 /// whose words sit in `<b>`, `<i>` or `<span>`.
 pub fn holds_only_phrasing(dom: &dyn Dom, el: ElId) -> bool {
-    dom.children(el)
-        .into_iter()
-        .all(|c| paints_nothing(dom, c) || (is_inline_phrasing(dom, c) && holds_only_phrasing(dom, c)))
+    dom.children(el).into_iter().all(|c| {
+        paints_nothing(dom, c) || (is_inline_phrasing(dom, c) && holds_only_phrasing(dom, c))
+    })
 }
 
 /// The children of `el` that set their own lines: a box laid out at block
@@ -145,14 +154,25 @@ fn collect_runs(dom: &dyn Dom, el: ElId, font_size: f64, runs: &mut Vec<TextRun>
     } else {
         PROPORTIONAL_ADVANCE_EM
     };
-    let chars = direct_text(dom, el).chars().filter(|c| !c.is_whitespace()).count() as f64;
+    let chars = direct_text(dom, el)
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .count() as f64;
     if chars > 0.0 {
-        runs.push(TextRun { chars, font_size, advance_em });
+        runs.push(TextRun {
+            chars,
+            font_size,
+            advance_em,
+        });
     }
     for c in dom.children(el) {
         if !paints_nothing(dom, c) && is_inline_phrasing(dom, c) {
             let size = parse_float(&dom.style(c, "fontSize"));
-            let size = if size.is_finite() && size > 0.0 { size } else { font_size };
+            let size = if size.is_finite() && size > 0.0 {
+                size
+            } else {
+                font_size
+            };
             collect_runs(dom, c, size, runs);
         }
     }
@@ -185,7 +205,10 @@ pub fn phrasing_text_font(dom: &dyn Dom, el: ElId, font_size: f64) -> (f64, f64)
         };
         return (font_size, advance);
     }
-    (weighted(&runs, |r| r.font_size), weighted(&runs, |r| r.advance_em))
+    (
+        weighted(&runs, |r| r.font_size),
+        weighted(&runs, |r| r.advance_em),
+    )
 }
 
 /// The line-height `el`'s text is set at, for an element with its own
@@ -278,7 +301,11 @@ pub(crate) fn moves_a_track(dom: &dyn Dom, el: ElId, clip: ElId) -> bool {
             break;
         }
         let content = dom.scroll_width(t);
-        if is_transformed(dom, t) && content.is_finite() && content > client + 1.0 && holds_row(dom, t) {
+        if is_transformed(dom, t)
+            && content.is_finite()
+            && content > client + 1.0
+            && holds_row(dom, t)
+        {
             return true;
         }
         cur = dom.parent(t);
@@ -358,22 +385,27 @@ fn runs_endless_animation(dom: &dyn Dom, el: ElId) -> bool {
     // a reduced-motion rule) moves nothing before the capture.
     let states_raw = dom.style(el, "animationPlayState");
     let states: Vec<&str> = states_raw.split(',').map(js::trim).collect();
-    dom.style(el, "animationName").split(',').enumerate().any(|(i, name)| {
-        let name = js::trim(name);
-        !name.is_empty()
-            && name != "none"
-            && counts[i % counts.len()] == "infinite"
-            && states[i % states.len()] != "paused"
-            && dom.keyframes(name).is_none_or(|frames| {
-                frames.iter().any(|f| {
-                    f.decls.iter().any(|(p, v)| match p.strip_prefix("-webkit-").unwrap_or(p) {
-                        "translate" => true,
-                        "transform" => !crate::checks::css_scan::transform_only_scales(v),
-                        _ => false,
+    dom.style(el, "animationName")
+        .split(',')
+        .enumerate()
+        .any(|(i, name)| {
+            let name = js::trim(name);
+            !name.is_empty()
+                && name != "none"
+                && counts[i % counts.len()] == "infinite"
+                && states[i % states.len()] != "paused"
+                && dom.keyframes(name).is_none_or(|frames| {
+                    frames.iter().any(|f| {
+                        f.decls
+                            .iter()
+                            .any(|(p, v)| match p.strip_prefix("-webkit-").unwrap_or(p) {
+                                "translate" => true,
+                                "transform" => !crate::checks::css_scan::transform_only_scales(v),
+                                _ => false,
+                            })
                     })
                 })
-            })
-    })
+        })
 }
 
 /// The x range of a truncated line: text measured at `(left, right)` cut to
@@ -394,10 +426,22 @@ pub fn clamp_to_own_clip(dom: &dyn Dom, el: ElId, left: f64, right: f64) -> (f64
         return (left, right);
     }
     let border = dom.client_left(el);
-    let clip_left = r.left + if border.is_finite() && border > 0.0 { border } else { 0.0 };
+    let clip_left = r.left
+        + if border.is_finite() && border > 0.0 {
+            border
+        } else {
+            0.0
+        };
     let client = dom.client_width(el);
-    let clip_right = if client.is_finite() && client > 0.0 { clip_left + client } else { r.right };
-    (js::math_max(left, clip_left), js::math_min(right, clip_right))
+    let clip_right = if client.is_finite() && client > 0.0 {
+        clip_left + client
+    } else {
+        r.right
+    };
+    (
+        js::math_max(left, clip_left),
+        js::math_min(right, clip_right),
+    )
 }
 
 /// A `transform` or `translate` other than `none`, the identity matrix
@@ -487,21 +531,42 @@ mod tests {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         let track = d.add(Some(body), "div");
-        d.set_styles(track, &[("animationName", "beat"), ("animationIterationCount", "infinite")]);
+        d.set_styles(
+            track,
+            &[
+                ("animationName", "beat"),
+                ("animationIterationCount", "infinite"),
+            ],
+        );
         let frames = |decls: &[(&str, &str)]| {
-            vec![KeyframeFrame { decls: decls.iter().map(|(p, v)| (p.to_string(), v.to_string())).collect() }]
+            vec![KeyframeFrame {
+                decls: decls
+                    .iter()
+                    .map(|(p, v)| (p.to_string(), v.to_string()))
+                    .collect(),
+            }]
         };
-        d.keyframes.insert("beat".into(), frames(&[("transform", "scale(1.05)")]));
+        d.keyframes
+            .insert("beat".into(), frames(&[("transform", "scale(1.05)")]));
         assert!(!runs_endless_animation(&d, track), "scale pulse");
-        d.keyframes.insert("beat".into(), frames(&[("-webkit-transform", "scaleX(0.9) scaleY(1.1)")]));
+        d.keyframes.insert(
+            "beat".into(),
+            frames(&[("-webkit-transform", "scaleX(0.9) scaleY(1.1)")]),
+        );
         assert!(!runs_endless_animation(&d, track), "two-axis scale pulse");
-        d.keyframes.insert("beat".into(), frames(&[("transform", "translateX(-50%)")]));
+        d.keyframes
+            .insert("beat".into(), frames(&[("transform", "translateX(-50%)")]));
         assert!(runs_endless_animation(&d, track), "a sliding track");
-        d.keyframes.insert("beat".into(), frames(&[("transform", "scale(1.05) translateX(-10px)")]));
+        d.keyframes.insert(
+            "beat".into(),
+            frames(&[("transform", "scale(1.05) translateX(-10px)")]),
+        );
         assert!(runs_endless_animation(&d, track), "scale plus a move");
-        d.keyframes.insert("beat".into(), frames(&[("transform", "scale(var(--s))")]));
+        d.keyframes
+            .insert("beat".into(), frames(&[("transform", "scale(var(--s))")]));
         assert!(runs_endless_animation(&d, track), "an unreadable value");
-        d.keyframes.insert("beat".into(), frames(&[("translate", "-100% 0")]));
+        d.keyframes
+            .insert("beat".into(), frames(&[("translate", "-100% 0")]));
         assert!(runs_endless_animation(&d, track), "the translate property");
         d.keyframes.remove("beat");
         assert!(runs_endless_animation(&d, track), "unread keyframes");
@@ -527,7 +592,10 @@ mod tests {
         d.set_text_rect(i, 20.0, 100.0, 600.0, 42.0);
         assert!(holds_only_phrasing(&d, p));
         let t = phrasing_text_extent(&d, p).expect("extent");
-        assert_eq!((t.left, t.top, t.right, t.bottom), (20.0, 100.0, 620.0, 142.0));
+        assert_eq!(
+            (t.left, t.top, t.right, t.bottom),
+            (20.0, 100.0, 620.0, 142.0)
+        );
 
         // A block child is not phrasing: the paragraph holds a component.
         let card = d.add(Some(p), "div");
@@ -536,7 +604,10 @@ mod tests {
         d.set_text_rect(card, 0.0, 200.0, 1000.0, 18.0);
         assert!(!holds_only_phrasing(&d, p));
         let t = phrasing_text_extent(&d, p).expect("extent");
-        assert_eq!(t.right, 620.0, "the block child's text is not the paragraph's line");
+        assert_eq!(
+            t.right, 620.0,
+            "the block child's text is not the paragraph's line"
+        );
 
         // Nothing measurable.
         let bare = d.add(Some(body), "p");
@@ -560,8 +631,14 @@ mod tests {
         d.el_mut(section).scroll_width = 451.0;
         let p = d.add(Some(section), "p");
         let cut = Rect::from_xywh(56.0, 20.0, 353.0, 48.0);
-        assert!(!scrolling_ancestor_cuts(&d, p, &cut), "a box that only hides overflow");
-        d.set_styles(section, &[("overflow", "hidden auto"), ("overflowX", "hidden")]);
+        assert!(
+            !scrolling_ancestor_cuts(&d, p, &cut),
+            "a box that only hides overflow"
+        );
+        d.set_styles(
+            section,
+            &[("overflow", "hidden auto"), ("overflowX", "hidden")],
+        );
         assert!(!scrolling_ancestor_cuts(&d, p, &cut), "overflow-x-hidden");
 
         // nike.com's `ul.slider`: auto on x, with slides to scroll to.
@@ -578,7 +655,10 @@ mod tests {
         let inside = Rect::from_xywh(24.0, 20.0, 300.0, 48.0);
         assert!(!scrolling_ancestor_cuts(&d, p, &inside));
         // The root scrolls the page, and stands for the viewport.
-        d.set_styles(section, &[("overflow", "visible"), ("overflowX", "visible")]);
+        d.set_styles(
+            section,
+            &[("overflow", "visible"), ("overflowX", "visible")],
+        );
         let html = d.document_element().expect("root");
         d.set_styles(html, &[("overflow", "auto"), ("overflowX", "auto")]);
         d.set_rect(html, 0.0, 0.0, 390.0, 900.0);
@@ -635,7 +715,14 @@ mod tests {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         let p = d.add(Some(body), "p");
-        d.set_styles(p, &[("display", "block"), ("fontSize", "16px"), ("fontFamily", "\"CVS Sans Regular\", Helvetica, sans-serif")]);
+        d.set_styles(
+            p,
+            &[
+                ("display", "block"),
+                ("fontSize", "16px"),
+                ("fontFamily", "\"CVS Sans Regular\", Helvetica, sans-serif"),
+            ],
+        );
         let span = d.add(Some(p), "span");
         d.set_styles(span, &[("display", "inline"), ("fontSize", "24px")]);
         d.add_text(span, "Create a good morning routine");
@@ -650,18 +737,49 @@ mod tests {
         assert_eq!(phrasing_text_font(&d, p, 16.0), (16.0, 0.5));
 
         let mono = d.add(Some(body), "p");
-        d.set_styles(mono, &[("display", "block"), ("fontSize", "14px"), ("fontFamily", "\"JetBrains Mono\", ui-monospace, monospace")]);
+        d.set_styles(
+            mono,
+            &[
+                ("display", "block"),
+                ("fontSize", "14px"),
+                ("fontFamily", "\"JetBrains Mono\", ui-monospace, monospace"),
+            ],
+        );
         let strong = d.add(Some(mono), "strong");
         // Computed style carries the inherited face.
-        d.set_styles(strong, &[("display", "inline"), ("fontFamily", "\"JetBrains Mono\", ui-monospace, monospace")]);
+        d.set_styles(
+            strong,
+            &[
+                ("display", "inline"),
+                ("fontFamily", "\"JetBrains Mono\", ui-monospace, monospace"),
+            ],
+        );
         d.add_text(strong, "How do you keep state correct");
-        assert_eq!(phrasing_text_font(&d, mono, 14.0), (14.0, 0.6), "the run inherits the face");
+        assert_eq!(
+            phrasing_text_font(&d, mono, 14.0),
+            (14.0, 0.6),
+            "the run inherits the face"
+        );
         // A code run in a proportional paragraph: half the characters at 0.6.
         let prose = d.add(Some(body), "p");
-        d.set_styles(prose, &[("display", "block"), ("fontSize", "16px"), ("fontFamily", "Georgia, serif")]);
+        d.set_styles(
+            prose,
+            &[
+                ("display", "block"),
+                ("fontSize", "16px"),
+                ("fontFamily", "Georgia, serif"),
+            ],
+        );
         d.add_text(prose, "abcd");
         let code = d.add(Some(prose), "code");
-        d.set_styles(code, &[("display", "inline"), ("fontSize", "16px"), ("fontFamily", "Menlo, monospace")]);
+        d.set_styles(
+            code,
+            &[
+                ("display", "inline"),
+                ("fontSize", "16px"),
+                ("fontFamily", "Menlo, monospace"),
+            ],
+        );
         d.add_text(code, "wxyz");
         let (size, advance) = phrasing_text_font(&d, prose, 16.0);
         assert_eq!(size, 16.0);
@@ -724,7 +842,10 @@ mod tests {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         let main = d.add(Some(body), "main");
-        d.set_styles(main, &[("overflow", "hidden auto"), ("overflowX", "hidden")]);
+        d.set_styles(
+            main,
+            &[("overflow", "hidden auto"), ("overflowX", "hidden")],
+        );
         assert_eq!(overflow_x(&d, main), "hidden");
         let legacy = d.add(Some(body), "div");
         d.set_style(legacy, "overflow", "auto scroll");
@@ -736,9 +857,23 @@ mod tests {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         let block = d.add(Some(body), "div");
-        d.set_styles(block, &[("display", "inline-block"), ("fontSize", "14px"), ("lineHeight", "14px")]);
+        d.set_styles(
+            block,
+            &[
+                ("display", "inline-block"),
+                ("fontSize", "14px"),
+                ("lineHeight", "14px"),
+            ],
+        );
         let span = d.add(Some(block), "span");
-        d.set_styles(span, &[("display", "inline"), ("fontSize", "11px"), ("lineHeight", "11px")]);
+        d.set_styles(
+            span,
+            &[
+                ("display", "inline"),
+                ("fontSize", "11px"),
+                ("lineHeight", "11px"),
+            ],
+        );
         assert_eq!(line_pitch_px(&d, span, 11.0), 14.0);
         // A taller own line-height sets the pitch itself.
         assert_eq!(line_pitch_px(&d, span, 20.0), 20.0);

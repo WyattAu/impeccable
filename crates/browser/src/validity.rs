@@ -76,13 +76,22 @@ const CHALLENGE_HOSTS: &[&str] = &["perfdrive.com", "captcha-delivery.com"];
 /// captchas). Each entry is `(selector, label)`; the probe reports the labels
 /// of the selectors that match.
 pub const CHALLENGE_MARKERS: &[(&str, &str)] = &[
-    ("#challenge-form, #challenge-running, #cf-challenge-running", "cloudflare-challenge"),
+    (
+        "#challenge-form, #challenge-running, #cf-challenge-running",
+        "cloudflare-challenge",
+    ),
     ("#px-captcha", "perimeterx-captcha"),
     ("iframe[src*='captcha-delivery.com']", "datadome-captcha"),
     ("iframe[src*='_Incapsula_Resource']", "imperva-incapsula"),
     ("#sec-if-cpt-container, #sec-cpt-if", "akamai-challenge"),
-    ("#captcha-container[class*='amzn'], awswaf-captcha", "aws-waf-captcha"),
-    (".geetest_holder, #nc_1_wrapper, #aliyunCaptcha-sliding-wrapper", "slider-captcha"),
+    (
+        "#captcha-container[class*='amzn'], awswaf-captcha",
+        "aws-waf-captcha",
+    ),
+    (
+        ".geetest_holder, #nc_1_wrapper, #aliyunCaptcha-sliding-wrapper",
+        "slider-captcha",
+    ),
 ];
 
 /// Challenge sheets a bot manager lays over the real page it has already
@@ -93,7 +102,10 @@ pub const CHALLENGE_MARKERS: &[(&str, &str)] = &[
 /// check as `iframe#px-captcha-modal`, fixed over the whole viewport at
 /// z-index 2147483647 (target.com, run 28 captures 4166, 4168, 4170, 4172,
 /// whose pages load `client.px-cloud.net` as `script#humanSensor`).
-pub const CHALLENGE_OVERLAYS: &[(&str, &str)] = &[("#px-captcha-modal, #px-captcha-wrapper", "human-press-and-hold")];
+pub const CHALLENGE_OVERLAYS: &[(&str, &str)] = &[(
+    "#px-captcha-modal, #px-captcha-wrapper",
+    "human-press-and-hold",
+)];
 
 /// The share of the viewport a challenge overlay covers before it stands in
 /// front of the page.
@@ -189,33 +201,76 @@ pub struct PageProbe {
 impl PageProbe {
     pub fn from_value(v: &Value) -> PageProbe {
         PageProbe {
-            title: v.get("title").and_then(Value::as_str).unwrap_or("").to_string(),
-            text_chars: v.get("textChars").and_then(Value::as_f64).unwrap_or(0.0).max(0.0) as u64,
-            href: v.get("href").and_then(Value::as_str).unwrap_or("").to_string(),
+            title: v
+                .get("title")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+            text_chars: v
+                .get("textChars")
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0)
+                .max(0.0) as u64,
+            href: v
+                .get("href")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
             markers: v
                 .get("markers")
                 .and_then(Value::as_array)
-                .map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(Value::as_str)
+                        .map(String::from)
+                        .collect()
+                })
                 .unwrap_or_default(),
             overlays: v
                 .get("overlays")
                 .and_then(Value::as_array)
-                .map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(Value::as_str)
+                        .map(String::from)
+                        .collect()
+                })
                 .unwrap_or_default(),
             consent: v
                 .get("consent")
                 .and_then(Value::as_array)
-                .map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(Value::as_str)
+                        .map(String::from)
+                        .collect()
+                })
                 .unwrap_or_default(),
-            consent_chars: v.get("consentChars").and_then(Value::as_f64).unwrap_or(0.0).max(0.0) as u64,
-            consent_outside: v.get("consentOutside").and_then(Value::as_f64).unwrap_or(0.0).max(0.0) as u64,
-            consent_shadow_chars: v.get("consentShadowChars").and_then(Value::as_f64).unwrap_or(0.0).max(0.0) as u64,
+            consent_chars: v
+                .get("consentChars")
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0)
+                .max(0.0) as u64,
+            consent_outside: v
+                .get("consentOutside")
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0)
+                .max(0.0) as u64,
+            consent_shadow_chars: v
+                .get("consentShadowChars")
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0)
+                .max(0.0) as u64,
             consent_page_shadow_chars: v
                 .get("consentPageShadowChars")
                 .and_then(Value::as_f64)
                 .unwrap_or(0.0)
                 .max(0.0) as u64,
-            consent_frames: v.get("consentFrames").and_then(Value::as_f64).unwrap_or(0.0).max(0.0) as u64,
+            consent_frames: v
+                .get("consentFrames")
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0)
+                .max(0.0) as u64,
         }
     }
 
@@ -247,7 +302,6 @@ impl PageProbe {
         }
         v
     }
-
 }
 
 /// The main document's HTTP response (the last one for the main frame, so
@@ -271,14 +325,20 @@ impl DocumentResponse {
                     .map(|(k, v)| {
                         (
                             k.to_ascii_lowercase(),
-                            v.as_str().map(String::from).unwrap_or_else(|| v.to_string()),
+                            v.as_str()
+                                .map(String::from)
+                                .unwrap_or_else(|| v.to_string()),
                         )
                     })
                     .collect()
             })
             .unwrap_or_default();
         Some(DocumentResponse {
-            url: response.get("url").and_then(Value::as_str).unwrap_or("").to_string(),
+            url: response
+                .get("url")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
             status: status.max(0.0) as u16,
             headers,
         })
@@ -385,7 +445,11 @@ fn printable(s: &str) -> String {
 /// response was seen (a `file://` URL, or a same-document navigation).
 /// `consent_wall` turns the consent-wall gate on; a scan that keeps the
 /// banners turns it off.
-pub fn classify_with(response: Option<&DocumentResponse>, probe: &PageProbe, consent_wall: bool) -> PageValidity {
+pub fn classify_with(
+    response: Option<&DocumentResponse>,
+    probe: &PageProbe,
+    consent_wall: bool,
+) -> PageValidity {
     let mut challenge: Vec<String> = Vec::new();
     if let Some(r) = response {
         if let Some(action) = r.header("x-amzn-waf-action") {
@@ -416,7 +480,11 @@ pub fn classify_with(response: Option<&DocumentResponse>, probe: &PageProbe, con
     let small = probe.text_chars <= SMALL_PAGE_CHARS;
     if small {
         let title = probe.title.trim().to_lowercase();
-        if !title.is_empty() && CHALLENGE_TITLE_PREFIXES.iter().any(|p| title.starts_with(p)) {
+        if !title.is_empty()
+            && CHALLENGE_TITLE_PREFIXES
+                .iter()
+                .any(|p| title.starts_with(p))
+        {
             challenge.push(format!("title \"{}\"", printable(probe.title.trim())));
         }
         for m in &probe.markers {
@@ -477,7 +545,10 @@ mod tests {
         DocumentResponse {
             url: "https://example.com/".into(),
             status,
-            headers: headers.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            headers: headers
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
         }
     }
 
@@ -508,9 +579,15 @@ mod tests {
                 ],
             }
         );
-        assert!(v.error_message().unwrap().starts_with("the page is a consent wall"));
+        assert!(v
+            .error_message()
+            .unwrap()
+            .starts_with("the page is a consent wall"));
         // A scan that keeps the banners reads the wall instead.
-        assert_eq!(classify_with(Some(&resp(200, &[])), &p, false), PageValidity::Ok);
+        assert_eq!(
+            classify_with(Some(&resp(200, &[])), &p, false),
+            PageValidity::Ok
+        );
     }
 
     #[test]
@@ -522,7 +599,10 @@ mod tests {
         p.consent_chars = 5392;
         assert!(matches!(
             classify(Some(&resp(200, &[])), &p),
-            PageValidity::Blocked { kind: BlockKind::ConsentWall, .. }
+            PageValidity::Blocked {
+                kind: BlockKind::ConsentWall,
+                ..
+            }
         ));
         // The same dialog over a long page is the page.
         let mut p = probe("Example", 9400, &[]);
@@ -538,7 +618,10 @@ mod tests {
         p.consent_frames = 1;
         assert!(matches!(
             classify(Some(&resp(200, &[])), &p),
-            PageValidity::Blocked { kind: BlockKind::ConsentWall, .. }
+            PageValidity::Blocked {
+                kind: BlockKind::ConsentWall,
+                ..
+            }
         ));
         // The same frame over a page with copy of its own is the page.
         p.text_chars = 400;
@@ -561,7 +644,10 @@ mod tests {
         c.consent_shadow_chars = 800;
         assert!(matches!(
             classify(Some(&resp(403, &[])), &c),
-            PageValidity::Blocked { kind: BlockKind::Challenge, .. }
+            PageValidity::Blocked {
+                kind: BlockKind::Challenge,
+                ..
+            }
         ));
     }
 
@@ -574,7 +660,10 @@ mod tests {
         p.consent_chars = 400;
         assert!(matches!(
             classify(Some(&resp(200, &[])), &p),
-            PageValidity::Blocked { kind: BlockKind::ConsentWall, .. }
+            PageValidity::Blocked {
+                kind: BlockKind::ConsentWall,
+                ..
+            }
         ));
         p.consent_page_shadow_chars = 600;
         assert_eq!(classify(Some(&resp(200, &[])), &p), PageValidity::Ok);
@@ -643,7 +732,10 @@ mod tests {
                 ],
             }
         );
-        assert!(v.error_message().unwrap().starts_with("the page is a bot challenge"));
+        assert!(v
+            .error_message()
+            .unwrap()
+            .starts_with("the page is a bot challenge"));
     }
 
     #[test]
@@ -654,14 +746,26 @@ mod tests {
         );
         let message = v.error_message().unwrap();
         assert!(!message.chars().any(|c| c.is_control()), "{message:?}");
-        assert!(message.contains("title \"Human Verification\\u{1b}]0;owned\\u{7}\""), "{message}");
-        assert!(message.contains("x-amzn-waf-action: captcha\\u{d}\\u{a}\\u{1b}[2J"), "{message}");
+        assert!(
+            message.contains("title \"Human Verification\\u{1b}]0;owned\\u{7}\""),
+            "{message}"
+        );
+        assert!(
+            message.contains("x-amzn-waf-action: captcha\\u{d}\\u{a}\\u{1b}[2J"),
+            "{message}"
+        );
     }
 
     #[test]
     fn cloudflare_interstitial_title_on_a_small_page() {
         let v = classify(Some(&resp(403, &[])), &probe("Just a moment...", 80, &[]));
-        assert!(matches!(v, PageValidity::Blocked { kind: BlockKind::Challenge, .. }));
+        assert!(matches!(
+            v,
+            PageValidity::Blocked {
+                kind: BlockKind::Challenge,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -670,18 +774,30 @@ mod tests {
             Some(&resp(200, &[("cf-mitigated", "challenge")])),
             &probe("Example", 20000, &[]),
         );
-        assert!(matches!(v, PageValidity::Blocked { kind: BlockKind::Challenge, .. }));
+        assert!(matches!(
+            v,
+            PageValidity::Blocked {
+                kind: BlockKind::Challenge,
+                ..
+            }
+        ));
     }
 
     #[test]
     fn challenge_title_on_a_content_page_is_content() {
-        let v = classify(Some(&resp(200, &[])), &probe("Access denied: a novel", 40000, &[]));
+        let v = classify(
+            Some(&resp(200, &[])),
+            &probe("Access denied: a novel", 40000, &[]),
+        );
         assert_eq!(v, PageValidity::Ok);
     }
 
     #[test]
     fn captcha_marker_on_a_content_page_is_content() {
-        let v = classify(Some(&resp(200, &[])), &probe("Sign up", 9000, &["slider-captcha"]));
+        let v = classify(
+            Some(&resp(200, &[])),
+            &probe("Sign up", 9000, &["slider-captcha"]),
+        );
         assert_eq!(v, PageValidity::Ok);
     }
 
@@ -754,7 +870,10 @@ mod tests {
 
     #[test]
     fn ordinary_pages_and_file_urls_pass() {
-        assert_eq!(classify(Some(&resp(200, &[])), &probe("Stripe", 12000, &[])), PageValidity::Ok);
+        assert_eq!(
+            classify(Some(&resp(200, &[])), &probe("Stripe", 12000, &[])),
+            PageValidity::Ok
+        );
         assert_eq!(classify(None, &probe("fixture", 10, &[])), PageValidity::Ok);
     }
 

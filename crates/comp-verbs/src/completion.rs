@@ -3,14 +3,29 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
-pub const PHASES: [&str; 8] = ["comps", "spec", "plates", "hero", "sections", "motion", "responsive", "review"];
+pub const PHASES: [&str; 8] = [
+    "comps",
+    "spec",
+    "plates",
+    "hero",
+    "sections",
+    "motion",
+    "responsive",
+    "review",
+];
 
 pub fn artifact_path(root: &Path, state: &Value) -> Option<PathBuf> {
     let relative = state.get("artifact")?.as_str()?;
-    if relative.is_empty() { return None; }
+    if relative.is_empty() {
+        return None;
+    }
     let path = Path::new(relative);
     let root = root.canonicalize().ok()?;
-    let absolute = if path.is_absolute() { path.to_path_buf() } else { root.join(path) };
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        root.join(path)
+    };
     let absolute = absolute.canonicalize().ok()?;
     absolute.starts_with(&root).then_some(absolute)
 }
@@ -26,29 +41,78 @@ pub fn artifact_hash(root: &Path, state: &Value) -> Option<String> {
 pub fn input_hash(root: &Path) -> Option<String> {
     fn collect(root: &Path, dir: &Path, paths: &mut Vec<PathBuf>) -> Option<()> {
         for entry in std::fs::read_dir(dir).ok()? {
-            let entry=entry.ok()?;let path=entry.path();let name=entry.file_name();
-            let name=name.to_string_lossy();
-            if name.starts_with('.') || matches!(name.as_ref(), "node_modules"|"target") {continue;}
-            let kind=entry.file_type().ok()?;
-            if kind.is_symlink() { return None; }
-            if kind.is_dir() {collect(root,&path,paths)?;}
-            else if matches!(path.extension().and_then(|v|v.to_str()),
-                Some("html"|"htm"|"css"|"scss"|"sass"|"less"|"js"|"mjs"|"cjs"|"ts"|"tsx"|"jsx"|"vue"|"svelte"|"astro"|"json"|"svg"|"png"|"jpg"|"jpeg"|"webp"|"avif"|"gif"|"woff"|"woff2"|"ttf"|"otf"|"mp4"|"webm")) {
+            let entry = entry.ok()?;
+            let path = entry.path();
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with('.') || matches!(name.as_ref(), "node_modules" | "target") {
+                continue;
+            }
+            let kind = entry.file_type().ok()?;
+            if kind.is_symlink() {
+                return None;
+            }
+            if kind.is_dir() {
+                collect(root, &path, paths)?;
+            } else if matches!(
+                path.extension().and_then(|v| v.to_str()),
+                Some(
+                    "html"
+                        | "htm"
+                        | "css"
+                        | "scss"
+                        | "sass"
+                        | "less"
+                        | "js"
+                        | "mjs"
+                        | "cjs"
+                        | "ts"
+                        | "tsx"
+                        | "jsx"
+                        | "vue"
+                        | "svelte"
+                        | "astro"
+                        | "json"
+                        | "svg"
+                        | "png"
+                        | "jpg"
+                        | "jpeg"
+                        | "webp"
+                        | "avif"
+                        | "gif"
+                        | "woff"
+                        | "woff2"
+                        | "ttf"
+                        | "otf"
+                        | "mp4"
+                        | "webm"
+                )
+            ) {
                 paths.push(path.strip_prefix(root).ok()?.to_path_buf());
-                if paths.len()>10000 {return None;}
+                if paths.len() > 10000 {
+                    return None;
+                }
             }
         }
         Some(())
     }
-    let root=root.canonicalize().ok()?;let mut paths=Vec::new();collect(&root,&root,&mut paths)?;paths.sort();
-    let mut hasher=Sha256::new();let mut total=0u64;
+    let root = root.canonicalize().ok()?;
+    let mut paths = Vec::new();
+    collect(&root, &root, &mut paths)?;
+    paths.sort();
+    let mut hasher = Sha256::new();
+    let mut total = 0u64;
     for path in paths {
-        let full=root.join(&path);total=total.checked_add(std::fs::metadata(&full).ok()?.len())?;
-        if total>256*1024*1024 {return None;}
-        hasher.update(path.to_string_lossy().as_bytes());hasher.update([0]);
+        let full = root.join(&path);
+        total = total.checked_add(std::fs::metadata(&full).ok()?.len())?;
+        if total > 256 * 1024 * 1024 {
+            return None;
+        }
+        hasher.update(path.to_string_lossy().as_bytes());
+        hasher.update([0]);
         hasher.update(Sha256::digest(std::fs::read(full).ok()?));
     }
-    Some(format!("{:x}",hasher.finalize()))
+    Some(format!("{:x}", hasher.finalize()))
 }
 
 /// The files the final native capture bound (its `inputs.json` manifest), as
@@ -63,10 +127,16 @@ pub fn changed_capture_inputs(root: &Path, state: &Value) -> Option<Vec<String>>
         let relative = file.get("path")?.as_str()?;
         let recorded = file.get("sha256")?.as_str()?;
         let path = Path::new(relative);
-        if relative.is_empty() || !path.components().all(|c| matches!(c, std::path::Component::Normal(_))) {
+        if relative.is_empty()
+            || !path
+                .components()
+                .all(|c| matches!(c, std::path::Component::Normal(_)))
+        {
             return None;
         }
-        let current = std::fs::read(root.join(path)).ok().map(|bytes| format!("{:x}", Sha256::digest(bytes)));
+        let current = std::fs::read(root.join(path))
+            .ok()
+            .map(|bytes| format!("{:x}", Sha256::digest(bytes)));
         if current.as_deref() != Some(recorded) {
             changed.push(relative.to_string());
         }
@@ -80,15 +150,24 @@ pub fn changed_capture_inputs(root: &Path, state: &Value) -> Option<Vec<String>>
 pub fn bound_fingerprint(root: &Path, state: &Value) -> Option<String> {
     let mut hasher = Sha256::new();
     hasher.update(artifact_hash(root, state)?.as_bytes());
-    if let Some(files) = state.pointer("/finish/captureInputs").and_then(Value::as_array) {
+    if let Some(files) = state
+        .pointer("/finish/captureInputs")
+        .and_then(Value::as_array)
+    {
         let root = root.canonicalize().ok()?;
         for file in files {
             let relative = file.get("path").and_then(Value::as_str).unwrap_or("");
             let path = Path::new(relative);
             hasher.update([0]);
             hasher.update(relative.as_bytes());
-            if !relative.is_empty() && path.components().all(|c| matches!(c, std::path::Component::Normal(_))) {
-                if let Ok(bytes) = std::fs::read(root.join(path)) { hasher.update(Sha256::digest(bytes)); }
+            if !relative.is_empty()
+                && path
+                    .components()
+                    .all(|c| matches!(c, std::path::Component::Normal(_)))
+            {
+                if let Ok(bytes) = std::fs::read(root.join(path)) {
+                    hasher.update(Sha256::digest(bytes));
+                }
             }
         }
     }
@@ -96,12 +175,19 @@ pub fn bound_fingerprint(root: &Path, state: &Value) -> Option<String> {
 }
 
 pub fn open_phases(state: &Value, include_review: bool) -> Vec<&'static str> {
-    PHASES.iter().copied().filter(|phase| {
-        (include_review || *phase != "review") && !matches!(
-            state.pointer(&format!("/phases/{phase}/status")).and_then(Value::as_str),
-            Some("closed" | "skipped")
-        )
-    }).collect()
+    PHASES
+        .iter()
+        .copied()
+        .filter(|phase| {
+            (include_review || *phase != "review")
+                && !matches!(
+                    state
+                        .pointer(&format!("/phases/{phase}/status"))
+                        .and_then(Value::as_str),
+                    Some("closed" | "skipped")
+                )
+        })
+        .collect()
 }
 
 pub fn report(root: &Path, state: Option<&Value>, session_id: Option<&str>) -> Value {
@@ -110,32 +196,52 @@ pub fn report(root: &Path, state: Option<&Value>, session_id: Option<&str>) -> V
     };
     let phases = open_phases(state, true);
     let disposition = state.pointer("/finish/disposition").and_then(Value::as_str);
-    let owner = state.get("sessionId").and_then(Value::as_str).filter(|s| !s.is_empty());
+    let owner = state
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty());
     let scope = match (owner, session_id.filter(|s| !s.is_empty())) {
         (Some(a), Some(b)) if a == b => "current-session",
         (Some(_), Some(_)) => "other-session",
         _ => "unknown",
     };
     let current_hash = artifact_hash(root, state);
-    let recorded_hash = state.pointer("/finish/artifactSha256").and_then(Value::as_str);
-    let mut unchanged = recorded_hash.zip(current_hash.as_deref()).map(|(a,b)| a == b);
+    let recorded_hash = state
+        .pointer("/finish/artifactSha256")
+        .and_then(Value::as_str);
+    let mut unchanged = recorded_hash
+        .zip(current_hash.as_deref())
+        .map(|(a, b)| a == b);
     let mut changed_inputs: Vec<String> = Vec::new();
     if unchanged == Some(false) {
-        if let Some(artifact) = state.get("artifact").and_then(Value::as_str) { changed_inputs.push(artifact.to_string()); }
+        if let Some(artifact) = state.get("artifact").and_then(Value::as_str) {
+            changed_inputs.push(artifact.to_string());
+        }
     }
     if state.pointer("/finish/captureInputs").is_some() {
         unchanged = match (unchanged, changed_capture_inputs(root, state)) {
             (entry, Some(changed)) => {
-                for path in changed { if !changed_inputs.contains(&path) { changed_inputs.push(path); } }
+                for path in changed {
+                    if !changed_inputs.contains(&path) {
+                        changed_inputs.push(path);
+                    }
+                }
                 // A deleted entry has no hash, but the manifest still names it as changed.
-                if !changed_inputs.is_empty() { Some(false) } else { entry }
+                if !changed_inputs.is_empty() {
+                    Some(false)
+                } else {
+                    entry
+                }
             }
             _ => None,
         };
     }
-    if let Some(recorded) = state.pointer("/finish/artifactInputsSha256").and_then(Value::as_str) {
-        unchanged = match (unchanged,input_hash(root)) {
-            (Some(entry),Some(inputs)) => Some(entry && recorded == inputs),
+    if let Some(recorded) = state
+        .pointer("/finish/artifactInputsSha256")
+        .and_then(Value::as_str)
+    {
+        unchanged = match (unchanged, input_hash(root)) {
+            (Some(entry), Some(inputs)) => Some(entry && recorded == inputs),
             _ => None,
         };
     }
@@ -145,7 +251,9 @@ pub fn report(root: &Path, state: Option<&Value>, session_id: Option<&str>) -> V
             Some(false) => "changed-after-finish",
             None => "unverified",
         }
-    } else { "incomplete" };
+    } else {
+        "incomplete"
+    };
     json!({
         "tool":"build-completion", "version":1, "status":status,
         "sessionScope":scope, "sessionId":owner, "buildStartedAt":state.get("startedAt"),
@@ -169,13 +277,19 @@ mod tests {
     }
     #[test]
     fn no_state_does_not_start_a_workflow() {
-        assert_eq!(report(Path::new("."), None, Some("session"))["status"], "not-applicable");
+        assert_eq!(
+            report(Path::new("."), None, Some("session"))["status"],
+            "not-applicable"
+        );
     }
     #[test]
     fn absent_or_foreign_identity_cannot_continue() {
         for session in [None, Some("other")] {
             let state = json!({"sessionId":"owner","artifact":"missing.html"});
-            assert_eq!(report(Path::new("."), Some(&state), session)["canContinue"], false);
+            assert_eq!(
+                report(Path::new("."), Some(&state), session)["canContinue"],
+                false
+            );
         }
     }
 }

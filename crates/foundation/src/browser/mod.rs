@@ -216,7 +216,11 @@ pub struct HiddenTextMeasure {
     /// out of both counts: whether a visitor meets it is a question about
     /// the capture, not the page (corpus decision r6-t6-hidden-scroll-linked).
     /// Omitted from the JSON when zero.
-    #[serde(default, skip_serializing_if = "is_zero", with = "crate::js::json_number")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_zero",
+        with = "crate::js::json_number"
+    )]
     pub unstarted_slider_chars: f64,
     /// Up to three of those sliders' text, 40 characters each.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

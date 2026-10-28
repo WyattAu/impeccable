@@ -71,7 +71,9 @@ fn the_visual_passes_measure_only_text_a_reader_sees_on_its_own_surface() {
     let engine = BrowserEngine::new(env);
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/{FIXTURE}");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     let low: Vec<(String, String)> = findings
         .iter()
         .filter(|f| f.antipattern == "low-contrast")

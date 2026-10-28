@@ -13,13 +13,16 @@ fn temp_root(name: &str) -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let dir = std::env::temp_dir().join(format!("impeccable-{name}-{}-{nanos}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("impeccable-{name}-{}-{nanos}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("temp root");
     // Like Node's `realpathSync`: no `\\?\` verbatim prefix on Windows, so the
     // `/`-joined paths these tests build under this root still resolve (the
     // kernel takes a verbatim path literally and rejects a forward slash).
     let real = dir.canonicalize().unwrap().to_string_lossy().into_owned();
-    real.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(real)
+    real.strip_prefix(r"\\?\")
+        .map(str::to_string)
+        .unwrap_or(real)
 }
 
 fn write(path: &str, content: &str) {
@@ -53,7 +56,10 @@ fn bundle_with_commands(bundle: &str, provider: &str, names: &[&str]) {
 }
 
 fn bundle_with_skill(bundle: &str, provider: &str, body: &str) {
-    write(&format!("{bundle}/{provider}/skills/impeccable/SKILL.md"), body);
+    write(
+        &format!("{bundle}/{provider}/skills/impeccable/SKILL.md"),
+        body,
+    );
 }
 
 #[test]
@@ -65,11 +71,14 @@ fn writes_commands_to_project_config_dir_by_default() {
     bundle_with_commands(&bundle, ".opencode", &["impeccable"]);
     let sys = sys_with(&root, &[]);
 
-    let written = copy_provider_commands(&sys, &bundle, &project, &["opencode"], Some(Scope::Project));
+    let written =
+        copy_provider_commands(&sys, &bundle, &project, &["opencode"], Some(Scope::Project));
     assert_eq!(written, 1);
     let dest = format!("{project}/.opencode/commands/impeccable.md");
     assert!(exists(&dest));
-    assert!(std::fs::read_to_string(&dest).unwrap().contains("impeccable bridge"));
+    assert!(std::fs::read_to_string(&dest)
+        .unwrap()
+        .contains("impeccable bridge"));
 }
 
 #[test]
@@ -85,7 +94,9 @@ fn user_scope_resolves_the_config_dir_opencode_scans() {
         copy_provider_commands(&sys, &bundle, &home, &["opencode"], Some(Scope::User)),
         1
     );
-    assert!(exists(&format!("{home}/.config/opencode/commands/impeccable.md")));
+    assert!(exists(&format!(
+        "{home}/.config/opencode/commands/impeccable.md"
+    )));
 
     // OPENCODE_CONFIG_DIR wins, and the default location stays untouched.
     let root = temp_root("cmd-user-env");
@@ -125,7 +136,10 @@ fn migrates_legacy_global_commands_without_disturbing_siblings() {
     let bundle = format!("{root}/bundle");
     let home = format!("{root}/home");
     bundle_with_commands(&bundle, ".opencode", &["impeccable"]);
-    write(&format!("{home}/.opencode/commands/impeccable.md"), "stale\n");
+    write(
+        &format!("{home}/.opencode/commands/impeccable.md"),
+        "stale\n",
+    );
     write(&format!("{home}/.opencode/commands/mine.md"), "keep me\n");
     let sys = sys_with(&home, &[]);
 
@@ -133,7 +147,9 @@ fn migrates_legacy_global_commands_without_disturbing_siblings() {
         copy_provider_commands(&sys, &bundle, &home, &["opencode"], Some(Scope::User)),
         1
     );
-    assert!(exists(&format!("{home}/.config/opencode/commands/impeccable.md")));
+    assert!(exists(&format!(
+        "{home}/.config/opencode/commands/impeccable.md"
+    )));
     // The stranded copy loses only what was just written.
     assert!(!exists(&format!("{home}/.opencode/commands/impeccable.md")));
     assert!(exists(&format!("{home}/.opencode/commands/mine.md")));
@@ -145,7 +161,10 @@ fn a_home_rooted_git_repo_is_a_project_install_and_is_left_alone() {
     let bundle = format!("{root}/bundle");
     let home = format!("{root}/home");
     bundle_with_commands(&bundle, ".opencode", &["impeccable"]);
-    write(&format!("{home}/.opencode/commands/impeccable.md"), "project copy\n");
+    write(
+        &format!("{home}/.opencode/commands/impeccable.md"),
+        "project copy\n",
+    );
     std::fs::create_dir_all(format!("{home}/.git")).unwrap();
     let sys = sys_with(&home, &[]);
 
@@ -176,22 +195,63 @@ fn is_up_to_date_tracks_the_command_bridge() {
     let skill = "---\nname: impeccable\nversion: 1.0.0\n---\n";
     bundle_with_skill(&bundle, ".opencode", skill);
     bundle_with_commands(&bundle, ".opencode", &["impeccable"]);
-    write(&format!("{project}/.opencode/skills/impeccable/SKILL.md"), skill);
+    write(
+        &format!("{project}/.opencode/skills/impeccable/SKILL.md"),
+        skill,
+    );
     let sys = sys_with(&root, &[]);
 
     // Skills match but the bridge is missing.
-    assert!(!is_up_to_date(&sys, &project, &[".opencode"], &bundle, Some(Scope::Project), Some(Scope::Project)).unwrap());
+    assert!(!is_up_to_date(
+        &sys,
+        &project,
+        &[".opencode"],
+        &bundle,
+        Some(Scope::Project),
+        Some(Scope::Project)
+    )
+    .unwrap());
 
     // Bridge in place and identical.
     copy_provider_commands(&sys, &bundle, &project, &["opencode"], Some(Scope::Project));
-    assert!(is_up_to_date(&sys, &project, &[".opencode"], &bundle, Some(Scope::Project), Some(Scope::Project)).unwrap());
+    assert!(is_up_to_date(
+        &sys,
+        &project,
+        &[".opencode"],
+        &bundle,
+        Some(Scope::Project),
+        Some(Scope::Project)
+    )
+    .unwrap());
 
     // Drifted content is not current.
-    write(&format!("{project}/.opencode/commands/impeccable.md"), "drifted\n");
-    assert!(!is_up_to_date(&sys, &project, &[".opencode"], &bundle, Some(Scope::Project), Some(Scope::Project)).unwrap());
+    write(
+        &format!("{project}/.opencode/commands/impeccable.md"),
+        "drifted\n",
+    );
+    assert!(!is_up_to_date(
+        &sys,
+        &project,
+        &[".opencode"],
+        &bundle,
+        Some(Scope::Project),
+        Some(Scope::Project)
+    )
+    .unwrap());
 
     // A local-only command (a pinned shortcut) does not affect freshness.
     copy_provider_commands(&sys, &bundle, &project, &["opencode"], Some(Scope::Project));
-    write(&format!("{project}/.opencode/commands/impeccable-polish.md"), "pinned\n");
-    assert!(is_up_to_date(&sys, &project, &[".opencode"], &bundle, Some(Scope::Project), Some(Scope::Project)).unwrap());
+    write(
+        &format!("{project}/.opencode/commands/impeccable-polish.md"),
+        "pinned\n",
+    );
+    assert!(is_up_to_date(
+        &sys,
+        &project,
+        &[".opencode"],
+        &bundle,
+        Some(Scope::Project),
+        Some(Scope::Project)
+    )
+    .unwrap());
 }

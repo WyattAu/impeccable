@@ -290,16 +290,14 @@ pub fn run_copy_edit_post_apply_checks(cwd: &str, files: &[String]) -> Value {
                 "marker": marker,
             }));
         }
-        if relative_file.ends_with(".json") {
-            if serde_json::from_str::<Value>(&content).is_err() {
-                let message = crate::json_error::json_parse_error(&content)
-                    .unwrap_or_else(|| "Unexpected token".to_string());
-                failures.push(json!({
-                    "file": relative_file,
-                    "reason": "invalid_json",
-                    "message": message,
-                }));
-            }
+        if relative_file.ends_with(".json") && serde_json::from_str::<Value>(&content).is_err() {
+            let message = crate::json_error::json_parse_error(&content)
+                .unwrap_or_else(|| "Unexpected token".to_string());
+            failures.push(json!({
+                "file": relative_file,
+                "reason": "invalid_json",
+                "message": message,
+            }));
         }
         if let Some(check) = check_framework_source_syntax(cwd, relative_file, &file) {
             if let Some(failure) = check.get("failure") {

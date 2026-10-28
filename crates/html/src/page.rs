@@ -14,13 +14,14 @@ use impeccable_core::checks::embedded_content::{
 use impeccable_core::checks::measures::{cream_from_class_list, is_cream_color};
 use impeccable_core::checks::rules::{
     check_flat_type_hierarchy_samples, flat_type_hierarchy_severity, is_card_like_from_props,
-    parse_font_weight, type_hierarchy_role, RuleHit,
-    TypeSample, TYPE_HIERARCHY_SELECTOR,
+    parse_font_weight, type_hierarchy_role, RuleHit, TypeSample, TYPE_HIERARCHY_SELECTOR,
 };
 use impeccable_core::checks::text_rules::{
     is_repeated_text_container, REPEATED_TEXT_CONTAINER_TAGS, REPEATED_TEXT_SKIP_SELECTOR,
 };
-use impeccable_core::constants::{overused_font_name, CSS_GENERIC_FONTS, OVERUSED_FONTS, SAFE_TAGS};
+use impeccable_core::constants::{
+    overused_font_name, CSS_GENERIC_FONTS, OVERUSED_FONTS, SAFE_TAGS,
+};
 use impeccable_core::js::{self, number_to_string, parse_float};
 use impeccable_core::js_ext_b::{slice_utf16_prefix, utf16_len};
 use once_cell::sync::Lazy;
@@ -81,7 +82,7 @@ pub fn check_static_page_typography(doc: &StaticDocument) -> Vec<RuleHit> {
 /// `content-visibility` entry, so a declared `content-visibility: hidden`
 /// never reaches the static computed style.
 fn is_rendered_type_element(el: &StaticElement<'_>) -> bool {
-    let mut current = Some(el.clone());
+    let mut current = Some(*el);
     while let Some(node) = current {
         if node.get_attribute("hidden").is_some() {
             return false;
@@ -151,7 +152,8 @@ static BOX_SHADOW_RE: Lazy<Regex> =
 /// draws none, so neither makes a card. The ASCII `\b` this replaces matched all of them,
 /// since `-` is a word boundary.
 static BORDER_CLASS_TOKEN_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^border(?:-[0-9]+|-px|-\[[0-9.]+(?:px|rem|em)\])?$").expect("BORDER_CLASS_TOKEN_RE")
+    Regex::new(r"^border(?:-[0-9]+|-px|-\[[0-9.]+(?:px|rem|em)\])?$")
+        .expect("BORDER_CLASS_TOKEN_RE")
 });
 
 fn class_draws_four_sided_border(cls: &str) -> bool {
@@ -248,7 +250,11 @@ fn controls_in<'a>(el: &StaticElement<'a>) -> Vec<(StaticElement<'a>, Control, S
     nodes
         .into_iter()
         .filter_map(|n| {
-            let kind = control_of(&n.tag_lower(), n.get_attribute("type"), n.get_attribute("role"))?;
+            let kind = control_of(
+                &n.tag_lower(),
+                n.get_attribute("type"),
+                n.get_attribute("role"),
+            )?;
             let name = n
                 .get_attribute("aria-label")
                 .or_else(|| n.get_attribute("title"))
@@ -303,12 +309,15 @@ fn frames_embedded_content(el: &StaticElement<'_>, outer: &StaticElement<'_>) ->
     }
     if el.tag_lower() == "figure" || el.query_selector("figcaption").is_some() {
         let total = visible_chars(&el.text_content());
-        let figure = el.query_selector_all("svg, canvas").into_iter().any(|figure| {
-            let caption = total.saturating_sub(visible_chars(&figure.text_content()));
-            caption > 0
-                && caption <= CAPTION_MAX_CHARS
-                && controls.iter().all(|(c, _, _)| figure.contains(c))
-        });
+        let figure = el
+            .query_selector_all("svg, canvas")
+            .into_iter()
+            .any(|figure| {
+                let caption = total.saturating_sub(visible_chars(&figure.text_content()));
+                caption > 0
+                    && caption <= CAPTION_MAX_CHARS
+                    && controls.iter().all(|(c, _, _)| figure.contains(c))
+            });
         if figure {
             return true;
         }
@@ -362,7 +371,11 @@ fn is_output_block(el: &StaticElement<'_>, outer: &StaticElement<'_>) -> bool {
         false
     };
     for (i, node) in nodes.iter().enumerate() {
-        let own = node.direct_text().chars().filter(|c| !c.is_whitespace()).count();
+        let own = node
+            .direct_text()
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .count();
         text[i] = own;
         run[i] = own;
         if own > 0 && mono_at(i) {
@@ -582,7 +595,10 @@ pub fn check_repeated_container_text_from_doc(doc: &StaticDocument) -> Vec<RuleH
                 } else {
                     WS_RE
                         .split(raw_cls)
-                        .filter(|s| !s.is_empty() && !impeccable_core::checks::text_rules::is_id_like_class(s))
+                        .filter(|s| {
+                            !s.is_empty()
+                                && !impeccable_core::checks::text_rules::is_id_like_class(s)
+                        })
                         .collect()
                 };
                 cls.sort_by(|a, b| a.encode_utf16().cmp(b.encode_utf16()));
@@ -669,10 +685,24 @@ mod tests {
 
     #[test]
     fn only_all_sided_width_utilities_draw_a_card_border() {
-        for cls in ["border", "card border-2", "md:border", "!border", "border-px", "rounded border-[3px]"] {
+        for cls in [
+            "border",
+            "card border-2",
+            "md:border",
+            "!border",
+            "border-px",
+            "rounded border-[3px]",
+        ] {
             assert!(class_draws_four_sided_border(cls), "{cls}");
         }
-        for cls in ["border-t", "border-b-[4px]", "border-x", "border-black", "border-dashed", "border-t-px"] {
+        for cls in [
+            "border-t",
+            "border-b-[4px]",
+            "border-x",
+            "border-black",
+            "border-dashed",
+            "border-t-px",
+        ] {
             assert!(!class_draws_four_sided_border(cls), "{cls}");
         }
     }

@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 fn hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File},
@@ -13,8 +13,8 @@ use std::{
     net::{Shutdown, TcpListener, TcpStream},
     path::{Component, Path, PathBuf},
     sync::{
-        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
     },
     thread::{self, JoinHandle},
     time::Duration,
@@ -331,7 +331,11 @@ fn encode_path(path: &str) -> String {
 #[derive(Clone, Default)]
 pub struct Connections(Arc<Mutex<(u64, BTreeMap<u64, TcpStream>)>>);
 impl Connections {
-    pub fn spawn(&self, mut stream: TcpStream, answer: impl FnOnce(&mut TcpStream) + Send + 'static) {
+    pub fn spawn(
+        &self,
+        mut stream: TcpStream,
+        answer: impl FnOnce(&mut TcpStream) + Send + 'static,
+    ) {
         let id = {
             let mut open = self.0.lock().unwrap_or_else(|e| e.into_inner());
             open.0 += 1;
@@ -345,7 +349,11 @@ impl Connections {
         thread::spawn(move || {
             answer(&mut stream);
             let _ = stream.shutdown(Shutdown::Write);
-            open.0.lock().unwrap_or_else(|e| e.into_inner()).1.remove(&id);
+            open.0
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .1
+                .remove(&id);
         });
     }
     pub fn close_all(&self) {
@@ -430,7 +438,11 @@ fn respond(
         Some(name) => ("200 OK", mime(name).unwrap(), snapshot.bytes(name).unwrap()),
         None => ("404 Not Found", "text/plain", b"Not found".as_slice()),
     };
-    let script_policy = if scripts { "script-src 'self' 'unsafe-inline'; worker-src 'none'; " } else { "" };
+    let script_policy = if scripts {
+        "script-src 'self' 'unsafe-inline'; worker-src 'none'; "
+    } else {
+        ""
+    };
     write!(
         stream,
         "HTTP/1.1 {status}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: private, max-age=3600, immutable\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; {script_policy}style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'\r\n\r\n",
@@ -455,6 +467,9 @@ mod connection_tests {
         while !open.0.lock().unwrap().1.is_empty() && std::time::Instant::now() < deadline {
             thread::sleep(Duration::from_millis(10));
         }
-        assert!(open.0.lock().unwrap().1.is_empty(), "a finished connection kept its socket handle");
+        assert!(
+            open.0.lock().unwrap().1.is_empty(),
+            "a finished connection kept its socket handle"
+        );
     }
 }

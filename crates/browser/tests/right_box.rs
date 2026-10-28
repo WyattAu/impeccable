@@ -74,7 +74,12 @@ fn findings(engine: &BrowserEngine, port: u16, fixture: &str, rule: &str) -> Vec
         .into_iter()
         .filter(|f| f.antipattern == rule)
         .map(|f| {
-            let selector = f.extras.get("selector").and_then(|s| s.as_str()).unwrap_or("").to_string();
+            let selector = f
+                .extras
+                .get("selector")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string();
             (f.snippet, selector)
         })
         .collect()
@@ -85,13 +90,17 @@ fn findings(engine: &BrowserEngine, port: u16, fixture: &str, rule: &str) -> Vec
 fn assert_cases(found: &[(String, String)], flag: &[&str], pass: &[&str], rule: &str) {
     for case in flag {
         assert!(
-            found.iter().any(|(snippet, sel)| sel.contains(case) || snippet.contains(case)),
+            found
+                .iter()
+                .any(|(snippet, sel)| sel.contains(case) || snippet.contains(case)),
             "{rule}: `{case}` should flag, got {found:?}"
         );
     }
     for case in pass {
         assert!(
-            !found.iter().any(|(snippet, sel)| sel.contains(case) || snippet.contains(case)),
+            !found
+                .iter()
+                .any(|(snippet, sel)| sel.contains(case) || snippet.contains(case)),
             "{rule}: `{case}` should pass, got {found:?}"
         );
     }
@@ -106,10 +115,22 @@ fn a_thin_stripe_is_read_against_the_far_corners() {
     assert_eq!(
         found,
         vec![
-            ("border-left: 2px + border-radius: 12px".to_string(), "div.card.flag-left-far-rounded".to_string()),
-            ("border-left: 2px + border-radius: 6px".to_string(), "div.card.flag-left-uneven-far".to_string()),
-            ("border-left: 4px".to_string(), "div.card.flag-left-wide-far-rounded".to_string()),
-            ("border-right: 2px + border-radius: 12px".to_string(), "div.card.flag-right-far-rounded".to_string()),
+            (
+                "border-left: 2px + border-radius: 12px".to_string(),
+                "div.card.flag-left-far-rounded".to_string()
+            ),
+            (
+                "border-left: 2px + border-radius: 6px".to_string(),
+                "div.card.flag-left-uneven-far".to_string()
+            ),
+            (
+                "border-left: 4px".to_string(),
+                "div.card.flag-left-wide-far-rounded".to_string()
+            ),
+            (
+                "border-right: 2px + border-radius: 12px".to_string(),
+                "div.card.flag-right-far-rounded".to_string()
+            ),
         ]
     );
 }
@@ -118,7 +139,12 @@ fn a_thin_stripe_is_read_against_the_far_corners() {
 fn a_clip_cuts_only_a_popover_layer_by_its_box() {
     let Some(engine) = engine() else { return };
     let port = serve();
-    let found = findings(&engine, port, "clipped-overflow-painted-box.html", "clipped-overflow-container");
+    let found = findings(
+        &engine,
+        port,
+        "clipped-overflow-painted-box.html",
+        "clipped-overflow-container",
+    );
     assert_cases(
         &found,
         &["flag-cuts-menu", "flag-cuts-tooltip"],
@@ -132,21 +158,36 @@ fn a_clip_cuts_only_a_popover_layer_by_its_box() {
 fn a_heading_is_measured_past_spacer_wrappers_and_not_past_main() {
     let Some(engine) = engine() else { return };
     let port = serve();
-    let found = findings(&engine, port, "heading-rhythm-spacers.html", "heading-rhythm");
+    let found = findings(
+        &engine,
+        port,
+        "heading-rhythm-spacers.html",
+        "heading-rhythm",
+    );
     assert_cases(
         &found,
         &["flag-crowded-one", "flag-crowded-two"],
         &["pass-under-wrapped-spacer", "pass-ends-main"],
         "heading-rhythm",
     );
-    assert!(found.iter().all(|(snippet, _)| snippet.contains("8px above vs 40px below")), "{found:?}");
+    assert!(
+        found
+            .iter()
+            .all(|(snippet, _)| snippet.contains("8px above vs 40px below")),
+        "{found:?}"
+    );
 }
 
 #[test]
 fn a_truncated_line_and_a_running_track_meet_no_viewport_edge() {
     let Some(engine) = engine() else { return };
     let port = serve();
-    let found = findings(&engine, port, "body-text-viewport-edge-truncated.html", "body-text-viewport-edge");
+    let found = findings(
+        &engine,
+        port,
+        "body-text-viewport-edge-truncated.html",
+        "body-text-viewport-edge",
+    );
     let (page, element): (Vec<_>, Vec<_>) = found.into_iter().partition(|(_, sel)| sel == "body");
     assert_cases(
         &element,
@@ -154,18 +195,31 @@ fn a_truncated_line_and_a_running_track_meet_no_viewport_edge() {
         &["pass-truncated-line", "pass-on-running-track"],
         "body-text-viewport-edge",
     );
-    assert!(element.iter().any(|(snippet, _)| snippet.contains("(right 7px)")), "{element:?}");
+    assert!(
+        element
+            .iter()
+            .any(|(snippet, _)| snippet.contains("(right 7px)")),
+        "{element:?}"
+    );
     // The unclipped line is the page's one overflow finding, and it counts
     // one block: the truncated line beside it is not past the page.
     assert_eq!(page.len(), 1, "{page:?}");
-    assert!(page[0].0.contains("flag-unclipped-line") && page[0].0.contains("text in 1 block"), "{page:?}");
+    assert!(
+        page[0].0.contains("flag-unclipped-line") && page[0].0.contains("text in 1 block"),
+        "{page:?}"
+    );
 }
 
 #[test]
 fn text_buried_under_the_answering_layer_is_not_overlapped() {
     let Some(engine) = engine() else { return };
     let port = serve();
-    let found = findings(&engine, port, "text-occlusion-buried.html", "text-occlusion");
+    let found = findings(
+        &engine,
+        port,
+        "text-occlusion-buried.html",
+        "text-occlusion",
+    );
     assert_cases(
         &found,
         &["flag-under-headline"],
@@ -178,17 +232,37 @@ fn text_buried_under_the_answering_layer_is_not_overlapped() {
 fn table_cells_are_not_cards() {
     let Some(engine) = engine() else { return };
     let port = serve();
-    let found = findings(&engine, port, "edge-flush-cards-table.html", "edge-flush-cards");
-    assert_cases(&found, &["flag-card-rail"], &["pass-data-table", "table", "pass-inset-rail"], "edge-flush-cards");
+    let found = findings(
+        &engine,
+        port,
+        "edge-flush-cards-table.html",
+        "edge-flush-cards",
+    );
+    assert_cases(
+        &found,
+        &["flag-card-rail"],
+        &["pass-data-table", "table", "pass-inset-rail"],
+        "edge-flush-cards",
+    );
 }
 
 #[test]
 fn slides_of_one_carousel_repeat_nothing() {
     let Some(engine) = engine() else { return };
     let port = serve();
-    let found = findings(&engine, port, "repeated-container-text-carousel.html", "repeated-container-text");
+    let found = findings(
+        &engine,
+        port,
+        "repeated-container-text-carousel.html",
+        "repeated-container-text",
+    );
     assert_eq!(found.len(), 1, "{found:?}");
-    assert!(found[0].0.starts_with("\"Servidor VPS\" rendered 3× in distinct spots"), "{found:?}");
+    assert!(
+        found[0]
+            .0
+            .starts_with("\"Servidor VPS\" rendered 3× in distinct spots"),
+        "{found:?}"
+    );
 }
 
 #[test]
@@ -203,7 +277,12 @@ fn stacked_blocks_are_not_columns() {
     );
     assert!(stacked.is_empty(), "{stacked:?}");
     // The side-by-side twin still reports.
-    let columns = findings(&engine, port, "first-viewport-column-overflow.html", "first-viewport-column-overflow");
+    let columns = findings(
+        &engine,
+        port,
+        "first-viewport-column-overflow.html",
+        "first-viewport-column-overflow",
+    );
     assert!(!columns.is_empty());
 }
 
@@ -224,11 +303,26 @@ fn a_composite_control_is_not_a_nested_card() {
 fn focusable_regions_and_code_runs_are_not_undersized_controls() {
     let Some(engine) = engine() else { return };
     let port = serve();
-    let found = findings(&engine, port, "undersized-ui-text-focus-and-code.html", "undersized-ui-text");
+    let found = findings(
+        &engine,
+        port,
+        "undersized-ui-text-focus-and-code.html",
+        "undersized-ui-text",
+    );
     assert_cases(
         &found,
-        &["flag-focusable-control", "flag-mono-price", "flag-mono-count"],
-        &["pass-json-key", "pass-json-pair", "pass-json-string", "pass-json-close", "pass-footer-skip-target"],
+        &[
+            "flag-focusable-control",
+            "flag-mono-price",
+            "flag-mono-count",
+        ],
+        &[
+            "pass-json-key",
+            "pass-json-pair",
+            "pass-json-string",
+            "pass-json-close",
+            "pass-footer-skip-target",
+        ],
         "undersized-ui-text",
     );
 }

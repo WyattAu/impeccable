@@ -61,13 +61,22 @@ pub enum Claim {
 }
 
 fn non_empty_str<'a>(event: &'a Map<String, Value>, keys: &[&str]) -> Option<&'a str> {
-    keys.iter().find_map(|k| event.get(*k).and_then(Value::as_str).filter(|s| !s.is_empty()))
+    keys.iter().find_map(|k| {
+        event
+            .get(*k)
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+    })
 }
 
 /// The claim key for an event, or `None` when the payload names no tool call.
 /// The project root and the scan targets are part of it, so two projects (or
 /// two test fixtures) that happen to reuse an id never collide.
-pub fn event_key(event: &Map<String, Value>, project_cwd: &str, files: &[String]) -> Option<String> {
+pub fn event_key(
+    event: &Map<String, Value>,
+    project_cwd: &str,
+    files: &[String],
+) -> Option<String> {
     let call = non_empty_str(event, TOOL_CALL_ID_KEYS)?;
     let session = non_empty_str(event, SESSION_KEYS).unwrap_or("");
     let mut files: Vec<&str> = files.iter().map(String::as_str).collect();
@@ -98,19 +107,31 @@ pub(crate) fn user_dir(rt: &Runtime, override_env: &str, name: &str) -> Option<P
     if let Some(dir) = rt.env(override_env).filter(|s| !s.is_empty()) {
         return Some(PathBuf::from(dir));
     }
-    let order: [&str; 2] = if cfg!(windows) { ["USERPROFILE", "HOME"] } else { ["HOME", "USERPROFILE"] };
-    let home = order.iter().find_map(|k| rt.env(k).filter(|s| !s.is_empty()))?;
+    let order: [&str; 2] = if cfg!(windows) {
+        ["USERPROFILE", "HOME"]
+    } else {
+        ["HOME", "USERPROFILE"]
+    };
+    let home = order
+        .iter()
+        .find_map(|k| rt.env(k).filter(|s| !s.is_empty()))?;
     Some(Path::new(home).join(".impeccable").join(name))
 }
 
 /// Lowercase hex SHA-256 of `s`: a 64-character name that is safe on every
 /// file system.
 pub(crate) fn sha256_hex(s: &str) -> String {
-    Sha256::digest(s.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
+    Sha256::digest(s.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 fn now_bucket() -> Option<u64> {
-    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs();
     Some(secs / BUCKET_SECONDS)
 }
 
@@ -209,20 +230,28 @@ pub(crate) fn is_claim_name(name: &str) -> bool {
 /// Only safe `<digits>` dirs are touched, and in them only `<64 hex>` regular
 /// files; a bucket holding anything else is left in place.
 fn sweep_old_buckets(root: &Path, bucket: u64) {
-    let Ok(entries) = std::fs::read_dir(root) else { return };
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return;
+    };
     for entry in entries.flatten() {
         let name = entry.file_name();
-        let Some(name) = name.to_str().filter(|n| is_bucket_name(n)) else { continue };
+        let Some(name) = name.to_str().filter(|n| is_bucket_name(n)) else {
+            continue;
+        };
         let Ok(n) = name.parse::<u64>() else { continue };
         if n + 1 >= bucket {
             continue;
         }
         let dir = entry.path();
-        let Ok(meta) = std::fs::symlink_metadata(&dir) else { continue };
+        let Ok(meta) = std::fs::symlink_metadata(&dir) else {
+            continue;
+        };
         if !is_safe_dir(&meta) {
             continue;
         }
-        let Ok(claims) = std::fs::read_dir(&dir) else { continue };
+        let Ok(claims) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for claim in claims.flatten() {
             let ok_name = claim.file_name().to_str().is_some_and(is_claim_name);
             let is_file = claim.file_type().is_ok_and(|t| t.is_file());
@@ -236,8 +265,11 @@ fn sweep_old_buckets(root: &Path, bucket: u64) {
 
 /// True when `dir/key` exists as a claim file in a safe bucket.
 fn holds_claim(dir: &Path, key: &str) -> bool {
-    let Ok(meta) = std::fs::symlink_metadata(dir) else { return false };
-    is_safe_dir(&meta) && std::fs::symlink_metadata(dir.join(key)).is_ok_and(|m| m.file_type().is_file())
+    let Ok(meta) = std::fs::symlink_metadata(dir) else {
+        return false;
+    };
+    is_safe_dir(&meta)
+        && std::fs::symlink_metadata(dir.join(key)).is_ok_and(|m| m.file_type().is_file())
 }
 
 /// Claims `key` for this invocation. `Duplicate` only when another
@@ -247,18 +279,28 @@ pub fn claim_key(rt: &Runtime, key: &str) -> Claim {
     if !is_claim_name(key) {
         return Claim::Scan;
     }
-    let Some(bucket) = now_bucket() else { return Claim::Scan };
-    let Some(root) = safe_root(rt) else { return Claim::Scan };
+    let Some(bucket) = now_bucket() else {
+        return Claim::Scan;
+    };
+    let Some(root) = safe_root(rt) else {
+        return Claim::Scan;
+    };
     if bucket > 0 && holds_claim(&root.join((bucket - 1).to_string()), key) {
         return Claim::Duplicate;
     }
     let dir = root.join(bucket.to_string());
-    let Some(created) = ensure_safe_dir(&dir) else { return Claim::Scan };
+    let Some(created) = ensure_safe_dir(&dir) else {
+        return Claim::Scan;
+    };
     if created {
         sweep_old_buckets(&root, bucket);
     }
     // `create_new` is O_CREAT|O_EXCL: it never follows a symlink at the path.
-    match std::fs::OpenOptions::new().write(true).create_new(true).open(dir.join(key)) {
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(dir.join(key))
+    {
         Ok(_) => Claim::Scan,
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Claim::Duplicate,
         Err(_) => Claim::Scan,
@@ -266,7 +308,12 @@ pub fn claim_key(rt: &Runtime, key: &str) -> Claim {
 }
 
 /// Claims the event this invocation is about to scan.
-pub fn claim_event(rt: &Runtime, event: &Map<String, Value>, project_cwd: &str, files: &[String]) -> Claim {
+pub fn claim_event(
+    rt: &Runtime,
+    event: &Map<String, Value>,
+    project_cwd: &str,
+    files: &[String],
+) -> Claim {
     match event_key(event, project_cwd, files) {
         Some(key) => claim_key(rt, &key),
         None => Claim::Scan,

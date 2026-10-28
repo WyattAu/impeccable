@@ -71,7 +71,9 @@ fn fixture_flags_crowded_headings_and_passes_the_misread_shapes() {
     let engine = BrowserEngine::new(env);
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/heading-rhythm.html");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     let snippets: Vec<&str> = findings
         .iter()
         .filter(|f| f.antipattern == "heading-rhythm")
@@ -135,7 +137,9 @@ fn fixture_flags_crowded_headings_and_passes_the_misread_shapes() {
         .find(|s| s.contains("\"Flag Link Closing Block\" has "))
         .expect("the link closing the block flags");
     assert!(
-        ["15px", "16px"].iter().any(|px| link.contains(&format!("has {px} above vs 40px below"))),
+        ["15px", "16px"]
+            .iter()
+            .any(|px| link.contains(&format!("has {px} above vs 40px below"))),
         "{link}"
     );
     let stray: Vec<&&str> = snippets.iter().filter(|s| s.contains("\"Pass ")).collect();

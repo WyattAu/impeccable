@@ -11,20 +11,19 @@ use impeccable_core::checks::row_stripe::scan_css_text_for_row_stripe;
 use impeccable_core::checks::rules::DeclaredCorners;
 use impeccable_core::findings::{finding, Finding};
 use impeccable_core::inline_ignores::apply_inline_ignores;
-use impeccable_core::js::{self, ci, number_to_string, string_to_number};
+use impeccable_core::js::{self, number_to_string, string_to_number};
 use impeccable_core::page::is_full_page;
 use impeccable_core::rule_pack::RulePack;
 
 use crate::design_system::{check_source_design_system, DesignSystem};
 use crate::profiler::{profile_findings, profile_step, DetectorProfile, ProfileMeta};
 use crate::regex_matchers::{
-    analyzer_rule_id, is_neutral_authored_color, sass_sheet_corners,
-    is_stripe_child_match, side_tab_known_square_in_sheet, side_tab_markup_known_square,
-    side_tab_rounded_in_scope, style_index_text,
-    ElementSource, MatchCtx, Scope, SourceText,
-    REGEX_ANALYZERS, REGEX_MATCHERS, TEXT_CONTENT_ANALYZER_IDS,
+    analyzer_rule_id, is_neutral_authored_color, is_stripe_child_match, sass_sheet_corners,
+    side_tab_known_square_in_sheet, side_tab_markup_known_square, side_tab_rounded_in_scope,
+    style_index_text, ElementSource, MatchCtx, Scope, SourceText, REGEX_ANALYZERS, REGEX_MATCHERS,
+    TEXT_CONTENT_ANALYZER_IDS,
 };
-use crate::util::{line_of_offset, re, ANY, B, D, W, WS, WS_CHARS};
+use crate::util::{line_of_offset, re};
 
 /// Options for `detect_text` (the JS `options` object).
 #[derive(Default)]
@@ -575,9 +574,7 @@ pub fn strip_js_comments(content: &str, jsx: bool) -> String {
             template_expression_depths[depth_index] =
                 template_expression_depths[depth_index].saturating_sub(1);
             last_closed_brace_kind = brace_kinds.pop().unwrap_or("");
-            if jsx_expression_depth > 0 {
-                jsx_expression_depth -= 1;
-            }
+            jsx_expression_depth = jsx_expression_depth.saturating_sub(1);
             sig.record(ch);
             if template_expression_depths[depth_index] == 0 {
                 template_expression_depths.pop();
@@ -667,18 +664,25 @@ fn mask_js_literals(content: &str, jsx: bool) -> String {
             // code strings, regexes, or nested JSX and need the code scanner.
             while p < tag.end {
                 match self.chars[p] {
-                    '\'' | '"' => p = find_quoted_string_end(self.chars, p, self.chars[p])
-                        .map(|end| end + 1).unwrap_or(tag.end),
+                    '\'' | '"' => {
+                        p = find_quoted_string_end(self.chars, p, self.chars[p])
+                            .map(|end| end + 1)
+                            .unwrap_or(tag.end)
+                    }
                     '{' => p = self.code(p + 1, true),
                     _ => p += 1,
                 }
             }
             p = tag.end + 1;
-            if tag.self_closing || tag.closing { return p; }
+            if tag.self_closing || tag.closing {
+                return p;
+            }
             while p < self.chars.len() {
                 if self.chars[p] == '<' {
                     if let Some(child) = parse_jsx_tag(self.chars, p) {
-                        if child.closing && child.name == tag.name { return child.end + 1; }
+                        if child.closing && child.name == tag.name {
+                            return child.end + 1;
+                        }
                         p = self.element(p, child);
                         continue;
                     }
@@ -701,11 +705,15 @@ fn mask_js_literals(content: &str, jsx: bool) -> String {
                 let next = self.chars.get(p + 1).copied();
                 if ch == '/' && matches!(next, Some('/') | Some('*')) {
                     let end = if next == Some('/') {
-                        self.chars[p..].iter().position(|c| *c == '\n')
-                            .map(|end| p + end).unwrap_or(self.chars.len())
+                        self.chars[p..]
+                            .iter()
+                            .position(|c| *c == '\n')
+                            .map(|end| p + end)
+                            .unwrap_or(self.chars.len())
                     } else {
                         find_sub(self.chars, p + 2, &['*', '/'])
-                            .map(|end| end + 2).unwrap_or(self.chars.len())
+                            .map(|end| end + 2)
+                            .unwrap_or(self.chars.len())
                     };
                     self.hide(p, end);
                     p = end;
@@ -713,7 +721,8 @@ fn mask_js_literals(content: &str, jsx: bool) -> String {
                 }
                 if matches!(ch, '\'' | '"') {
                     let end = find_quoted_string_end(self.chars, p, ch)
-                        .map(|end| end + 1).unwrap_or(self.chars.len());
+                        .map(|end| end + 1)
+                        .unwrap_or(self.chars.len());
                     self.hide(p, end);
                     p = end;
                     sig.record(')');
@@ -742,10 +751,15 @@ fn mask_js_literals(content: &str, jsx: bool) -> String {
                 if ch == '{' {
                     braces.push(sig.brace_kind(false, true));
                 } else if ch == '}' {
-                    if expression && braces.is_empty() { return p + 1; }
+                    if expression && braces.is_empty() {
+                        return p + 1;
+                    }
                     last_brace = braces.pop().unwrap_or("");
                 } else if ch == '(' {
-                    parens.push(matches!(sig.current_word.as_str(), "if" | "while" | "for" | "with" | "switch" | "catch"));
+                    parens.push(matches!(
+                        sig.current_word.as_str(),
+                        "if" | "while" | "for" | "with" | "switch" | "catch"
+                    ));
                 } else if ch == ')' && parens.pop() == Some(true) {
                     // A control condition is followed by a statement, where
                     // `/.../` is a regex, unlike division after a function call.
@@ -760,12 +774,16 @@ fn mask_js_literals(content: &str, jsx: bool) -> String {
         }
     }
     let chars: Vec<char> = content.chars().collect();
-    let mut mask = Mask { chars: &chars, hidden: vec![false; chars.len()], jsx };
+    let mut mask = Mask {
+        chars: &chars,
+        hidden: vec![false; chars.len()],
+        jsx,
+    };
     mask.code(0, false);
     let mut out = String::with_capacity(content.len());
     for (ch, hidden) in chars.iter().zip(mask.hidden) {
         if hidden && !matches!(ch, '\n' | '\r') {
-            out.extend(std::iter::repeat(' ').take(ch.len_utf8()));
+            out.extend(std::iter::repeat_n(' ', ch.len_utf8()));
         } else {
             out.push(*ch);
         }
@@ -850,10 +868,17 @@ fn blank_html_and_css_comments_outside_scripts(text: &str) -> String {
 }
 
 fn is_js_ws(c: char) -> bool {
-    matches!(c,
-        '\t' | '\n' | '\x0B' | '\x0C' | '\r' | ' ' | '\u{A0}' | '\u{1680}'
-        | '\u{2000}'..='\u{200A}' | '\u{2028}' | '\u{2029}' | '\u{202F}'
-        | '\u{205F}' | '\u{3000}' | '\u{FEFF}')
+    matches!(
+        c,
+        '\t' | '\n' | '\x0B' | '\x0C' | '\r' | ' ' | '\u{A0}' | '\u{1680}' | '\u{2000}'
+            ..='\u{200A}'
+                | '\u{2028}'
+                | '\u{2029}'
+                | '\u{202F}'
+                | '\u{205F}'
+                | '\u{3000}'
+                | '\u{FEFF}'
+    )
 }
 
 /// JS `blankCssLineComments`: a small state machine that blanks `//` line
@@ -1488,7 +1513,9 @@ impl<'a> FileSheet<'a> {
         self.style_sources.get_or_init(|| {
             let mut text = String::new();
             for block in extract_style_blocks(self.content, &self.ext) {
-                text.push_str(&blank_css_line_comments(&strip_css_comments(&block.content)));
+                text.push_str(&blank_css_line_comments(&strip_css_comments(
+                    &block.content,
+                )));
                 text.push('\n');
             }
             for block in extract_css_in_js(self.source, &self.ext) {
@@ -1533,7 +1560,7 @@ impl<'a> FileSheet<'a> {
                         if ch == '\n' {
                             out.push('\n');
                         } else {
-                            out.extend(std::iter::repeat(' ').take(ch.len_utf8()));
+                            out.extend(std::iter::repeat_n(' ', ch.len_utf8()));
                         }
                     }
                 };
@@ -1914,7 +1941,9 @@ pub fn run_regex_matchers(
             if image
                 && (phase != "source"
                     || !lines.iter().any(|l| {
-                        l.as_bytes().windows(4).any(|w| w.eq_ignore_ascii_case(b"<img"))
+                        l.as_bytes()
+                            .windows(4)
+                            .any(|w| w.eq_ignore_ascii_case(b"<img"))
                     }))
             {
                 return matches;
@@ -1926,7 +1955,10 @@ pub fn run_regex_matchers(
                         let joined = lines.join("\n");
                         // Masking keeps every byte offset and newline.
                         let text = if JS_SOURCE_EXTS.contains(&ext.as_str()) {
-                            mask_js_literals(&joined, matches!(ext.as_str(), ".js" | ".jsx" | ".tsx"))
+                            mask_js_literals(
+                                &joined,
+                                matches!(ext.as_str(), ".js" | ".jsx" | ".tsx"),
+                            )
                         } else {
                             joined
                         };
@@ -2111,19 +2143,29 @@ fn row_stripe_findings(
 /// does: the inset scan's names the same selectors and thickness, a side
 /// border's the same property and width.
 fn same_stripe(card: &str, row: &str) -> bool {
-    let Some((selector, detail)) = row.split_once(" — ") else { return false };
+    let Some((selector, detail)) = row.split_once(" — ") else {
+        return false;
+    };
     let words: Vec<&str> = detail.split_whitespace().collect();
-    let Some(at) = words.iter().position(|w| w.ends_with("px")) else { return false };
+    let Some(at) = words.iter().position(|w| w.ends_with("px")) else {
+        return false;
+    };
     let (prop, px) = (words[..at].join(" "), words[at]);
     if prop == "inset box-shadow" {
-        let Some((card_selector, card_detail)) = card.split_once(" — ") else { return false };
+        let Some((card_selector, card_detail)) = card.split_once(" — ") else {
+            return false;
+        };
         let card_branches: Vec<&str> = card_selector.split(", ").collect();
         return card_detail.starts_with(&format!("inset box-shadow {px} "))
             && selector.split(", ").all(|b| card_branches.contains(&b));
     }
     // The border matcher's snippet is the declaration as written, spaced or not.
     card.split_once(':').is_some_and(|(p, v)| {
-        js::trim(p) == prop && js::trim_start(v).split(|c: char| c.is_whitespace() || c == ';' || c == '}').next() == Some(px)
+        js::trim(p) == prop
+            && js::trim_start(v)
+                .split(|c: char| c.is_whitespace() || c == ';' || c == '}')
+                .next()
+                == Some(px)
     })
 }
 
@@ -2302,10 +2344,11 @@ pub fn detect_text(content: &str, file_path: &str, options: &TextOptions) -> Vec
     }
     let cards = findings.len();
     for stripe in row_stripes {
-        if !findings[..cards]
-            .iter()
-            .any(|f| f.antipattern == "side-tab" && f.line == stripe.line && same_stripe(&f.snippet, &stripe.snippet))
-        {
+        if !findings[..cards].iter().any(|f| {
+            f.antipattern == "side-tab"
+                && f.line == stripe.line
+                && same_stripe(&f.snippet, &stripe.snippet)
+        }) {
             findings.push(stripe);
         }
     }
@@ -2509,7 +2552,8 @@ function Thumb({ url }: { url?: string }) {
 
     #[test]
     fn inset_stripe() {
-        let scan = |css: &str| scan_inset_stripe_css(css, "a.css", 0, &FileSheet::new(css, css, ".css"));
+        let scan =
+            |css: &str| scan_inset_stripe_css(css, "a.css", 0, &FileSheet::new(css, css, ".css"));
         let f = scan(".card {\n  box-shadow: inset 4px 0 0 #6366f1;\n  border-radius: 8px;\n}\n");
         assert_eq!(f.len(), 1);
         assert_eq!(f[0].snippet, ".card — inset box-shadow 4px stripe (left)");
@@ -2569,12 +2613,36 @@ function Thumb({ url }: { url?: string }) {
         let bar = "border-bottom: 3px solid #d0342c;";
         let include = format!(".card {{ @include border-radius(8px); {bar} }}\n");
         assert_eq!(at(&include, "/x/a.scss"), 0);
-        assert_eq!(at(&format!(".card\n  +border-radius(8px)\n  {bar}\n"), "/x/a.sass"), 0);
-        assert_eq!(accents(&format!(".card {{ @apply rounded-lg; {bar} }}\n")), 0);
-        assert_eq!(accents(&format!(".btn {{ --btn-border-radius: 6px; {bar} }}\n")), 0);
-        assert_eq!(at(&format!(".b {{ $card-radius: 8px; }} .b {{ {bar} }}\n"), "/x/a.scss"), 0);
-        assert_eq!(at(&format!(".b {{ @card-radius: 8px; {bar} }}\n"), "/x/a.less"), 0);
-        assert_eq!(accents(&format!(".card {{ {bar} border-top-left-radius: 8px; }}\n")), 1);
+        assert_eq!(
+            at(
+                &format!(".card\n  +border-radius(8px)\n  {bar}\n"),
+                "/x/a.sass"
+            ),
+            0
+        );
+        assert_eq!(
+            accents(&format!(".card {{ @apply rounded-lg; {bar} }}\n")),
+            0
+        );
+        assert_eq!(
+            accents(&format!(".btn {{ --btn-border-radius: 6px; {bar} }}\n")),
+            0
+        );
+        assert_eq!(
+            at(
+                &format!(".b {{ $card-radius: 8px; }} .b {{ {bar} }}\n"),
+                "/x/a.scss"
+            ),
+            0
+        );
+        assert_eq!(
+            at(&format!(".b {{ @card-radius: 8px; {bar} }}\n"), "/x/a.less"),
+            0
+        );
+        assert_eq!(
+            accents(&format!(".card {{ {bar} border-top-left-radius: 8px; }}\n")),
+            1
+        );
         let tab = format!(".tab-#{{$n}} {{ {bar} }}{gap}.tab-#{{$n}} {{ border-radius: 8px; }}\n");
         assert_eq!(at(&tab, "/x/a.scss"), 0);
         let styled = |body: &str| format!("const A = styled.div`\n  {body}\n`;\n");
@@ -2587,7 +2655,12 @@ function Thumb({ url }: { url?: string }) {
         assert_eq!(accents(&specific), 0);
         let tab = ".tab::after { border-top: 4px solid #d0342c; border-radius: 4px 4px 0 0; }";
         assert_eq!(accents(&format!("{tab}\n")), 1);
-        assert_eq!(accents(&format!("{accent}{gap}.card::after {{ border-radius: 8px; }}\n")), 0);
+        assert_eq!(
+            accents(&format!(
+                "{accent}{gap}.card::after {{ border-radius: 8px; }}\n"
+            )),
+            0
+        );
         let split = format!(
             ".tab::after {{ border-top: 4px solid #d0342c; }}{gap}.tab::after {{ border-radius: 8px; }}\n"
         );
@@ -2597,10 +2670,19 @@ function Thumb({ url }: { url?: string }) {
             format!("<template><div class=\"tabs\" /></template>\n<style>\n{rules}\n</style>\n")
         };
         assert_eq!(at(&vue(&format!("{tabs} {zoom}")), "/x/a.vue"), 0);
-        assert_eq!(at(&vue(&format!("{tabs} .tabs {{ border-radius: 12px; }}")), "/x/a.vue"), 1);
+        assert_eq!(
+            at(
+                &vue(&format!("{tabs} .tabs {{ border-radius: 12px; }}")),
+                "/x/a.vue"
+            ),
+            1
+        );
         // Indented Sass, in a file or a `lang="sass"` block, reads the
         // accent's own scope, however far the radius.
-        let far = format!(".card\n  {bar}\n{}  border-radius: 12px\n", "  color: red\n".repeat(5));
+        let far = format!(
+            ".card\n  {bar}\n{}  border-radius: 12px\n",
+            "  color: red\n".repeat(5)
+        );
         assert_eq!(at(&far, "/x/a.sass"), 1);
         let sass_vue = |rules: &str| {
             format!("<template><div /></template>\n<style lang=\"sass\">\n{rules}</style>\n")
@@ -2624,29 +2706,45 @@ function Thumb({ url }: { url?: string }) {
     /// colour read from the project's other sheets.
     #[test]
     fn status_row_stripe_is_a_side_tab_in_every_text_source() {
-        let side_tabs = |src: &str, path: &str, tokens: Option<&CustomProps>| -> Vec<(f64, String)> {
-            let options = TextOptions { tokens, ..TextOptions::default() };
-            detect_text(src, path, &options)
-                .into_iter()
-                .filter(|f| f.antipattern == "side-tab")
-                .map(|f| (f.line, f.snippet))
-                .collect()
-        };
-        let rule = "tr.is-broken > td:first-child { box-shadow: inset 3px 0 0 var(--pr-mark-danger); }";
+        let side_tabs =
+            |src: &str, path: &str, tokens: Option<&CustomProps>| -> Vec<(f64, String)> {
+                let options = TextOptions {
+                    tokens,
+                    ..TextOptions::default()
+                };
+                detect_text(src, path, &options)
+                    .into_iter()
+                    .filter(|f| f.antipattern == "side-tab")
+                    .map(|f| (f.line, f.snippet))
+                    .collect()
+            };
+        let rule =
+            "tr.is-broken > td:first-child { box-shadow: inset 3px 0 0 var(--pr-mark-danger); }";
         let svelte = format!("<table><tr class=\"is-broken\"><td>a</td></tr></table>\n\n<style>\n  .x {{ color: red; }}\n  {rule}\n</style>\n");
         let mut tokens = CustomProps::new();
         tokens.set("--pr-mark-danger", "oklch(63% .23 27)".to_string());
         let found = side_tabs(&svelte, "/x/AppsTable.svelte", Some(&tokens));
         assert_eq!(found.len(), 1, "{found:?}");
         assert_eq!(found[0].0, 5.0);
-        assert!(found[0].1.starts_with("tr.is-broken > td:first-child"), "{found:?}");
+        assert!(
+            found[0].1.starts_with("tr.is-broken > td:first-child"),
+            "{found:?}"
+        );
         // The token name says the colour even with no sheet in reach; a
         // neutral token says it is not one.
         assert_eq!(side_tabs(&svelte, "/x/AppsTable.svelte", None).len(), 1);
         let mut neutral = CustomProps::new();
         neutral.set("--pr-mark-danger", "#e5e7eb".to_string());
         assert!(side_tabs(&svelte, "/x/AppsTable.svelte", Some(&neutral)).is_empty());
-        assert_eq!(side_tabs(".cell {\n  box-shadow: inset 3px 0 0 red;\n}\n", "/x/a.css", None).len(), 1);
+        assert_eq!(
+            side_tabs(
+                ".cell {\n  box-shadow: inset 3px 0 0 red;\n}\n",
+                "/x/a.css",
+                None
+            )
+            .len(),
+            1
+        );
         let styled = "const Row = styled.tr`\n  &.is-new td:first-child { border-left: 3px solid #16a34a; }\n`;\n";
         assert_eq!(side_tabs(styled, "/x/a.tsx", None).len(), 1);
         // A rounded row card reports once, from the card scan.
@@ -2659,14 +2757,32 @@ function Thumb({ url }: { url?: string }) {
         assert_eq!(side_tabs(beside_card, "/x/a.css", None).len(), 2);
         let rounded_elsewhere = ".row-card.is-x { box-shadow: inset 4px 0 0 #d0342c; }\n.row-card { border-radius: 8px; }\n";
         assert_eq!(side_tabs(rounded_elsewhere, "/x/a.css", None).len(), 1);
-        let compact_rounded = ".row-card.is-x{border-left:3px solid #d0342c}.row-card{border-radius:8px}\n";
+        let compact_rounded =
+            ".row-card.is-x{border-left:3px solid #d0342c}.row-card{border-radius:8px}\n";
         assert_eq!(side_tabs(compact_rounded, "/x/a.css", None).len(), 1);
         let card_then_cell = ".card{border-left:3px solid red;border-radius:12px} td.is-error{border-left:3px solid blue}\n";
         assert_eq!(side_tabs(card_then_cell, "/x/a.css", None).len(), 2);
         // A line comment in a preprocessor sheet is not a rule.
         for path in ["/x/a.scss", "/x/a.less"] {
-            assert!(side_tabs("// td.is-error { box-shadow: inset 3px 0 0 red; }\n", path, None).is_empty(), "{path}");
-            assert_eq!(side_tabs("td.is-error { box-shadow: inset 3px 0 0 red; } // flagged\n", path, None).len(), 1, "{path}");
+            assert!(
+                side_tabs(
+                    "// td.is-error { box-shadow: inset 3px 0 0 red; }\n",
+                    path,
+                    None
+                )
+                .is_empty(),
+                "{path}"
+            );
+            assert_eq!(
+                side_tabs(
+                    "td.is-error { box-shadow: inset 3px 0 0 red; } // flagged\n",
+                    path,
+                    None
+                )
+                .len(),
+                1,
+                "{path}"
+            );
         }
         // Selection and hover stripes on a row stay silent.
         assert!(side_tabs("tr.is-selected td { box-shadow: inset 3px 0 0 #2563eb; }\ntr:hover td { box-shadow: inset 3px 0 0 #2563eb; }\n", "/x/a.css", None).is_empty());
@@ -2768,28 +2884,60 @@ export const Card = styled.div`\n  position: relative;\n  border-radius: 12px;\n
             out
         };
         let tag = "<div class=\"card border-l-4 border-teal-700 p-4\">x</div>";
-        let vue = |css: &str| format!("<template>\n  {tag}\n</template>\n<style scoped>\n{css}\n</style>\n");
+        let vue = |css: &str| {
+            format!("<template>\n  {tag}\n</template>\n<style scoped>\n{css}\n</style>\n")
+        };
         let flag = vec!["border-l-4".to_string()];
         let none = Vec::<String>::new();
         // The class the tag carries is rounded, in a compound or descendant
         // rule, or behind a value the reader cannot resolve.
-        assert_eq!(side_tabs(&vue(".card { border-radius: 12px; }"), "/x/a.vue"), flag);
-        assert_eq!(side_tabs(&vue(".list .card { border-radius: 12px; }"), "/x/a.vue"), flag);
-        assert_eq!(side_tabs(&vue(".card { border-radius: var(--r); }"), "/x/a.vue"), flag);
-        assert_eq!(side_tabs(&vue(".card { @apply rounded-lg; }"), "/x/a.vue"), flag);
+        assert_eq!(
+            side_tabs(&vue(".card { border-radius: 12px; }"), "/x/a.vue"),
+            flag
+        );
+        assert_eq!(
+            side_tabs(&vue(".list .card { border-radius: 12px; }"), "/x/a.vue"),
+            flag
+        );
+        assert_eq!(
+            side_tabs(&vue(".card { border-radius: var(--r); }"), "/x/a.vue"),
+            flag
+        );
+        assert_eq!(
+            side_tabs(&vue(".card { @apply rounded-lg; }"), "/x/a.vue"),
+            flag
+        );
         // A radius no rule for this tag declares, but unknown: fail safe.
-        assert_eq!(side_tabs(&vue(".other { border-radius: var(--r); }"), "/x/a.vue"), flag);
+        assert_eq!(
+            side_tabs(&vue(".other { border-radius: var(--r); }"), "/x/a.vue"),
+            flag
+        );
         // Known square: the tag's own class squares it, or every radius is
         // literal and names another class, a pseudo-element or another type.
-        assert_eq!(side_tabs(&vue(".card { border-radius: 0; }"), "/x/a.vue"), none);
+        assert_eq!(
+            side_tabs(&vue(".card { border-radius: 0; }"), "/x/a.vue"),
+            none
+        );
         assert_eq!(side_tabs(&vue(".other { border-radius: 12px; }\n.card::before { border-radius: 12px; }\nspan { border-radius: 12px; }"), "/x/a.vue"), none);
         let svelte = format!("{tag}\n<style>\n.card {{ border-radius: 12px; }}\n</style>\n");
         assert_eq!(side_tabs(&svelte, "/x/a.svelte"), flag);
         // No radius in the style text: the tag's own reading, as before.
         assert_eq!(side_tabs(&vue(".card { padding: 8px; }"), "/x/a.vue"), none);
-        assert_eq!(side_tabs(&format!("export const A = () => {tag};\n").replace("class=", "className="), "/x/a.tsx"), none);
+        assert_eq!(
+            side_tabs(
+                &format!("export const A = () => {tag};\n").replace("class=", "className="),
+                "/x/a.tsx"
+            ),
+            none
+        );
         // Radius utilities on the tag still round it.
-        assert_eq!(side_tabs(&vue(".card { border-radius: 0; }").replace("p-4", "rounded-lg p-4"), "/x/a.vue"), flag);
+        assert_eq!(
+            side_tabs(
+                &vue(".card { border-radius: 0; }").replace("p-4", "rounded-lg p-4"),
+                "/x/a.vue"
+            ),
+            flag
+        );
         // CSS-in-JS: a global rule for the class, and a styled component's own
         // template, which styles only that component.
         let tsx = "import styled, { createGlobalStyle } from 'styled-components';\n\
@@ -2798,7 +2946,10 @@ export const A = () => <div className=\"card border-l-4 p-4\">x</div>;\n";
         assert_eq!(side_tabs(tsx, "/x/global.tsx"), flag);
         let jsx = "export const A = () => (\n  <>\n    <div className=\"card border-l-4 p-4\">x</div>\n    <style jsx>{`\n      .card { border-radius: 12px; }\n    `}</style>\n  </>\n);\n";
         assert_eq!(side_tabs(jsx, "/x/styled-jsx.jsx"), flag);
-        assert_eq!(side_tabs(&jsx.replace("12px", "0"), "/x/styled-jsx.jsx"), none);
+        assert_eq!(
+            side_tabs(&jsx.replace("12px", "0"), "/x/styled-jsx.jsx"),
+            none
+        );
         let styled = "import styled from 'styled-components';\n\
 const Card = styled.div`\n  border-radius: 12px;\n`;\n\
 export const A = () => <Card className=\"border-l-4 p-4\">x</Card>;\n\
@@ -2833,8 +2984,17 @@ export const B = () => <div className=\"border-r-4 p-4\">x</div>;\n";
             assert_eq!(side_tabs(&src, "/x/a.jsx"), flag, "{import}");
         }
         // Without an import, or with a script import, the tag reads as before.
-        assert_eq!(side_tabs(&format!("export const A = () => {tag};\n"), "/x/a.jsx"), none);
-        assert_eq!(side_tabs(&format!("import {{ cn }} from './utils';\nexport const A = () => {tag};\n"), "/x/a.jsx"), none);
+        assert_eq!(
+            side_tabs(&format!("export const A = () => {tag};\n"), "/x/a.jsx"),
+            none
+        );
+        assert_eq!(
+            side_tabs(
+                &format!("import {{ cn }} from './utils';\nexport const A = () => {tag};\n"),
+                "/x/a.jsx"
+            ),
+            none
+        );
         // A tag that squares itself off.
         let square = "import './card.css';\n\
 export const A = () => <div className=\"card rounded-none border-l-4 p-4\">x</div>;\n\
@@ -2845,11 +3005,31 @@ export const C = () => <Box className=\"card\" sx={{ borderRadius: 0, borderLeft
         let one_corner = "import './card.css';\nexport const A = () => <div className=\"card border-l-4 p-4\" style={{ borderTopRightRadius: 0 }}>x</div>;\n";
         assert_eq!(side_tabs(one_corner, "/x/c.jsx"), flag);
         // Component files: an `@import` in the style block, and a `src` block.
-        let vue = |style: &str| format!("<template>\n  <div class=\"card border-l-4 p-4\" />\n</template>\n{style}\n");
-        assert_eq!(side_tabs(&vue("<style scoped>\n@import './card.css';\n</style>"), "/x/a.vue"), flag);
-        assert_eq!(side_tabs(&vue("<style scoped src=\"./card.css\"></style>"), "/x/a.vue"), flag);
+        let vue = |style: &str| {
+            format!("<template>\n  <div class=\"card border-l-4 p-4\" />\n</template>\n{style}\n")
+        };
+        assert_eq!(
+            side_tabs(
+                &vue("<style scoped>\n@import './card.css';\n</style>"),
+                "/x/a.vue"
+            ),
+            flag
+        );
+        assert_eq!(
+            side_tabs(
+                &vue("<style scoped src=\"./card.css\"></style>"),
+                "/x/a.vue"
+            ),
+            flag
+        );
         // A `sass:` module brings no CSS.
-        assert_eq!(side_tabs(&vue("<style lang=\"scss\" scoped>\n@use 'sass:math';\n</style>"), "/x/a.vue"), none);
+        assert_eq!(
+            side_tabs(
+                &vue("<style lang=\"scss\" scoped>\n@use 'sass:math';\n</style>"),
+                "/x/a.vue"
+            ),
+            none
+        );
     }
 
     /// A border accent reads the stylesheet the way the pseudo-element and
@@ -2882,9 +3062,15 @@ export const C = () => <Box className=\"card\" sx={{ borderRadius: 0, borderLeft
             ]
         );
         let scss = ".card {\n  border-radius: 12px;\n}\n.card {\n  &.is-active { border-left: 4px solid $primary; }\n}\n";
-        assert_eq!(side_tabs(scss, "/x/flat.scss"), vec!["border-left: 4px solid $primary".to_string()]);
+        assert_eq!(
+            side_tabs(scss, "/x/flat.scss"),
+            vec!["border-left: 4px solid $primary".to_string()]
+        );
         let vue = "<template><div class=\"card\" /></template>\n<style scoped>\n.card { border-radius: 12px; }\n.card.active { border-left: 4px solid #6366f1; }\n</style>\n";
-        assert_eq!(side_tabs(vue, "/x/flat.vue"), vec!["border-left: 4px solid #6366f1".to_string()]);
+        assert_eq!(
+            side_tabs(vue, "/x/flat.vue"),
+            vec!["border-left: 4px solid #6366f1".to_string()]
+        );
 
         // A radius the reader cannot resolve, and a radius on another class
         // the element may carry: both border and pseudo-element accents keep
@@ -2901,16 +3087,30 @@ export const C = () => <Box className=\"card\" sx={{ borderRadius: 0, borderLeft
             ]
         );
         // Indented Sass has no index; the whole file still answers.
-        let sass = ".card\n  border-radius: 12px\n.card.is-active\n  border-left: 4px solid #6366f1\n";
-        assert_eq!(side_tabs(sass, "/x/flat.sass"), vec!["border-left: 4px solid #6366f1".to_string()]);
+        let sass =
+            ".card\n  border-radius: 12px\n.card.is-active\n  border-left: 4px solid #6366f1\n";
+        assert_eq!(
+            side_tabs(sass, "/x/flat.sass"),
+            vec!["border-left: 4px solid #6366f1".to_string()]
+        );
         // Mixins, `@apply` and interpolations could bring a radius in unseen.
-        for source in [".x { @include card; }\n.a { border-left: 4px solid #6366f1; }\n", ".x { @apply rounded-lg; }\n.a { border-left: 4px solid #6366f1; }\n"] {
-            assert_eq!(side_tabs(source, "/x/mixin.scss"), vec!["border-left: 4px solid #6366f1".to_string()], "{source}");
+        for source in [
+            ".x { @include card; }\n.a { border-left: 4px solid #6366f1; }\n",
+            ".x { @apply rounded-lg; }\n.a { border-left: 4px solid #6366f1; }\n",
+        ] {
+            assert_eq!(
+                side_tabs(source, "/x/mixin.scss"),
+                vec!["border-left: 4px solid #6366f1".to_string()],
+                "{source}"
+            );
         }
         let tsx = "import styled from 'styled-components';\n\
 export const Card = styled.div`\n  border-radius: 12px;\n`;\n\
 export const Accent = styled(Card)`\n  border-left: 4px solid #6366f1;\n`;\n";
-        assert_eq!(side_tabs(tsx, "/x/extend.tsx"), vec!["border-left: 4px solid #6366f1".to_string()]);
+        assert_eq!(
+            side_tabs(tsx, "/x/extend.tsx"),
+            vec!["border-left: 4px solid #6366f1".to_string()]
+        );
 
         // Known square: no radius anywhere, literal square radii only, or the
         // card's own literal radius under the threshold.
@@ -2922,7 +3122,10 @@ export const Accent = styled(Card)`\n  border-left: 4px solid #6366f1;\n`;\n";
 .shadow { box-shadow: inset 9px 0 0 #6366f1; }\n";
         assert_eq!(side_tabs(square, "/x/square.css"), Vec::<String>::new());
         let square_sass = ".callout\n  padding: 8px\n  border-left: 4px solid #6366f1\n.zero\n  border-radius: 0\n  &.on\n    border-left: 5px solid #6366f1\n";
-        assert_eq!(side_tabs(square_sass, "/x/square.sass"), Vec::<String>::new());
+        assert_eq!(
+            side_tabs(square_sass, "/x/square.sass"),
+            Vec::<String>::new()
+        );
         let square_tsx = "import styled from 'styled-components';\n\
 export const A = styled.div`\n  padding: 16px;\n  border-left: 6px solid #6366f1;\n`;\n\
 export const B = styled.div`\n  position: relative;\n  border-radius: 0;\n  &::before { content: \"\"; position: absolute; left: 0; top: 0; bottom: 0; width: 7px; background: #6366f1; }\n`;\n";

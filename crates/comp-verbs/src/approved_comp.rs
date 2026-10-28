@@ -46,7 +46,11 @@ pub fn pixel_sha256(img: &Image) -> String {
 
 fn resolve(io: &Io, p: &str) -> PathBuf {
     let path = Path::new(p);
-    if path.is_absolute() { path.to_path_buf() } else { io.cwd.join(path) }
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        io.cwd.join(path)
+    }
 }
 
 pub fn same_file(io: &Io, a: &str, b: &str) -> bool {
@@ -75,7 +79,9 @@ pub fn file_pixel_sha256(io: &Io, comp: &str) -> Option<String> {
 
 fn load_record(io: &Io) -> Option<Value> {
     let raw = std::fs::read_to_string(resolve(io, RECORD_PATH)).ok()?;
-    serde_json::from_str::<Value>(&raw).ok().filter(|r| r["comp"].is_string() && r["pixelSha256"].is_string())
+    serde_json::from_str::<Value>(&raw)
+        .ok()
+        .filter(|r| r["comp"].is_string() && r["pixelSha256"].is_string())
 }
 
 /// The record for `comp`, when the engine kept one for that file.
@@ -87,12 +93,22 @@ fn record_for(io: &Io, comp: &str) -> Option<Value> {
 /// `Ok(None)` when the file cannot be read or decoded (nothing to keep);
 /// `Err` when the copy or record cannot be written, which approval refuses on.
 pub fn keep(io: &Io, comp: &str) -> Result<Option<Value>, String> {
-    let Ok(bytes) = std::fs::read(resolve(io, comp)) else { return Ok(None) };
-    let Some(pixels) = bytes_pixel_sha256(&bytes) else { return Ok(None) };
-    let ext = Path::new(comp).extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase)
-        .filter(|e| e.chars().all(|c| c.is_ascii_alphanumeric())).unwrap_or_else(|| "png".into());
+    let Ok(bytes) = std::fs::read(resolve(io, comp)) else {
+        return Ok(None);
+    };
+    let Some(pixels) = bytes_pixel_sha256(&bytes) else {
+        return Ok(None);
+    };
+    let ext = Path::new(comp)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase)
+        .filter(|e| e.chars().all(|c| c.is_ascii_alphanumeric()))
+        .unwrap_or_else(|| "png".into());
     let copy = format!("{BUILD_DIR}/{COPY_STEM}.{ext}");
-    let failed = |what: &str, e: std::io::Error| format!("cannot keep the approved comp: writing {what} failed ({e})");
+    let failed = |what: &str, e: std::io::Error| {
+        format!("cannot keep the approved comp: writing {what} failed ({e})")
+    };
     std::fs::create_dir_all(resolve(io, BUILD_DIR)).map_err(|e| failed(BUILD_DIR, e))?;
     std::fs::write(resolve(io, &copy), &bytes).map_err(|e| failed(&copy, e))?;
     let record = json!({
@@ -102,7 +118,8 @@ pub fn keep(io: &Io, comp: &str) -> Result<Option<Value>, String> {
         "copy": copy,
         "at": crate::util::iso_now(),
     });
-    std::fs::write(resolve(io, RECORD_PATH), crate::util::json_pretty(&record)).map_err(|e| failed(RECORD_PATH, e))?;
+    std::fs::write(resolve(io, RECORD_PATH), crate::util::json_pretty(&record))
+        .map_err(|e| failed(RECORD_PATH, e))?;
     Ok(Some(record))
 }
 
@@ -114,7 +131,8 @@ pub fn forget(io: &Io) {
 /// Whether the kept copy still decodes to the recorded hash.
 fn copy_intact(io: &Io, record: &Value) -> Option<String> {
     let copy = record["copy"].as_str()?;
-    (file_pixel_sha256(io, copy).as_deref() == record["pixelSha256"].as_str()).then(|| copy.to_string())
+    (file_pixel_sha256(io, copy).as_deref() == record["pixelSha256"].as_str())
+        .then(|| copy.to_string())
 }
 
 const FIXED: &str = "The approved comp is the fixed reference every gate measures against; never edit it, composite into it, or regenerate it.";
@@ -126,9 +144,18 @@ fn remedy(io: &Io, record: Option<&Value>, s: &str) -> String {
     }
 }
 
-fn changed_message(io: &Io, comp: &str, expected: &str, actual: Option<&str>, record: Option<&Value>, s: &str) -> String {
+fn changed_message(
+    io: &Io,
+    comp: &str,
+    expected: &str,
+    actual: Option<&str>,
+    record: Option<&Value>,
+    s: &str,
+) -> String {
     let found = match actual {
-        Some(actual) => format!("has changed since approval: expected pixel sha256 {expected}, found {actual}"),
+        Some(actual) => {
+            format!("has changed since approval: expected pixel sha256 {expected}, found {actual}")
+        }
         None => format!("is missing or not a decodable image: expected pixel sha256 {expected}"),
     };
     format!("the approved comp {comp} {found}. {FIXED} Nothing was measured against the changed file. {}", remedy(io, record, s))
@@ -141,7 +168,11 @@ fn changed_message(io: &Io, comp: &str, expected: &str, actual: Option<&str>, re
 /// [`issue`] for the spec read from `spec_path`: the build's own spec gets
 /// [`build_issue`], any other spec only the pixel check for the comp it names.
 pub fn issue_at(io: &Io, spec: &Value, spec_path: &str, s: &str) -> Option<String> {
-    if same_file(io, spec_path, SPEC_PATH) { build_issue(io, spec, s) } else { issue(io, spec, s) }
+    if same_file(io, spec_path, SPEC_PATH) {
+        build_issue(io, spec, s)
+    } else {
+        issue(io, spec, s)
+    }
 }
 
 /// [`issue`] for the build's own spec (`.impeccable/build/spec.json`): it must
@@ -160,7 +191,10 @@ pub fn build_issue(io: &Io, spec: &Value, s: &str) -> Option<String> {
     let why = issue(io, spec, s);
     // A build with no kept copy yet gets one here, from its own spec only and
     // only once the comp matches it; never from a spec at another path.
-    if why.is_none() && load_record(io).is_none() && spec.get("compSha256").and_then(Value::as_str).is_some() {
+    if why.is_none()
+        && load_record(io).is_none()
+        && spec.get("compSha256").and_then(Value::as_str).is_some()
+    {
         let _ = keep(io, comp);
     }
     why
@@ -170,13 +204,22 @@ pub fn issue(io: &Io, spec: &Value, s: &str) -> Option<String> {
     let comp = spec.get("comp").and_then(Value::as_str)?;
     let spec_hash = spec.get("compSha256").and_then(Value::as_str);
     let record = record_for(io, comp);
-    if record.is_none() && spec_hash.is_none() { return None; }
+    if record.is_none() && spec_hash.is_none() {
+        return None;
+    }
     let actual = file_pixel_sha256(io, comp);
     match record {
         Some(record) => {
             let expected = record["pixelSha256"].as_str().unwrap_or("");
             if actual.as_deref() != Some(expected) {
-                return Some(changed_message(io, comp, expected, actual.as_deref(), Some(&record), s));
+                return Some(changed_message(
+                    io,
+                    comp,
+                    expected,
+                    actual.as_deref(),
+                    Some(&record),
+                    s,
+                ));
             }
             match spec_hash {
                 Some(hash) if hash != expected => Some(format!(
@@ -188,7 +231,14 @@ pub fn issue(io: &Io, spec: &Value, s: &str) -> Option<String> {
         None => {
             let expected = spec_hash?;
             if actual.as_deref() != Some(expected) {
-                return Some(changed_message(io, comp, expected, actual.as_deref(), None, s));
+                return Some(changed_message(
+                    io,
+                    comp,
+                    expected,
+                    actual.as_deref(),
+                    None,
+                    s,
+                ));
             }
             None
         }
@@ -201,7 +251,8 @@ pub fn issue_for_comp(io: &Io, comp: &str, s: &str) -> Option<String> {
     let record = record_for(io, comp)?;
     let expected = record["pixelSha256"].as_str().unwrap_or("");
     let actual = file_pixel_sha256(io, comp);
-    (actual.as_deref() != Some(expected)).then(|| changed_message(io, comp, expected, actual.as_deref(), Some(&record), s))
+    (actual.as_deref() != Some(expected))
+        .then(|| changed_message(io, comp, expected, actual.as_deref(), Some(&record), s))
 }
 
 /// `comp-spec --regions` on the build's comp: refuse to re-measure a comp whose
@@ -210,15 +261,29 @@ pub fn issue_for_comp(io: &Io, comp: &str, s: &str) -> Option<String> {
 /// `previous` the spec it is about to replace: a build that predates the record
 /// is checked against that spec's `compSha256` before its pixels are kept. A
 /// comp no build state names (a mapping-only run) is not guarded.
-pub fn spec_refusal(io: &Io, comp: &str, actual: &str, previous: Option<&Value>, s: &str) -> Option<String> {
-    let state = std::fs::read_to_string(resolve(io, &format!("{BUILD_DIR}/state.json"))).ok()
+pub fn spec_refusal(
+    io: &Io,
+    comp: &str,
+    actual: &str,
+    previous: Option<&Value>,
+    s: &str,
+) -> Option<String> {
+    let state = std::fs::read_to_string(resolve(io, &format!("{BUILD_DIR}/state.json")))
+        .ok()
         .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())?;
-    if !state["comp"].as_str().is_some_and(|c| same_file(io, c, comp)) { return None; }
+    if !state["comp"]
+        .as_str()
+        .is_some_and(|c| same_file(io, c, comp))
+    {
+        return None;
+    }
     if let Some(record) = record_for(io, comp) {
         let expected = record["pixelSha256"].as_str().unwrap_or("");
-        return (actual != expected).then(|| changed_message(io, comp, expected, Some(actual), Some(&record), s));
+        return (actual != expected)
+            .then(|| changed_message(io, comp, expected, Some(actual), Some(&record), s));
     }
-    let measured = previous.filter(|p| p["comp"].as_str().is_some_and(|c| same_file(io, c, comp)))
+    let measured = previous
+        .filter(|p| p["comp"].as_str().is_some_and(|c| same_file(io, c, comp)))
         .and_then(|p| p["compSha256"].as_str());
     if let Some(expected) = measured.filter(|h| *h != actual) {
         return Some(changed_message(io, comp, expected, Some(actual), None, s));
@@ -258,19 +323,37 @@ pub fn restore(io: &Io) -> (String, i32) {
     let mut aside = None;
     if let Ok(edited) = std::fs::read(resolve(io, &comp)) {
         let tag = current.as_deref().map(|h| &h[..12]).unwrap_or("unreadable");
-        let ext = Path::new(&comp).extension().and_then(|e| e.to_str()).unwrap_or("png");
+        let ext = Path::new(&comp)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("png");
         let path = format!("{BUILD_DIR}/edited-comp-{tag}.{ext}");
         if std::fs::write(resolve(io, &path), edited).is_err() {
             return (format!("build-phase: restore-comp could not keep the edited file at {path}; nothing restored\n"), 1);
         }
         aside = Some(path);
     }
-    let bytes = match std::fs::read(resolve(io, &copy)) { Ok(b) => b, Err(e) => return (format!("build-phase: restore-comp cannot read {copy}: {e}\n"), 1) };
-    if let Some(parent) = resolve(io, &comp).parent() { let _ = std::fs::create_dir_all(parent); }
-    if let Err(e) = std::fs::write(resolve(io, &comp), bytes) {
-        return (format!("build-phase: restore-comp cannot write {comp}: {e}\n"), 1);
+    let bytes = match std::fs::read(resolve(io, &copy)) {
+        Ok(b) => b,
+        Err(e) => {
+            return (
+                format!("build-phase: restore-comp cannot read {copy}: {e}\n"),
+                1,
+            )
+        }
+    };
+    if let Some(parent) = resolve(io, &comp).parent() {
+        let _ = std::fs::create_dir_all(parent);
     }
-    let kept = aside.map(|p| format!(" The edited file is kept at {p} as evidence, not as a comp.")).unwrap_or_default();
+    if let Err(e) = std::fs::write(resolve(io, &comp), bytes) {
+        return (
+            format!("build-phase: restore-comp cannot write {comp}: {e}\n"),
+            1,
+        );
+    }
+    let kept = aside
+        .map(|p| format!(" The edited file is kept at {p} as evidence, not as a comp."))
+        .unwrap_or_default();
     (format!("RESTORED {comp} from {copy} (pixel sha256 {expected}).{kept} Re-run the step that refused; plates and page code built against the edited comp now have to match the approved one.\n"), 0)
 }
 
@@ -281,8 +364,11 @@ mod tests {
 
     fn ws() -> (Io, PathBuf) {
         static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-        let dir = std::env::temp_dir().join(format!("impeccable-approved-comp-{}-{}", std::process::id(),
-            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+        let dir = std::env::temp_dir().join(format!(
+            "impeccable-approved-comp-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join(".impeccable/mocks")).unwrap();
         let (io, _) = Io::captured("", dir.clone(), Default::default());
@@ -302,7 +388,11 @@ mod tests {
         let record = keep(&io, COMP).unwrap().unwrap();
         let spec = json!({"comp": COMP, "compSha256": record["pixelSha256"]});
         assert_eq!(issue(&io, &spec, "impeccable"), None);
-        let tagged = png_io::encode_png(&r::create_image(8, 8, [10, 20, 30, 255]), &[("prompt".into(), "x".into())]).unwrap();
+        let tagged = png_io::encode_png(
+            &r::create_image(8, 8, [10, 20, 30, 255]),
+            &[("prompt".into(), "x".into())],
+        )
+        .unwrap();
         std::fs::write(dir.join(COMP), tagged).unwrap();
         assert_eq!(issue(&io, &spec, "impeccable"), None);
     }
@@ -318,12 +408,20 @@ mod tests {
         let actual = file_pixel_sha256(&io, COMP).unwrap();
         let why = issue(&io, &spec, "impeccable").unwrap();
         assert!(why.contains(&expected) && why.contains(&actual), "{why}");
-        assert!(why.contains("never edit it, composite into it, or regenerate it"), "{why}");
+        assert!(
+            why.contains("never edit it, composite into it, or regenerate it"),
+            "{why}"
+        );
         assert!(why.contains("impeccable build-phase restore-comp"), "{why}");
         let (message, code) = restore(&io);
         assert_eq!(code, 0, "{message}");
         assert_eq!(file_pixel_sha256(&io, COMP).unwrap(), expected);
-        assert!(dir.join(format!(".impeccable/build/edited-comp-{}.png", &actual[..12])).exists());
+        assert!(dir
+            .join(format!(
+                ".impeccable/build/edited-comp-{}.png",
+                &actual[..12]
+            ))
+            .exists());
         assert_eq!(issue(&io, &spec, "impeccable"), None);
         assert_eq!(restore(&io).1, 0);
     }
@@ -335,7 +433,11 @@ mod tests {
         let record = keep(&io, COMP).unwrap().unwrap();
         let spec = json!({"comp": COMP, "compSha256": "0".repeat(64)});
         let why = issue(&io, &spec, "impeccable").unwrap();
-        assert!(why.contains("not the approved comp") && why.contains(record["pixelSha256"].as_str().unwrap()), "{why}");
+        assert!(
+            why.contains("not the approved comp")
+                && why.contains(record["pixelSha256"].as_str().unwrap()),
+            "{why}"
+        );
     }
 
     #[test]
@@ -345,9 +447,15 @@ mod tests {
         let hash = file_pixel_sha256(&io, COMP).unwrap();
         let spec = json!({"comp": COMP, "compSha256": hash});
         assert_eq!(issue(&io, &spec, "impeccable"), None);
-        assert!(!dir.join(RECORD_PATH).exists(), "a spec at another path never pins the reference");
+        assert!(
+            !dir.join(RECORD_PATH).exists(),
+            "a spec at another path never pins the reference"
+        );
         assert_eq!(build_issue(&io, &spec, "impeccable"), None);
-        assert!(dir.join(RECORD_PATH).exists() && dir.join(".impeccable/build/approved-comp.png").exists());
+        assert!(
+            dir.join(RECORD_PATH).exists()
+                && dir.join(".impeccable/build/approved-comp.png").exists()
+        );
         forget(&io);
         std::fs::write(dir.join(COMP), png([1, 2, 3, 255])).unwrap();
         let why = issue(&io, &spec, "impeccable").unwrap();
@@ -362,9 +470,16 @@ mod tests {
         let (io, dir) = ws();
         std::fs::write(dir.join(COMP), png([10, 20, 30, 255])).unwrap();
         keep(&io, COMP).unwrap().unwrap();
-        std::fs::write(dir.join(".impeccable/build/approved-comp.png"), png([9, 9, 9, 255])).unwrap();
+        std::fs::write(
+            dir.join(".impeccable/build/approved-comp.png"),
+            png([9, 9, 9, 255]),
+        )
+        .unwrap();
         std::fs::write(dir.join(COMP), png([200, 20, 30, 255])).unwrap();
         assert_eq!(restore(&io).1, 2);
-        assert_eq!(file_pixel_sha256(&io, COMP), Some(pixel_sha256(&r::create_image(8, 8, [200, 20, 30, 255]))));
+        assert_eq!(
+            file_pixel_sha256(&io, COMP),
+            Some(pixel_sha256(&r::create_image(8, 8, [200, 20, 30, 255])))
+        );
     }
 }

@@ -70,20 +70,29 @@ fn the_pixels_read_halos_and_near_opaque_glass() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/low-contrast-pixel-reads.html");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     let low: Vec<(&str, &str, &str)> = findings
         .iter()
         .filter(|f| f.antipattern == "low-contrast")
         .map(|f| {
             (
-                f.extras.get("selector").and_then(|v| v.as_str()).unwrap_or(""),
+                f.extras
+                    .get("selector")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(""),
                 f.severity.as_str(),
                 f.snippet.as_str(),
             )
         })
         .collect();
     eprintln!("{low:#?}");
-    let pixel = |id: &str| low.iter().any(|(s, sev, snip)| s.contains(id) && *sev != "advisory" && snip.starts_with("pixel contrast"));
+    let pixel = |id: &str| {
+        low.iter().any(|(s, sev, snip)| {
+            s.contains(id) && *sev != "advisory" && snip.starts_with("pixel contrast")
+        })
+    };
     assert!(pixel("flag-halo-copy-on-pale-photo"), "{low:#?}");
     // Over a photo half pale and half dark only the pixels can say; they
     // read about 4.1:1, and before they refused the box nothing reported.

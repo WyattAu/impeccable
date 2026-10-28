@@ -28,12 +28,20 @@ fn px(value: &str) -> Option<f64> {
 
 /// One property of an inline `style` attribute, by its hyphenated name.
 fn inline_declaration(el: &StaticElement<'_>, name: &str) -> String {
-    let Some(style) = el.get_attribute("style") else { return String::new() };
+    let Some(style) = el.get_attribute("style") else {
+        return String::new();
+    };
     style
         .split(';')
         .filter_map(|decl| decl.split_once(':'))
         .filter(|(prop, _)| prop.trim().eq_ignore_ascii_case(name))
-        .map(|(_, value)| value.trim().trim_end_matches("!important").trim().to_string())
+        .map(|(_, value)| {
+            value
+                .trim()
+                .trim_end_matches("!important")
+                .trim()
+                .to_string()
+        })
         .next_back()
         .unwrap_or_default()
 }

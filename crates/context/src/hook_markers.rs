@@ -63,7 +63,10 @@ fn normalize_hook_separators(command: &str) -> String {
 /// True when `command` invokes an Impeccable hook in either generation's spelling.
 pub fn is_impeccable_hook_command(command: &str) -> bool {
     let command = normalize_hook_separators(command);
-    LEGACY_HOOK_SCRIPT_MARKERS.iter().any(|m| command.contains(m)) || LAUNCHER_HOOK_MARKER.is_match(&command)
+    LEGACY_HOOK_SCRIPT_MARKERS
+        .iter()
+        .any(|m| command.contains(m))
+        || LAUNCHER_HOOK_MARKER.is_match(&command)
 }
 
 /// True when `command` invokes an Impeccable hook in the launcher generation
@@ -247,7 +250,9 @@ pub fn migrate_cursor_gate_in_place(manifest: &serde_json::Value) -> Option<serd
         _ => Vec::new(),
     };
     let has_post = post.iter().any(|e| {
-        e.get("command").and_then(Value::as_str).is_some_and(is_impeccable_hook_command)
+        e.get("command")
+            .and_then(Value::as_str)
+            .is_some_and(is_impeccable_hook_command)
     });
     if !has_post {
         post.push(serde_json::json!({
@@ -267,11 +272,19 @@ mod tests {
 
     #[test]
     fn recognizes_legacy_script_forms() {
-        assert!(is_impeccable_hook_command("node \"${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/hook.mjs\""));
+        assert!(is_impeccable_hook_command(
+            "node \"${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/hook.mjs\""
+        ));
         assert!(is_impeccable_hook_command("[ ! -f '/x/.cursor/skills/impeccable/scripts/hook-before-edit.mjs' ] || node '/x/.cursor/skills/impeccable/scripts/hook-before-edit.mjs'"));
-        assert!(is_impeccable_hook_command("node .agents/skills/impeccable/scripts/hook-probe.mjs"));
-        assert!(is_design_hook_command("node \".agents/skills/impeccable/scripts/hook.mjs\""));
-        assert!(!is_design_hook_command("node .agents/skills/impeccable/scripts/hook-probe.mjs"));
+        assert!(is_impeccable_hook_command(
+            "node .agents/skills/impeccable/scripts/hook-probe.mjs"
+        ));
+        assert!(is_design_hook_command(
+            "node \".agents/skills/impeccable/scripts/hook.mjs\""
+        ));
+        assert!(!is_design_hook_command(
+            "node .agents/skills/impeccable/scripts/hook-probe.mjs"
+        ));
     }
 
     #[test]
@@ -329,15 +342,24 @@ mod tests {
     #[test]
     fn extracts_program_token() {
         assert_eq!(
-            hook_program_token("node \"${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/hook.mjs\"").as_deref(),
+            hook_program_token(
+                "node \"${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/hook.mjs\""
+            )
+            .as_deref(),
             Some("${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/hook.mjs")
         );
         assert_eq!(
-            hook_program_token("\"${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/impeccable\" hook").as_deref(),
+            hook_program_token(
+                "\"${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/impeccable\" hook"
+            )
+            .as_deref(),
             Some("${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/impeccable")
         );
         assert_eq!(
-            hook_program_token("'/x/.cursor/skills/impeccable/scripts/impeccable' hook-before-edit").as_deref(),
+            hook_program_token(
+                "'/x/.cursor/skills/impeccable/scripts/impeccable' hook-before-edit"
+            )
+            .as_deref(),
             Some("/x/.cursor/skills/impeccable/scripts/impeccable")
         );
         assert_eq!(
@@ -345,10 +367,17 @@ mod tests {
             Some(".agents/skills/impeccable/scripts/impeccable")
         );
         assert_eq!(
-            hook_program_token(&windows_launcher_hook_command(r"C:\Users\a b\.agents\skills\impeccable\scripts\impeccable", "hook")).as_deref(),
+            hook_program_token(&windows_launcher_hook_command(
+                r"C:\Users\a b\.agents\skills\impeccable\scripts\impeccable",
+                "hook"
+            ))
+            .as_deref(),
             Some("C:/Users/a b/.agents/skills/impeccable/scripts/impeccable.cmd")
         );
-        assert_eq!(hook_program_token("'/x/it'\\''s/.claude/skills/impeccable/scripts/impeccable' hook"), None);
+        assert_eq!(
+            hook_program_token("'/x/it'\\''s/.claude/skills/impeccable/scripts/impeccable' hook"),
+            None
+        );
         assert_eq!(hook_program_token("echo hi"), None);
     }
 
@@ -362,14 +391,17 @@ mod tests {
         }});
         assert!(cursor_manifest_has_retired_gate(&gate));
         let next = migrate_cursor_gate_in_place(&gate).unwrap();
-        assert_eq!(next, serde_json::json!({"version": 1, "hooks": {
-            "preToolUse": [{"command": "./audit.sh", "matcher": "Shell"}],
-            "postToolUse": [{
-                "command": "[ ! -f '/x/.cursor/skills/impeccable/scripts/impeccable' ] || '/x/.cursor/skills/impeccable/scripts/impeccable' hook",
-                "matcher": "^Write$",
-                "timeout": 7,
-            }],
-        }}));
+        assert_eq!(
+            next,
+            serde_json::json!({"version": 1, "hooks": {
+                "preToolUse": [{"command": "./audit.sh", "matcher": "Shell"}],
+                "postToolUse": [{
+                    "command": "[ ! -f '/x/.cursor/skills/impeccable/scripts/impeccable' ] || '/x/.cursor/skills/impeccable/scripts/impeccable' hook",
+                    "matcher": "^Write$",
+                    "timeout": 7,
+                }],
+            }})
+        );
         assert!(!cursor_manifest_has_retired_gate(&next));
         assert_eq!(migrate_cursor_gate_in_place(&next), None);
         // The JS-era spelling has no launcher to keep; `hooks on` rewrites it.
@@ -439,20 +471,39 @@ pub fn strip_json_comments(text: &str) -> (String, bool) {
     while let Some(ch) = chars.next() {
         if in_string {
             out.push(ch);
-            if escaped { escaped = false } else if ch == '\\' { escaped = true } else if ch == '"' { in_string = false }
+            if escaped {
+                escaped = false
+            } else if ch == '\\' {
+                escaped = true
+            } else if ch == '"' {
+                in_string = false
+            }
             continue;
         }
         match (ch, chars.peek()) {
-            ('"', _) => { in_string = true; out.push(ch); }
+            ('"', _) => {
+                in_string = true;
+                out.push(ch);
+            }
             ('/', Some('/')) => {
                 stripped = true;
-                while let Some(&c) = chars.peek() { if c == '\n' { break } chars.next(); }
+                while let Some(&c) = chars.peek() {
+                    if c == '\n' {
+                        break;
+                    }
+                    chars.next();
+                }
             }
             ('/', Some('*')) => {
                 stripped = true;
                 chars.next();
                 let mut prev = '\0';
-                for c in chars.by_ref() { if prev == '*' && c == '/' { break } prev = c; }
+                for c in chars.by_ref() {
+                    if prev == '*' && c == '/' {
+                        break;
+                    }
+                    prev = c;
+                }
                 out.push(' ');
             }
             _ => out.push(ch),
@@ -465,7 +516,9 @@ pub fn strip_json_comments(text: &str) -> (String, bool) {
 /// even after the comments are removed.
 pub fn parse_manifest_jsonc(text: &str) -> Option<(serde_json::Value, bool)> {
     let (stripped, had_comments) = strip_json_comments(text);
-    serde_json::from_str(&stripped).ok().map(|v| (v, had_comments))
+    serde_json::from_str(&stripped)
+        .ok()
+        .map(|v| (v, had_comments))
 }
 
 #[cfg(test)]
@@ -474,12 +527,18 @@ mod jsonc_tests {
 
     #[test]
     fn strips_comments_outside_strings_only() {
-        let (v, had) = parse_manifest_jsonc("{\n // a\n \"u\": \"http://x//y\", /* b */ \"s\": \"/* no */\\\"//\"\n}").unwrap();
+        let (v, had) = parse_manifest_jsonc(
+            "{\n // a\n \"u\": \"http://x//y\", /* b */ \"s\": \"/* no */\\\"//\"\n}",
+        )
+        .unwrap();
         assert!(had);
         assert_eq!(v["u"], "http://x//y");
         assert_eq!(v["s"], "/* no */\"//");
-        assert_eq!(parse_manifest_jsonc("{\"a\": 1}").unwrap().1, false);
+        assert!(!parse_manifest_jsonc("{\"a\": 1}").unwrap().1);
         assert!(parse_manifest_jsonc("{ \"a\": ").is_none());
-        assert_eq!(crate::context_cli::hook_manifests_for("gemini"), &[".gemini/settings.json"]);
+        assert_eq!(
+            crate::context_cli::hook_manifests_for("gemini"),
+            &[".gemini/settings.json"]
+        );
     }
 }

@@ -13,7 +13,11 @@ fn crc32(data: &[u8]) -> u32 {
     for n in 0..256u32 {
         let mut c = n;
         for _ in 0..8 {
-            c = if c & 1 == 1 { 0xedb88320 ^ (c >> 1) } else { c >> 1 };
+            c = if c & 1 == 1 {
+                0xedb88320 ^ (c >> 1)
+            } else {
+                c >> 1
+            };
         }
         table[n as usize] = c;
     }
@@ -60,7 +64,8 @@ fn parse_png(b: &[u8]) -> (Vec<PngChunk>, Option<String>) {
         let data_end = (off + 8 + len).min(b.len());
         let data = &b[(off + 8).min(b.len())..data_end];
         let nul = data.iter().position(|x| *x == 0);
-        let prompt_chunk = (&ty == b"tEXt" || &ty == b"zTXt") && nul.map(|n| &data[..n] == KEYWORD).unwrap_or(false);
+        let prompt_chunk = (&ty == b"tEXt" || &ty == b"zTXt")
+            && nul.map(|n| &data[..n] == KEYWORD).unwrap_or(false);
         if prompt.is_none() && prompt_chunk {
             let n = nul.unwrap();
             prompt = if &ty == b"tEXt" {
@@ -76,7 +81,12 @@ fn parse_png(b: &[u8]) -> (Vec<PngChunk>, Option<String>) {
             };
         }
         let end = (off + 12 + len).min(b.len());
-        chunks.push(PngChunk { offset: off, ty, prompt_chunk, end });
+        chunks.push(PngChunk {
+            offset: off,
+            ty,
+            prompt_chunk,
+            end,
+        });
         off += 12 + len;
     }
     (chunks, prompt)
@@ -168,7 +178,9 @@ fn walk(p: &str, is_root: bool, rasters: &mut Vec<String>) -> Result<(), String>
         if !is_root && (base == "node_modules" || base.starts_with('.')) {
             return Ok(());
         }
-        let Some(entries) = read_dir_names(p) else { return Ok(()) };
+        let Some(entries) = read_dir_names(p) else {
+            return Ok(());
+        };
         for e in entries {
             walk(&format!("{}/{}", trimmed, e), false, rasters)?;
         }
@@ -180,7 +192,10 @@ fn walk(p: &str, is_root: bool, rasters: &mut Vec<String>) -> Result<(), String>
 
 fn is_raster(p: &str) -> bool {
     let lower = p.to_ascii_lowercase();
-    lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg") || lower.ends_with(".webp")
+    lower.ends_with(".png")
+        || lower.ends_with(".jpg")
+        || lower.ends_with(".jpeg")
+        || lower.ends_with(".webp")
 }
 
 pub fn run(args: &[String], io: &mut Io) -> i32 {
@@ -265,7 +280,10 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
                 Some(pf) if !pf.is_empty() => match std::fs::read(abs(&pf)) {
                     Ok(b) => Some(String::from_utf8_lossy(&b).into_owned()),
                     Err(e) => {
-                        io.err(&format!("Error: {}\n", crate::util::node_read_error(&pf, &e)));
+                        io.err(&format!(
+                            "Error: {}\n",
+                            crate::util::node_read_error(&pf, &e)
+                        ));
                         return 1;
                     }
                 },
@@ -282,7 +300,11 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             // chunks (not buf.indexOf('IEND')) and reuses parsePng's chunk list
             // and prompt to rebuild the body idempotently.
             let (chunks, existing) = parse_png(&buf);
-            let iend: i64 = chunks.iter().find(|c| &c.ty == b"IEND").map(|c| c.offset as i64).unwrap_or(-1);
+            let iend: i64 = chunks
+                .iter()
+                .find(|c| &c.ty == b"IEND")
+                .map(|c| c.offset as i64)
+                .unwrap_or(-1);
             if iend < 8 {
                 io.err("embed-prompt: malformed PNG\n");
                 return 1;
@@ -335,7 +357,10 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             m.insert("prompt".into(), Value::String(prompt));
             m.insert("createdAt".into(), Value::String(iso_now()));
             let _ = std::fs::write(&sidecar_abs, json_pretty(&Value::Object(m)));
-            io.out(&format!("EMBEDDED: {} (sidecar fallback for this format)\n", sidecar));
+            io.out(&format!(
+                "EMBEDDED: {} (sidecar fallback for this format)\n",
+                sidecar
+            ));
             0
         }
     }

@@ -164,11 +164,25 @@ fn inspect(comp: &Image, input: &Value, comp_path: &str) -> Value {
     .expect("individually validated regions");
     spec["regions"] = json!(measured);
     let group_issues = impeccable_comp::review_groups::issues(&measured);
-    let invalid_groups: HashSet<String> = group_issues.iter().filter_map(|(id, _)| {
-        measured.iter().find(|r| r["id"] == *id).and_then(|r| r["reviewGroup"].as_str()).map(String::from)
-    }).collect();
+    let invalid_groups: HashSet<String> = group_issues
+        .iter()
+        .filter_map(|(id, _)| {
+            measured
+                .iter()
+                .find(|r| r["id"] == *id)
+                .and_then(|r| r["reviewGroup"].as_str())
+                .map(String::from)
+        })
+        .collect();
     for (id, message) in group_issues {
-        let code = if measured.iter().any(|r| r["id"] == id && r["kind"].as_str().is_some_and(is_raster_kind)) { "raster-group" } else { "invalid-group" };
+        let code = if measured
+            .iter()
+            .any(|r| r["id"] == id && r["kind"].as_str().is_some_and(is_raster_kind))
+        {
+            "raster-group"
+        } else {
+            "invalid-group"
+        };
         issue(&mut issues, "error", code, Some(&id), message);
     }
     let mut groups: serde_json::Map<String, Value> = serde_json::Map::new();
@@ -203,7 +217,10 @@ fn inspect(comp: &Image, input: &Value, comp_path: &str) -> Value {
             }
         }
         if let Some(group) = region.get("reviewGroup") {
-            if let Some(name) = group.as_str().filter(|n| !n.trim().is_empty() && !invalid_groups.contains(*n)) {
+            if let Some(name) = group
+                .as_str()
+                .filter(|n| !n.trim().is_empty() && !invalid_groups.contains(*n))
+            {
                 groups
                     .entry(name)
                     .or_insert(json!([]))
@@ -217,7 +234,12 @@ fn inspect(comp: &Image, input: &Value, comp_path: &str) -> Value {
             if let Some(message) = reference.issue(&id) {
                 issue(&mut issues, "error", "fully-masked", Some(&id), message);
             } else if reference.excluded_pixels > 0 {
-                let sources = reference.excluded_regions.iter().filter_map(|r| r["id"].as_str()).collect::<Vec<_>>().join(", ");
+                let sources = reference
+                    .excluded_regions
+                    .iter()
+                    .filter_map(|r| r["id"].as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 issue(&mut issues,"warning","foreground-mask",Some(&id),format!("{sources} exclude {:.1}% of this reference. Check that the excluded pixels contain foreground, not artwork between separate text elements. Split overly broad foreground bounds; review grouping must not change geometry.",100.*reference.excluded_pixels as f64/reference.total_pixels as f64));
             }
             region["reference"] = reference.audit();
@@ -293,34 +315,96 @@ fn save_reference(path: &Path, image: &Image, source: &str) -> Result<(), String
 
 /// A bounded overview, not a new matcher: both panes use the same scale and
 /// preserve aspect ratio. Individual full-resolution crops remain authoritative.
-fn comparison_sheet(comp: &Image, spec: &Value, regions: &[&Value], page: usize, pages: usize) -> Image {
+fn comparison_sheet(
+    comp: &Image,
+    spec: &Value,
+    regions: &[&Value],
+    page: usize,
+    pages: usize,
+) -> Image {
     const PANEL_W: usize = 512;
     const PANEL_H: usize = 320;
     const PAD: usize = 24;
     let rows = regions.len().div_ceil(2);
-    let mut sheet = r::create_image(PANEL_W * 2 + PAD * 3, 96 + rows * PANEL_H + PAD, [246,247,245,255]);
-    let ink = [32.,38.,35.,255.];
-    let muted = [91.,101.,95.,255.];
-    r::draw_text(&mut sheet, &format!("MASKED REFERENCES {page}/{pages}"), 24., 20., ink, 3.);
-    r::draw_text(&mut sheet, "ORIGINAL AND ACTUAL CHECKER REFERENCE. REFERENCE ONLY.", 24., 54., muted, 2.);
+    let mut sheet = r::create_image(
+        PANEL_W * 2 + PAD * 3,
+        96 + rows * PANEL_H + PAD,
+        [246, 247, 245, 255],
+    );
+    let ink = [32., 38., 35., 255.];
+    let muted = [91., 101., 95., 255.];
+    r::draw_text(
+        &mut sheet,
+        &format!("MASKED REFERENCES {page}/{pages}"),
+        24.,
+        20.,
+        ink,
+        3.,
+    );
+    r::draw_text(
+        &mut sheet,
+        "ORIGINAL AND ACTUAL CHECKER REFERENCE. REFERENCE ONLY.",
+        24.,
+        54.,
+        muted,
+        2.,
+    );
     for (i, region) in regions.iter().enumerate() {
         let x = (PAD + (i % 2) * (PANEL_W + PAD)) as f64;
         let y = (96 + (i / 2) * PANEL_H) as f64;
         let label = format!("#{} {}", region["number"], region["id"].as_str().unwrap());
-        let label = if label.chars().count() > 42 { format!("{}...", label.chars().take(39).collect::<String>()) } else { label };
+        let label = if label.chars().count() > 42 {
+            format!("{}...", label.chars().take(39).collect::<String>())
+        } else {
+            label
+        };
         r::draw_text(&mut sheet, &label, x, y, ink, 2.);
-        r::draw_text(&mut sheet, &format!("{:.1}% EXCLUDED - {}X{} PX",
-            region["reference"]["excludedFraction"].as_f64().unwrap() * 100., region["px"]["w"], region["px"]["h"]), x, y+23., muted, 2.);
-        let original = r::crop(comp, coord(region,"x"), coord(region,"y"), coord(region,"w"), coord(region,"h"));
+        r::draw_text(
+            &mut sheet,
+            &format!(
+                "{:.1}% EXCLUDED - {}X{} PX",
+                region["reference"]["excludedFraction"].as_f64().unwrap() * 100.,
+                region["px"]["w"],
+                region["px"]["h"]
+            ),
+            x,
+            y + 23.,
+            muted,
+            2.,
+        );
+        let original = r::crop(
+            comp,
+            coord(region, "x"),
+            coord(region, "y"),
+            coord(region, "w"),
+            coord(region, "h"),
+        );
         let reference = comp_spec::prepare_plate_reference(comp, spec, region);
-        let scale = (244. / original.width as f64).min(216. / original.height as f64).min(3.);
+        let scale = (244. / original.width as f64)
+            .min(216. / original.height as f64)
+            .min(3.);
         let width = (original.width as f64 * scale).round().max(1.);
         let height = (original.height as f64 * scale).round().max(1.);
-        for (pane, (name, image)) in [("ORIGINAL", &original), ("CHECKER", &reference.image)].iter().enumerate() {
+        for (pane, (name, image)) in [("ORIGINAL", &original), ("CHECKER", &reference.image)]
+            .iter()
+            .enumerate()
+        {
             let px = x + pane as f64 * 268.;
-            r::draw_text(&mut sheet, name, px, y+48., muted, 2.);
-            r::fill_rect(&mut sheet, px, y+72., 244., 216., [233.,237.,232.,255.]);
-            r::blit(&mut sheet, &r::resize(image, width, height), px+(244.-width)/2., y+72.+(216.-height)/2.);
+            r::draw_text(&mut sheet, name, px, y + 48., muted, 2.);
+            r::fill_rect(
+                &mut sheet,
+                px,
+                y + 72.,
+                244.,
+                216.,
+                [233., 237., 232., 255.],
+            );
+            r::blit(
+                &mut sheet,
+                &r::resize(image, width, height),
+                px + (244. - width) / 2.,
+                y + 72. + (216. - height) / 2.,
+            );
         }
     }
     sheet
@@ -333,7 +417,9 @@ fn write_report(dir: &Path, comp: &Image, report: &mut Value) -> Result<(), Stri
     }
     std::fs::create_dir(dir).map_err(|e| format!("choose a new output directory: {e}"))?;
     let result = write_report_contents(dir, comp, report);
-    if result.is_err() { let _ = std::fs::remove_dir_all(dir); }
+    if result.is_err() {
+        let _ = std::fs::remove_dir_all(dir);
+    }
     result
 }
 
@@ -386,16 +472,35 @@ fn write_report_contents(dir: &Path, comp: &Image, report: &mut Value) -> Result
         );
     }
     save_reference(&dir.join("overlay.png"), &overlay, &source)?;
-    let mut affected: Vec<&Value> = report["regions"].as_array().unwrap().iter()
-        .filter(|r| r.pointer("/reference/excludedPixels").and_then(Value::as_u64).unwrap_or(0) > 0).collect();
-    affected.sort_by(|a,b| b["reference"]["excludedFraction"].as_f64().unwrap()
-        .total_cmp(&a["reference"]["excludedFraction"].as_f64().unwrap()));
+    let mut affected: Vec<&Value> = report["regions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| {
+            r.pointer("/reference/excludedPixels")
+                .and_then(Value::as_u64)
+                .unwrap_or(0)
+                > 0
+        })
+        .collect();
+    affected.sort_by(|a, b| {
+        b["reference"]["excludedFraction"]
+            .as_f64()
+            .unwrap()
+            .total_cmp(&a["reference"]["excludedFraction"].as_f64().unwrap())
+    });
     let pages = affected.len().div_ceil(6);
     let mut sheets = Vec::new();
     for (i, regions) in affected.chunks(6).enumerate() {
-        let path = format!("comparison-{}.png", i+1);
-        save_reference(&dir.join(&path), &comparison_sheet(comp, &spec, regions, i+1, pages), &source)?;
-        sheets.push(json!({"path":path,"regionIds":regions.iter().map(|r| &r["id"]).collect::<Vec<_>>()}));
+        let path = format!("comparison-{}.png", i + 1);
+        save_reference(
+            &dir.join(&path),
+            &comparison_sheet(comp, &spec, regions, i + 1, pages),
+            &source,
+        )?;
+        sheets.push(
+            json!({"path":path,"regionIds":regions.iter().map(|r| &r["id"]).collect::<Vec<_>>()}),
+        );
     }
     report["comparisonSheets"] = json!(sheets);
     let data = serde_json::to_string_pretty(report).map_err(|e| e.to_string())?;
@@ -413,16 +518,35 @@ fn write_report_contents(dir: &Path, comp: &Image, report: &mut Value) -> Result
         include_str!("../../../ui/component-review/vendor/docs-rail.css"),
     ]
     .join("\n");
-    let strip = include_str!("../../../ui/component-review/vendor/instrument-strip.js").replace("export function", "function");
+    let strip = include_str!("../../../ui/component-review/vendor/instrument-strip.js")
+        .replace("export function", "function");
     let fonts = dir.join("fonts");
     std::fs::create_dir(&fonts).map_err(|e| e.to_string())?;
     for (name, bytes) in [
-        ("albertsans.ttf", &include_bytes!("../../../ui/component-review/fonts/albertsans.ttf")[..]),
-        ("alumnisans.ttf", &include_bytes!("../../../ui/component-review/fonts/alumnisans.ttf")[..]),
-        ("jetbrainsmono.ttf", &include_bytes!("../../../ui/component-review/fonts/jetbrainsmono.ttf")[..]),
-        ("albertsans-OFL.txt", include_bytes!("../../../ui/component-review/fonts/albertsans-OFL.txt")),
-        ("alumnisans-OFL.txt", include_bytes!("../../../ui/component-review/fonts/alumnisans-OFL.txt")),
-        ("jetbrainsmono-OFL.txt", include_bytes!("../../../ui/component-review/fonts/jetbrainsmono-OFL.txt")),
+        (
+            "albertsans.ttf",
+            &include_bytes!("../../../ui/component-review/fonts/albertsans.ttf")[..],
+        ),
+        (
+            "alumnisans.ttf",
+            &include_bytes!("../../../ui/component-review/fonts/alumnisans.ttf")[..],
+        ),
+        (
+            "jetbrainsmono.ttf",
+            &include_bytes!("../../../ui/component-review/fonts/jetbrainsmono.ttf")[..],
+        ),
+        (
+            "albertsans-OFL.txt",
+            include_bytes!("../../../ui/component-review/fonts/albertsans-OFL.txt"),
+        ),
+        (
+            "alumnisans-OFL.txt",
+            include_bytes!("../../../ui/component-review/fonts/alumnisans-OFL.txt"),
+        ),
+        (
+            "jetbrainsmono-OFL.txt",
+            include_bytes!("../../../ui/component-review/fonts/jetbrainsmono-OFL.txt"),
+        ),
     ] {
         std::fs::write(fonts.join(name), bytes).map_err(|e| e.to_string())?;
     }
@@ -473,10 +597,19 @@ pub fn run(argv: &[String], io: &mut Io, comp: &Image, comp_path: &str) -> i32 {
             if flag(argv, "json") {
                 io.out(&format!("{report}\n"));
             } else {
-                let partial_masks = report["issues"].as_array().unwrap().iter().filter(|i| i["code"] == "foreground-mask").count();
+                let partial_masks = report["issues"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter(|i| i["code"] == "foreground-mask")
+                    .count();
                 io.out(&format!("MAP {}/index.html\nOVERLAY {}/overlay.png\n{} regions, {errors} errors, {partial_masks} partial masks to inspect. Zero errors does not certify crop accuracy. Reference only; no build state or approvals changed.\n",report["outputDir"].as_str().unwrap(),report["outputDir"].as_str().unwrap(),report["inputRegionCount"]));
                 for sheet in report["comparisonSheets"].as_array().unwrap() {
-                    io.out(&format!("COMPARE {}/{}\n", report["outputDir"].as_str().unwrap(), sheet["path"].as_str().unwrap()));
+                    io.out(&format!(
+                        "COMPARE {}/{}\n",
+                        report["outputDir"].as_str().unwrap(),
+                        sheet["path"].as_str().unwrap()
+                    ));
                 }
                 for i in report["issues"].as_array().unwrap() {
                     io.out(&format!(
@@ -503,40 +636,72 @@ mod tests {
 
     #[test]
     fn sheet_panes_match_original_and_real_reference_at_the_same_scale() {
-        let mut comp = create_image(100, 100, [240,240,240,255]);
-        r::fill_rect(&mut comp, 10., 10., 10., 10., [150.,40.,20.,255.]);
+        let mut comp = create_image(100, 100, [240, 240, 240, 255]);
+        r::fill_rect(&mut comp, 10., 10., 10., 10., [150., 40., 20., 255.]);
         let mut region = json!({"id":"art","number":1,"kind":"image","px":{"x":10,"y":10,"w":20,"h":10},"palette":[{"hex":"#f0f0f0"}]});
         let spec = json!({"regions":[region,{"id":"label","kind":"text","px":{"x":10,"y":10,"w":5,"h":10}}]});
         let reference = comp_spec::prepare_plate_reference(&comp, &spec, &region);
         region["reference"] = reference.audit();
         let sheet = comparison_sheet(&comp, &spec, &[&region], 1, 1);
-        let expected_original = r::resize(&r::crop(&comp,10.,10.,20.,10.),60.,30.);
-        let expected_reference = r::resize(&reference.image,60.,30.);
+        let expected_original = r::resize(&r::crop(&comp, 10., 10., 20., 10.), 60., 30.);
+        let expected_reference = r::resize(&reference.image, 60., 30.);
         assert_ne!(expected_original.data, expected_reference.data);
-        assert_eq!(r::crop(&sheet,116.,261.,60.,30.).data, expected_original.data);
-        assert_eq!(r::crop(&sheet,384.,261.,60.,30.).data, expected_reference.data);
+        assert_eq!(
+            r::crop(&sheet, 116., 261., 60., 30.).data,
+            expected_original.data
+        );
+        assert_eq!(
+            r::crop(&sheet, 384., 261., 60., 30.).data,
+            expected_reference.data
+        );
     }
 
     #[test]
     fn comparison_sheets_paginate_masked_assets_and_keep_reference_provenance() {
-        let root = std::env::temp_dir().join(format!("impeccable-sheet-test-{}-{}", std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let root = std::env::temp_dir().join(format!(
+            "impeccable-sheet-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
         let image = create_image(300, 100, [240, 240, 240, 255]);
-        let mut regions: Vec<Value> = (0..7).map(|n| json!({"id":format!("art-{n}"),"kind":"image",
-            "note":"Distinct illustration", "pixelBox":{"x":5+n*25,"y":20,"w":20,"h":20}})).collect();
-        regions.push(json!({"id":"foreground","kind":"text","note":"Overlapping text line",
-            "pixelBox":{"x":0,"y":20,"w":200,"h":4}}));
-        regions.push(json!({"id":"unmasked","kind":"image","note":"Unobscured photograph",
-            "pixelBox":{"x":230,"y":20,"w":20,"h":20}}));
+        let mut regions: Vec<Value> = (0..7)
+            .map(|n| {
+                json!({"id":format!("art-{n}"),"kind":"image",
+            "note":"Distinct illustration", "pixelBox":{"x":5+n*25,"y":20,"w":20,"h":20}})
+            })
+            .collect();
+        regions.push(
+            json!({"id":"foreground","kind":"text","note":"Overlapping text line",
+            "pixelBox":{"x":0,"y":20,"w":200,"h":4}}),
+        );
+        regions.push(
+            json!({"id":"unmasked","kind":"image","note":"Unobscured photograph",
+            "pixelBox":{"x":230,"y":20,"w":20,"h":20}}),
+        );
         let mut report = inspect(&image, &json!({"regions":regions}), "comp.png");
         write_report(&root, &image, &mut report).unwrap();
-        let sheets = report["comparisonSheets"].as_array().expect("sheets are discoverable in JSON");
+        let sheets = report["comparisonSheets"]
+            .as_array()
+            .expect("sheets are discoverable in JSON");
         assert_eq!(sheets.len(), 2);
-        let ids: Vec<&str> = sheets.iter().flat_map(|s| s["regionIds"].as_array().unwrap()).map(|id|id.as_str().unwrap()).collect();
-        assert_eq!(ids, (0..7).map(|n|format!("art-{n}")).collect::<Vec<_>>());
+        let ids: Vec<&str> = sheets
+            .iter()
+            .flat_map(|s| s["regionIds"].as_array().unwrap())
+            .map(|id| id.as_str().unwrap())
+            .collect();
+        assert_eq!(ids, (0..7).map(|n| format!("art-{n}")).collect::<Vec<_>>());
         for sheet in sheets {
-            let png = png_io::decode_png(&std::fs::read(root.join(sheet["path"].as_str().unwrap())).unwrap()).unwrap();
-            assert_eq!(png.text.get("impeccable:crop-of").map(String::as_str), Some("comp.png"));
+            let png = png_io::decode_png(
+                &std::fs::read(root.join(sheet["path"].as_str().unwrap())).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                png.text.get("impeccable:crop-of").map(String::as_str),
+                Some("comp.png")
+            );
             assert!(sheet["regionIds"].as_array().unwrap().len() <= 6);
         }
         assert_eq!(report["regions"].as_array().unwrap().len(), 9);
@@ -556,7 +721,10 @@ mod tests {
         let report = inspect(&image, &input, "comp.png");
         let findings = report["issues"].as_array().unwrap();
         assert!(!findings.iter().any(|i| i["severity"] == "error"));
-        let mask = findings.iter().find(|i| i["code"] == "foreground-mask").unwrap();
+        let mask = findings
+            .iter()
+            .find(|i| i["code"] == "foreground-mask")
+            .unwrap();
         assert_eq!(mask["severity"], "warning");
         assert!(mask["message"].as_str().unwrap().contains("details"));
         assert_eq!(report["regions"][0]["reference"]["excludedPixels"], 100);
@@ -574,23 +742,37 @@ mod tests {
         ]});
         let report = inspect(&image, &input, "comp.png");
         let reference = &report["regions"][0]["reference"];
-        assert_eq!(reference["excludedPixels"], 10, "only the actual caption overlap is masked");
+        assert_eq!(
+            reference["excludedPixels"], 10,
+            "only the actual caption overlap is masked"
+        );
         assert_eq!(reference["regions"][0]["id"], "caption");
         assert_eq!(reference["ignoredContainers"], json!(["details"]));
-        assert_eq!(report["reviewGroups"]["titles"], json!(["title", "title-2"]));
+        assert_eq!(
+            report["reviewGroups"]["titles"],
+            json!(["title", "title-2"])
+        );
         assert_eq!(report["regions"].as_array().unwrap().len(), 5);
     }
 
     #[test]
     fn mixed_review_groups_are_reported_without_discarding_geometry() {
-        let comp = Image { width: 100, height: 100, data: vec![255; 100*100*4] };
+        let comp = Image {
+            width: 100,
+            height: 100,
+            data: vec![255; 100 * 100 * 4],
+        };
         let input = json!({"regions":[
             {"id":"frame","kind":"chrome","container":true,"reviewGroup":"cards","pixelBox":{"x":0,"y":0,"w":20,"h":20},"note":"Card border"},
             {"id":"label","kind":"text","reviewGroup":"cards","pixelBox":{"x":2,"y":2,"w":10,"h":5},"note":"Card label"}
         ]});
         let report = inspect(&comp, &input, "comp.png");
-        assert_eq!(report["regions"].as_array().unwrap().len(),2);
-        assert!(report["issues"].as_array().unwrap().iter().any(|i| i["code"]=="invalid-group"));
+        assert_eq!(report["regions"].as_array().unwrap().len(), 2);
+        assert!(report["issues"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["code"] == "invalid-group"));
         assert!(report["reviewGroups"].get("cards").is_none());
         let measured = comp_spec::measure_regions(&comp, &input, "comp.png").unwrap();
         assert_eq!(measured["regions"][1]["reviewGroup"], "cards");
@@ -598,15 +780,18 @@ mod tests {
 
     #[test]
     fn failed_report_write_removes_only_its_new_directory() {
-        let root=std::env::temp_dir().join(format!("map-write-failure-{}",std::process::id()));
-        let mut report=json!({"comp":"comp.png","regions":[]});
-        let image=create_image(0,0,[0;4]);
-        assert!(write_report(&root,&image,&mut report).is_err());
+        let root = std::env::temp_dir().join(format!("map-write-failure-{}", std::process::id()));
+        let mut report = json!({"comp":"comp.png","regions":[]});
+        let image = create_image(0, 0, [0; 4]);
+        assert!(write_report(&root, &image, &mut report).is_err());
         assert!(!root.exists());
         std::fs::create_dir(&root).unwrap();
-        std::fs::write(root.join("keep.txt"),"existing").unwrap();
-        assert!(write_report(&root,&image,&mut report).is_err());
-        assert_eq!(std::fs::read_to_string(root.join("keep.txt")).unwrap(),"existing");
+        std::fs::write(root.join("keep.txt"), "existing").unwrap();
+        assert!(write_report(&root, &image, &mut report).is_err());
+        assert_eq!(
+            std::fs::read_to_string(root.join("keep.txt")).unwrap(),
+            "existing"
+        );
         std::fs::remove_dir_all(root).unwrap();
     }
     #[test]

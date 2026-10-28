@@ -4,18 +4,21 @@
 
 use std::collections::HashMap;
 
-use impeccable_skills::providers::{Scope, Sys};
 use impeccable_common::jsp;
+use impeccable_skills::providers::{Scope, Sys};
 
 fn temp_root(name: &str) -> String {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let dir = std::env::temp_dir().join(format!("impeccable-{name}-{}-{nanos}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("impeccable-{name}-{}-{nanos}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("temp root");
     let real = dir.canonicalize().unwrap().to_string_lossy().into_owned();
-    real.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(real)
+    real.strip_prefix(r"\\?\")
+        .map(str::to_string)
+        .unwrap_or(real)
 }
 
 fn sys_with(home: &str, extra: &[(&str, &str)]) -> Sys {

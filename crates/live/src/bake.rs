@@ -21,8 +21,18 @@ use serde_json::{json, Map, Value};
 /// Directories a stylesheet search never enters (build output, caches, the
 /// framework's own trees).
 const SKIP_DIRS: [&str; 12] = [
-    "dist", "build", "coverage", ".next", ".nuxt", ".svelte-kit", ".astro", ".turbo", ".vercel", ".cache",
-    "out", "storybook-static",
+    "dist",
+    "build",
+    "coverage",
+    ".next",
+    ".nuxt",
+    ".svelte-kit",
+    ".astro",
+    ".turbo",
+    ".vercel",
+    ".cache",
+    "out",
+    "storybook-static",
 ];
 const MAX_DEPTH: usize = 6;
 const MAX_FILES: usize = 4000;
@@ -42,8 +52,11 @@ pub struct BakePlan {
     pub rules: usize,
 }
 
-static ROOT_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?s)<([A-Za-z][A-Za-z0-9.-]*)((?:\s+[^<>]*?)?)>").unwrap());
-static ATTR_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?:^|\s)(id|class|className)\s*=\s*(?:"([^"]*)"|'([^']*)')"#).unwrap());
+static ROOT_TAG_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?s)<([A-Za-z][A-Za-z0-9.-]*)((?:\s+[^<>]*?)?)>").unwrap());
+static ATTR_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(?:^|\s)(id|class|className)\s*=\s*(?:"([^"]*)"|'([^']*)')"#).unwrap()
+});
 static SCOPE_PRELUDE_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"data-impeccable-variant\s*=\s*["']?(\d+)["']?"#).unwrap());
 static VARIANT_PREFIX_RE: Lazy<Regex> =
@@ -61,7 +74,11 @@ pub fn root_tag(restored: &[String]) -> Option<String> {
 /// `Card.Root`) renders whatever it likes, and its `className` or `id`
 /// prop may never reach that element.
 pub fn is_element_tag(tag: &str) -> bool {
-    tag.chars().next().map(|c| c.is_ascii_lowercase()).unwrap_or(false) && !tag.contains('.')
+    tag.chars()
+        .next()
+        .map(|c| c.is_ascii_lowercase())
+        .unwrap_or(false)
+        && !tag.contains('.')
 }
 
 /// The variant's root element, as `#id` or `tag.class.class`: the selector
@@ -81,7 +98,11 @@ pub fn element_anchor(restored: &[String]) -> Option<String> {
     let mut id: Option<String> = None;
     let mut classes: Vec<String> = Vec::new();
     for a in ATTR_RE.captures_iter(attrs) {
-        let value = a.get(2).or_else(|| a.get(3)).map(|m| m.as_str()).unwrap_or("");
+        let value = a
+            .get(2)
+            .or_else(|| a.get(3))
+            .map(|m| m.as_str())
+            .unwrap_or("");
         match &a[1] {
             "id" => {
                 if !value.trim().is_empty() {
@@ -105,7 +126,8 @@ pub fn element_anchor(restored: &[String]) -> Option<String> {
 
 fn is_css_ident(s: &str) -> bool {
     !s.is_empty()
-        && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
         && !s.starts_with(|c: char| c.is_ascii_digit())
 }
 
@@ -201,7 +223,9 @@ fn compound_parts(compound: &str) -> (Option<String>, Vec<String>) {
     if chars.first() == Some(&'*') {
         i = 1;
     } else {
-        while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_') {
+        while i < chars.len()
+            && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_')
+        {
             tag.push(chars[i]);
             i += 1;
         }
@@ -250,7 +274,10 @@ fn anchor_with_child(anchor: &str, child: &str) -> Result<String, String> {
     let (child_tag, child_tokens) = compound_parts(child);
     if let (Some(a), Some(c)) = (&anchor_tag, &child_tag) {
         if !a.eq_ignore_ascii_case(c) {
-            return Err(format!("`:scope > {}` names a {} but the variant's root is a {}", child, c, a));
+            return Err(format!(
+                "`:scope > {}` names a {} but the variant's root is a {}",
+                child, c, a
+            ));
         }
     }
     let mut out = anchor.to_string();
@@ -286,9 +313,17 @@ pub fn rewrite_selector(selector: &str, anchor: &str) -> Result<String, String> 
             if first.is_empty() {
                 return Err(format!("selector has no child after :scope: {}", selector));
             }
-            format!("{}{}{}", anchor_with_child(anchor, &first)?, state, remainder)
+            format!(
+                "{}{}{}",
+                anchor_with_child(anchor, &first)?,
+                state,
+                remainder
+            )
         } else if after_trim.starts_with(['+', '~']) {
-            return Err(format!("sibling combinator on :scope has no meaning after unwrap: {}", selector));
+            return Err(format!(
+                "sibling combinator on :scope has no meaning after unwrap: {}",
+                selector
+            ));
         } else {
             // `:scope .x`, `:scope:hover .x`: a descendant of the element.
             format!("{}{} {}", anchor, state, after_trim)
@@ -297,7 +332,10 @@ pub fn rewrite_selector(selector: &str, anchor: &str) -> Result<String, String> 
         s
     };
     if out.contains(":scope") || out.contains("data-impeccable") {
-        return Err(format!("selector still names the preview wrapper: {}", selector));
+        return Err(format!(
+            "selector still names the preview wrapper: {}",
+            selector
+        ));
     }
     if trim(&out).is_empty() {
         return Err(format!("selector rewrote to nothing: {}", selector));
@@ -305,21 +343,36 @@ pub fn rewrite_selector(selector: &str, anchor: &str) -> Result<String, String> 
     Ok(trim(&out).to_string())
 }
 
-fn rewrite_nodes(nodes: &[CssNode], anchor: &str, out: &mut Vec<CssNode>, rules: &mut usize) -> Result<(), String> {
+fn rewrite_nodes(
+    nodes: &[CssNode],
+    anchor: &str,
+    out: &mut Vec<CssNode>,
+    rules: &mut usize,
+) -> Result<(), String> {
     for node in nodes {
         match node {
             CssNode::Comment { .. } => {}
             CssNode::Rule { prelude, body } => {
-                let rewritten: Result<Vec<String>, String> =
-                    split_selector_list(prelude).iter().map(|sel| rewrite_selector(sel, anchor)).collect();
+                let rewritten: Result<Vec<String>, String> = split_selector_list(prelude)
+                    .iter()
+                    .map(|sel| rewrite_selector(sel, anchor))
+                    .collect();
                 let selectors = rewritten?;
                 if selectors.is_empty() {
                     continue;
                 }
-                out.push(CssNode::Rule { prelude: selectors.join(", "), body: body.clone() });
+                out.push(CssNode::Rule {
+                    prelude: selectors.join(", "),
+                    body: body.clone(),
+                });
                 *rules += 1;
             }
-            CssNode::At { name, prelude, children: Some(children), .. } => {
+            CssNode::At {
+                name,
+                prelude,
+                children: Some(children),
+                ..
+            } => {
                 if name == "scope" {
                     return Err("nested @scope inside a variant block".to_string());
                 }
@@ -344,21 +397,40 @@ fn rewrite_nodes(nodes: &[CssNode], anchor: &str, out: &mut Vec<CssNode>, rules:
 /// A rule outside any `@scope`: Astro's global-prefixed mode writes
 /// `[data-impeccable-variant="N"] > .x`. Ours are rewritten, other
 /// variants' are dropped (None), plain rules are kept as they are.
-fn global_rule(prelude: &str, body: &str, variant_num: &str, anchor: &str) -> Result<Option<CssNode>, String> {
+fn global_rule(
+    prelude: &str,
+    body: &str,
+    variant_num: &str,
+    anchor: &str,
+) -> Result<Option<CssNode>, String> {
     let selectors = split_selector_list(prelude);
     let mine: Vec<String> = selectors
         .iter()
-        .filter(|sel| SCOPE_PRELUDE_RE.captures(sel).map(|c| &c[1] == variant_num).unwrap_or(false))
+        .filter(|sel| {
+            SCOPE_PRELUDE_RE
+                .captures(sel)
+                .map(|c| &c[1] == variant_num)
+                .unwrap_or(false)
+        })
         .cloned()
         .collect();
     if mine.is_empty() {
         if prelude.contains("data-impeccable-variant") {
             return Ok(None);
         }
-        return Ok(Some(CssNode::Rule { prelude: prelude.to_string(), body: body.to_string() }));
+        return Ok(Some(CssNode::Rule {
+            prelude: prelude.to_string(),
+            body: body.to_string(),
+        }));
     }
-    let rewritten: Result<Vec<String>, String> = mine.iter().map(|sel| rewrite_selector(sel, anchor)).collect();
-    Ok(Some(CssNode::Rule { prelude: rewritten?.join(", "), body: body.to_string() }))
+    let rewritten: Result<Vec<String>, String> = mine
+        .iter()
+        .map(|sel| rewrite_selector(sel, anchor))
+        .collect();
+    Ok(Some(CssNode::Rule {
+        prelude: rewritten?.join(", "),
+        body: body.to_string(),
+    }))
 }
 
 /// Nodes outside any `@scope` (the top level, or an `@media` / `@supports`
@@ -366,12 +438,26 @@ fn global_rule(prelude: &str, body: &str, variant_num: &str, anchor: &str) -> Re
 /// flattened and rewritten, prefixed rules go through `global_rule`,
 /// nested blocks recurse, and global at-rules (`@keyframes`, `@font-face`)
 /// are kept.
-fn global_nodes(nodes: &[CssNode], variant_num: &str, anchor: &str, out: &mut Vec<CssNode>, rules: &mut usize) -> Result<(), String> {
+fn global_nodes(
+    nodes: &[CssNode],
+    variant_num: &str,
+    anchor: &str,
+    out: &mut Vec<CssNode>,
+    rules: &mut usize,
+) -> Result<(), String> {
     for node in nodes {
         match node {
-            CssNode::At { name, prelude, children: Some(children), .. } if name == "scope" => {
+            CssNode::At {
+                name,
+                prelude,
+                children: Some(children),
+                ..
+            } if name == "scope" => {
                 let Some(caps) = SCOPE_PRELUDE_RE.captures(prelude) else {
-                    return Err(format!("@scope block without a variant prelude: {}", prelude));
+                    return Err(format!(
+                        "@scope block without a variant prelude: {}",
+                        prelude
+                    ));
                 };
                 if &caps[1] == variant_num {
                     rewrite_nodes(children, anchor, out, rules)?;
@@ -383,7 +469,12 @@ fn global_nodes(nodes: &[CssNode], variant_num: &str, anchor: &str, out: &mut Ve
                     *rules += 1;
                 }
             }
-            CssNode::At { name, prelude, children: Some(children), .. } => {
+            CssNode::At {
+                name,
+                prelude,
+                children: Some(children),
+                ..
+            } => {
                 let mut inner = Vec::new();
                 let mut inner_rules = 0usize;
                 global_nodes(children, variant_num, anchor, &mut inner, &mut inner_rules)?;
@@ -408,7 +499,11 @@ fn global_nodes(nodes: &[CssNode], variant_num: &str, anchor: &str, out: &mut Ve
 /// `@scope ([data-impeccable-variant="N"])` block rewritten and flattened,
 /// its prefixed rules rewritten wherever they sit, global at-rules
 /// (`@keyframes`, `@font-face`) kept, the other variants' rules dropped.
-pub fn extract_variant_css(css: &str, variant_num: &str, anchor: &str) -> Result<(String, usize), String> {
+pub fn extract_variant_css(
+    css: &str,
+    variant_num: &str,
+    anchor: &str,
+) -> Result<(String, usize), String> {
     let nodes = parse_stylesheet(css);
     let mut kept: Vec<CssNode> = Vec::new();
     let mut rules = 0usize;
@@ -423,13 +518,17 @@ pub fn extract_variant_css(css: &str, variant_num: &str, anchor: &str) -> Result
     Ok((text, rules))
 }
 
-static SELECTOR_TOKEN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[#.][A-Za-z_][A-Za-z0-9_-]*").unwrap());
+static SELECTOR_TOKEN_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"[#.][A-Za-z_][A-Za-z0-9_-]*").unwrap());
 
 /// The stylesheet that already styles the element: the `.css` file under
 /// the app root with the most rules naming the anchor's id or classes, the
 /// only `.css` file when there is exactly one, else none.
 pub fn find_owning_stylesheet(cwd: &str, anchor: &str) -> Option<String> {
-    let tokens: Vec<String> = SELECTOR_TOKEN_RE.find_iter(anchor).map(|m| m.as_str().to_string()).collect();
+    let tokens: Vec<String> = SELECTOR_TOKEN_RE
+        .find_iter(anchor)
+        .map(|m| m.as_str().to_string())
+        .collect();
     let mut files: Vec<String> = Vec::new();
     walk_css(cwd, 0, &mut files);
     let mut scored: Vec<(usize, usize, String)> = Vec::new();
@@ -437,12 +536,18 @@ pub fn find_owning_stylesheet(cwd: &str, anchor: &str) -> Option<String> {
         if is_generated_file(f, cwd) {
             continue;
         }
-        let Some(text) = crate::util::safe_read(f) else { continue };
+        let Some(text) = crate::util::safe_read(f) else {
+            continue;
+        };
         let mut score = 0usize;
         for t in &tokens {
             // No lookaround in this regex engine: the character after the
             // token is consumed, which is fine for a count.
-            let re = Regex::new(&format!(r"(?:^|[\s,>+~{{}}\)]){}(?:[^A-Za-z0-9_-]|$)", regex::escape(t))).ok();
+            let re = Regex::new(&format!(
+                r"(?:^|[\s,>+~{{}}\)]){}(?:[^A-Za-z0-9_-]|$)",
+                regex::escape(t)
+            ))
+            .ok();
             if let Some(re) = re {
                 score += re.find_iter(&text).count();
             }
@@ -464,7 +569,9 @@ fn walk_css(dir: &str, depth: usize, out: &mut Vec<String>) {
     if depth > MAX_DEPTH || out.len() >= MAX_FILES {
         return;
     }
-    let Some(entries) = read_dir_sorted(dir) else { return };
+    let Some(entries) = read_dir_sorted(dir) else {
+        return;
+    };
     for e in entries {
         if e.is_dir {
             if NEVER_SOURCE_DIRS.contains(&e.name.as_str())
@@ -474,7 +581,10 @@ fn walk_css(dir: &str, depth: usize, out: &mut Vec<String>) {
                 continue;
             }
             walk_css(&jsp::join(&[dir, &e.name]), depth + 1, out);
-        } else if e.is_file && e.name.to_ascii_lowercase().ends_with(".css") && !e.name.ends_with(".min.css") {
+        } else if e.is_file
+            && e.name.to_ascii_lowercase().ends_with(".css")
+            && !e.name.ends_with(".min.css")
+        {
             out.push(jsp::join(&[dir, &e.name]));
         }
     }
@@ -512,7 +622,8 @@ pub fn plan(
         return Err("no preview stylesheet to bake".into());
     };
     let css = css_lines.join("\n");
-    if css.contains("var(--p-") || css.contains("data-p-") || css.contains("data-impeccable-params") {
+    if css.contains("var(--p-") || css.contains("data-p-") || css.contains("data-impeccable-params")
+    {
         return Err("the preview CSS is authored against knobs".into());
     }
     let anchor = element_anchor(restored).ok_or_else(|| match root_tag(restored) {
@@ -525,14 +636,28 @@ pub fn plan(
     verify_anchor_unique(&anchor, element)?;
     let (rules_css, rules) = extract_variant_css(&css, variant_num, &anchor)?;
     let css_file = if is_jsx {
-        Some(find_owning_stylesheet(cwd, &anchor).ok_or_else(|| "no stylesheet under the app root names the element".to_string())?)
-    } else if HTML_STYLE_BLOCK_RE.captures_iter(source_after_unwrap).any(|c| !c[1].contains("data-impeccable")) {
+        Some(
+            find_owning_stylesheet(cwd, &anchor)
+                .ok_or_else(|| "no stylesheet under the app root names the element".to_string())?,
+        )
+    } else if HTML_STYLE_BLOCK_RE
+        .captures_iter(source_after_unwrap)
+        .any(|c| !c[1].contains("data-impeccable"))
+    {
         None
     } else {
-        Some(find_owning_stylesheet(cwd, &anchor).ok_or_else(|| "no stylesheet names the element and the page has no <style> block".to_string())?)
+        Some(find_owning_stylesheet(cwd, &anchor).ok_or_else(|| {
+            "no stylesheet names the element and the page has no <style> block".to_string()
+        })?)
     };
     let _ = target_file;
-    Ok(BakePlan { css_file, css: rules_css, anchor, restored: restored.to_vec(), rules })
+    Ok(BakePlan {
+        css_file,
+        css: rules_css,
+        anchor,
+        restored: restored.to_vec(),
+        rules,
+    })
 }
 
 /// The block appended to the stylesheet: a one-line provenance comment and
@@ -566,15 +691,25 @@ pub fn apply(
                     last = Some((inner.start(), inner.end()));
                 }
             }
-            let (_, end) = last.ok_or_else(|| "the page's <style> block disappeared".to_string())?;
-            format!("{}{}{}", &source_after_unwrap[..end], block, &source_after_unwrap[end..])
+            let (_, end) =
+                last.ok_or_else(|| "the page's <style> block disappeared".to_string())?;
+            format!(
+                "{}{}{}",
+                &source_after_unwrap[..end],
+                block,
+                &source_after_unwrap[end..]
+            )
         }
     };
     let (clean, findings) = verify_accepted_source(&source_text);
     if !clean {
         return Err(format!(
             "the baked source would still carry live-mode leftovers: {}",
-            findings.iter().filter_map(|f| f.get("why").and_then(Value::as_str)).collect::<Vec<_>>().join("; ")
+            findings
+                .iter()
+                .filter_map(|f| f.get("why").and_then(Value::as_str))
+                .collect::<Vec<_>>()
+                .join("; ")
         ));
     }
     if let Some(css_file) = &plan.css_file {
@@ -584,9 +719,11 @@ pub fn apply(
         } else {
             format!("{}\n{}", existing, block.trim_start_matches('\n'))
         };
-        std::fs::write(css_file, joined).map_err(|e| format!("could not write {}: {}", css_file, e))?;
+        std::fs::write(css_file, joined)
+            .map_err(|e| format!("could not write {}: {}", css_file, e))?;
     }
-    std::fs::write(target_file, source_text).map_err(|e| format!("could not write {}: {}", target_file, e))?;
+    std::fs::write(target_file, source_text)
+        .map_err(|e| format!("could not write {}: {}", target_file, e))?;
     Ok(json!({ "rules": plan.rules, "anchor": plan.anchor }))
 }
 
@@ -597,46 +734,125 @@ mod tests {
     #[test]
     fn scope_selectors_rewrite_onto_the_element() {
         let a = "div.pricing-grid";
-        assert_eq!(rewrite_selector(":scope > .pricing-grid", a).unwrap(), "div.pricing-grid");
-        assert_eq!(rewrite_selector(":scope > .pricing-grid .pricing-card", a).unwrap(), "div.pricing-grid .pricing-card");
-        assert_eq!(rewrite_selector(":scope .pricing-card", a).unwrap(), "div.pricing-grid .pricing-card");
+        assert_eq!(
+            rewrite_selector(":scope > .pricing-grid", a).unwrap(),
+            "div.pricing-grid"
+        );
+        assert_eq!(
+            rewrite_selector(":scope > .pricing-grid .pricing-card", a).unwrap(),
+            "div.pricing-grid .pricing-card"
+        );
+        assert_eq!(
+            rewrite_selector(":scope .pricing-card", a).unwrap(),
+            "div.pricing-grid .pricing-card"
+        );
         assert_eq!(rewrite_selector(":scope", a).unwrap(), "div.pricing-grid");
-        assert_eq!(rewrite_selector(":scope:hover > .pricing-grid", a).unwrap(), "div.pricing-grid:hover");
-        assert_eq!(rewrite_selector(":scope:focus-within > .pricing-grid .card", a).unwrap(), "div.pricing-grid:focus-within .card");
-        assert_eq!(rewrite_selector(":scope[open] > .pricing-grid > .card", a).unwrap(), "div.pricing-grid[open] > .card");
-        assert_eq!(rewrite_selector(":scope:hover .card", a).unwrap(), "div.pricing-grid:hover .card");
-        assert_eq!(rewrite_selector(":scope:not([hidden])", a).unwrap(), "div.pricing-grid:not([hidden])");
+        assert_eq!(
+            rewrite_selector(":scope:hover > .pricing-grid", a).unwrap(),
+            "div.pricing-grid:hover"
+        );
+        assert_eq!(
+            rewrite_selector(":scope:focus-within > .pricing-grid .card", a).unwrap(),
+            "div.pricing-grid:focus-within .card"
+        );
+        assert_eq!(
+            rewrite_selector(":scope[open] > .pricing-grid > .card", a).unwrap(),
+            "div.pricing-grid[open] > .card"
+        );
+        assert_eq!(
+            rewrite_selector(":scope:hover .card", a).unwrap(),
+            "div.pricing-grid:hover .card"
+        );
+        assert_eq!(
+            rewrite_selector(":scope:not([hidden])", a).unwrap(),
+            "div.pricing-grid:not([hidden])"
+        );
         assert!(rewrite_selector(":scope:hover >", a).is_err());
-        assert_eq!(rewrite_selector("[data-impeccable-variant=\"2\"] > .x", a).unwrap(), "div.pricing-grid.x");
+        assert_eq!(
+            rewrite_selector("[data-impeccable-variant=\"2\"] > .x", a).unwrap(),
+            "div.pricing-grid.x"
+        );
         // The child compound is the element: a class it adds rides on the
         // anchor, a type must be the anchor's own, an id anchor takes any.
-        assert_eq!(rewrite_selector(":scope > div.pricing-grid.wide[open]", a).unwrap(), "div.pricing-grid.wide[open]");
-        assert_eq!(rewrite_selector(":scope > div", a).unwrap(), "div.pricing-grid");
+        assert_eq!(
+            rewrite_selector(":scope > div.pricing-grid.wide[open]", a).unwrap(),
+            "div.pricing-grid.wide[open]"
+        );
+        assert_eq!(
+            rewrite_selector(":scope > div", a).unwrap(),
+            "div.pricing-grid"
+        );
         assert!(rewrite_selector(":scope > section.pricing-grid", a).is_err());
-        assert_eq!(rewrite_selector(":scope > section.pricing", "#pricing").unwrap(), "#pricing.pricing");
-        assert_eq!(rewrite_selector(":scope > .card:not([hidden])", a).unwrap(), "div.pricing-grid.card:not([hidden])");
+        assert_eq!(
+            rewrite_selector(":scope > section.pricing", "#pricing").unwrap(),
+            "#pricing.pricing"
+        );
+        assert_eq!(
+            rewrite_selector(":scope > .card:not([hidden])", a).unwrap(),
+            "div.pricing-grid.card:not([hidden])"
+        );
         // The universal selector adds nothing to the anchor.
-        assert_eq!(rewrite_selector(":scope > *", a).unwrap(), "div.pricing-grid");
-        assert_eq!(rewrite_selector(":scope > *.card", a).unwrap(), "div.pricing-grid.card");
-        assert_eq!(rewrite_selector(":scope:hover > * .x", a).unwrap(), "div.pricing-grid:hover .x");
+        assert_eq!(
+            rewrite_selector(":scope > *", a).unwrap(),
+            "div.pricing-grid"
+        );
+        assert_eq!(
+            rewrite_selector(":scope > *.card", a).unwrap(),
+            "div.pricing-grid.card"
+        );
+        assert_eq!(
+            rewrite_selector(":scope:hover > * .x", a).unwrap(),
+            "div.pricing-grid:hover .x"
+        );
         assert!(rewrite_selector(":scope + .x", a).is_err());
         assert!(rewrite_selector(".a :scope", a).is_err());
     }
 
     #[test]
     fn the_anchor_comes_from_the_root_tag() {
-        assert_eq!(element_anchor(&["<div className=\"pricing-grid wide\">".into(), "</div>".into()]), Some("div.pricing-grid.wide".into()));
-        assert_eq!(element_anchor(&["<section id=\"pricing\" class=\"pricing\">".into()]), Some("#pricing".into()));
+        assert_eq!(
+            element_anchor(&[
+                "<div className=\"pricing-grid wide\">".into(),
+                "</div>".into()
+            ]),
+            Some("div.pricing-grid.wide".into())
+        );
+        assert_eq!(
+            element_anchor(&["<section id=\"pricing\" class=\"pricing\">".into()]),
+            Some("#pricing".into())
+        );
         assert_eq!(element_anchor(&["<section className={cls}>".into()]), None);
-        assert_eq!(element_anchor(&["  <h1 class='hero-heading'>Hi</h1>".into()]), Some("h1.hero-heading".into()));
+        assert_eq!(
+            element_anchor(&["  <h1 class='hero-heading'>Hi</h1>".into()]),
+            Some("h1.hero-heading".into())
+        );
         // A component root renders an unknown element: its className or id
         // prop may never reach it, so nothing anchors on it.
-        assert_eq!(element_anchor(&["<PricingGrid className=\"pricing-grid wide\">".into()]), None);
-        assert_eq!(element_anchor(&["<Card.Root className=\"card\">".into()]), None);
-        assert_eq!(element_anchor(&["<PricingGrid id=\"pricing\">".into()]), None);
-        assert_eq!(element_anchor(&["<my-card class=\"card\">".into()]), Some("my-card.card".into()));
-        assert_eq!(root_tag(&["<Card.Root className=\"card\">".into()]), Some("Card.Root".into()));
-        assert!(is_element_tag("my-card") && !is_element_tag("PricingGrid") && !is_element_tag("Card.Root"));
+        assert_eq!(
+            element_anchor(&["<PricingGrid className=\"pricing-grid wide\">".into()]),
+            None
+        );
+        assert_eq!(
+            element_anchor(&["<Card.Root className=\"card\">".into()]),
+            None
+        );
+        assert_eq!(
+            element_anchor(&["<PricingGrid id=\"pricing\">".into()]),
+            None
+        );
+        assert_eq!(
+            element_anchor(&["<my-card class=\"card\">".into()]),
+            Some("my-card.card".into())
+        );
+        assert_eq!(
+            root_tag(&["<Card.Root className=\"card\">".into()]),
+            Some("Card.Root".into())
+        );
+        assert!(
+            is_element_tag("my-card")
+                && !is_element_tag("PricingGrid")
+                && !is_element_tag("Card.Root")
+        );
     }
 
     #[test]
@@ -654,11 +870,17 @@ mod tests {
         let (out, rules) = extract_variant_css(css, "2", "div.pricing-grid").unwrap();
         assert_eq!(rules, 3, "{out}");
         assert!(out.contains("div.pricing-grid { gap: 32px; }"), "{out}");
-        assert!(out.contains("div.pricing-grid .pricing-card { border: 2px solid #111; }"), "{out}");
+        assert!(
+            out.contains("div.pricing-grid .pricing-card { border: 2px solid #111; }"),
+            "{out}"
+        );
         assert!(out.contains("@media (max-width: 600px)"), "{out}");
         assert!(out.contains("@keyframes rise"), "{out}");
         assert!(!out.contains("8px") && !out.contains("gap: 0"), "{out}");
-        assert!(!out.contains("data-impeccable") && !out.contains(":scope"), "{out}");
+        assert!(
+            !out.contains("data-impeccable") && !out.contains(":scope"),
+            "{out}"
+        );
     }
 
     #[test]
@@ -677,39 +899,114 @@ mod tests {
         let (out, rules) = extract_variant_css(css, "2", "div.pricing-grid").unwrap();
         assert_eq!(rules, 4, "{out}");
         assert!(out.contains("@media (max-width: 600px)"), "{out}");
-        assert!(out.contains("gap: 12px"), "the variant's breakpoint survives: {out}");
-        assert!(out.contains("div.pricing-grid:hover .card { border-color: #111; }"), "{out}");
+        assert!(
+            out.contains("gap: 12px"),
+            "the variant's breakpoint survives: {out}"
+        );
+        assert!(
+            out.contains("div.pricing-grid:hover .card { border-color: #111; }"),
+            "{out}"
+        );
         assert!(out.contains(".site-wide { color: red; }"), "{out}");
-        assert!(!out.contains("8px") && !out.contains("4px"), "the other variant's rules are gone: {out}");
+        assert!(
+            !out.contains("8px") && !out.contains("4px"),
+            "the other variant's rules are gone: {out}"
+        );
         assert!(!out.contains("data-impeccable"), "{out}");
     }
 
     #[test]
     fn knobs_and_plumbing_refuse_the_bake() {
-        let restored = vec!["<div className=\"pricing-grid\">".to_string(), "</div>".to_string()];
+        let restored = vec![
+            "<div className=\"pricing-grid\">".to_string(),
+            "</div>".to_string(),
+        ];
         let css = vec!["@scope ([data-impeccable-variant=\"1\"]) { :scope > .pricing-grid { gap: var(--p-gap, 8px); } }".to_string()];
-        let err = plan("/nonexistent", "src/App.jsx", true, "1", Some(&css), &restored, None, None, "").unwrap_err();
+        let err = plan(
+            "/nonexistent",
+            "src/App.jsx",
+            true,
+            "1",
+            Some(&css),
+            &restored,
+            None,
+            None,
+            "",
+        )
+        .unwrap_err();
         assert!(err.contains("knobs"), "{err}");
         let mut pv = Map::new();
         pv.insert("gap".into(), json!(1));
-        let err = plan("/nonexistent", "src/App.jsx", true, "1", Some(&css), &restored, Some(&pv), None, "").unwrap_err();
+        let err = plan(
+            "/nonexistent",
+            "src/App.jsx",
+            true,
+            "1",
+            Some(&css),
+            &restored,
+            Some(&pv),
+            None,
+            "",
+        )
+        .unwrap_err();
         assert!(err.contains("paramValues"), "{err}");
         let plumbing = vec!["<div className=\"pricing-grid\" data-impeccable-x=\"1\">".to_string()];
-        let err = plan("/nonexistent", "src/App.jsx", true, "1", Some(&css), &plumbing, None, None, "").unwrap_err();
+        let err = plan(
+            "/nonexistent",
+            "src/App.jsx",
+            true,
+            "1",
+            Some(&css),
+            &plumbing,
+            None,
+            None,
+            "",
+        )
+        .unwrap_err();
         assert!(err.contains("plumbing"), "{err}");
         // A component root: its className prop may never reach the rendered element.
-        let plain = vec!["@scope ([data-impeccable-variant=\"1\"]) { :scope { gap: 8px; } }".to_string()];
-        let component = vec!["<PricingGrid className=\"pricing-grid\">".to_string(), "</PricingGrid>".to_string()];
-        let err = plan("/nonexistent", "src/App.jsx", true, "1", Some(&plain), &component, None, None, "").unwrap_err();
+        let plain =
+            vec!["@scope ([data-impeccable-variant=\"1\"]) { :scope { gap: 8px; } }".to_string()];
+        let component = vec![
+            "<PricingGrid className=\"pricing-grid\">".to_string(),
+            "</PricingGrid>".to_string(),
+        ];
+        let err = plan(
+            "/nonexistent",
+            "src/App.jsx",
+            true,
+            "1",
+            Some(&plain),
+            &component,
+            None,
+            None,
+            "",
+        )
+        .unwrap_err();
         assert!(err.contains("component <PricingGrid>"), "{err}");
     }
 
     #[test]
     fn a_class_anchor_bakes_only_when_the_page_showed_one_match() {
-        let restored = vec!["<div className=\"pricing-grid featured\">".to_string(), "</div>".to_string()];
-        let css = vec!["@scope ([data-impeccable-variant=\"1\"]) { :scope { gap: 8px; } }".to_string()];
+        let restored = vec![
+            "<div className=\"pricing-grid featured\">".to_string(),
+            "</div>".to_string(),
+        ];
+        let css =
+            vec!["@scope ([data-impeccable-variant=\"1\"]) { :scope { gap: 8px; } }".to_string()];
         let attempt = |element: Option<Map<String, Value>>| {
-            plan("/nonexistent", "src/App.jsx", true, "1", Some(&css), &restored, None, element.as_ref(), "").unwrap_err()
+            plan(
+                "/nonexistent",
+                "src/App.jsx",
+                true,
+                "1",
+                Some(&css),
+                &restored,
+                None,
+                element.as_ref(),
+                "",
+            )
+            .unwrap_err()
         };
         let seen = |anchor: &str, matches: Value| {
             let mut m = Map::new();
@@ -723,17 +1020,37 @@ mod tests {
         let err = attempt(Some(seen("div.pricing-grid.featured", Value::Null)));
         assert!(err.contains("no anchor count"), "{err}");
         let err = attempt(Some(seen("div.pricing-grid.featured.open", json!(1))));
-        assert!(err.contains("div.pricing-grid.featured.open") && err.contains("cannot be verified"), "{err}");
+        assert!(
+            err.contains("div.pricing-grid.featured.open") && err.contains("cannot be verified"),
+            "{err}"
+        );
         // Siblings share the classes: the count says so.
         let err = attempt(Some(seen("div.featured.pricing-grid", json!(3))));
-        assert!(err.contains("div.pricing-grid.featured matches 3 elements"), "{err}");
+        assert!(
+            err.contains("div.pricing-grid.featured matches 3 elements"),
+            "{err}"
+        );
         // One match, the classes in the page's own order: the check passes
         // and the plan moves on to the stylesheet search.
         let err = attempt(Some(seen("div.featured.pricing-grid", json!(1))));
         assert!(err.contains("stylesheet"), "{err}");
         // An id anchor is compared as written.
-        let by_id = vec!["<section id=\"pricing\" className=\"pricing\">".to_string(), "</section>".to_string()];
-        let err = plan("/nonexistent", "src/App.jsx", true, "1", Some(&css), &by_id, None, Some(&seen("#pricing", json!(2))), "").unwrap_err();
+        let by_id = vec![
+            "<section id=\"pricing\" className=\"pricing\">".to_string(),
+            "</section>".to_string(),
+        ];
+        let err = plan(
+            "/nonexistent",
+            "src/App.jsx",
+            true,
+            "1",
+            Some(&css),
+            &by_id,
+            None,
+            Some(&seen("#pricing", json!(2))),
+            "",
+        )
+        .unwrap_err();
         assert!(err.contains("#pricing matches 2 elements"), "{err}");
     }
 
@@ -744,8 +1061,16 @@ mod tests {
         std::fs::create_dir_all(dir.join("src")).unwrap();
         std::fs::create_dir_all(dir.join("node_modules/x")).unwrap();
         std::fs::write(dir.join("src/reset.css"), "* { margin: 0 }").unwrap();
-        std::fs::write(dir.join("src/styles.css"), ".pricing-grid { display: grid }\n.pricing-card { padding: 1px }").unwrap();
-        std::fs::write(dir.join("node_modules/x/x.css"), ".pricing-grid { color: red }").unwrap();
+        std::fs::write(
+            dir.join("src/styles.css"),
+            ".pricing-grid { display: grid }\n.pricing-card { padding: 1px }",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("node_modules/x/x.css"),
+            ".pricing-grid { color: red }",
+        )
+        .unwrap();
         let cwd = dir.to_string_lossy().into_owned();
         let found = jsp::to_posix(&find_owning_stylesheet(&cwd, "div.pricing-grid").unwrap());
         assert!(found.ends_with("src/styles.css"), "{found}");

@@ -29,7 +29,10 @@ fn bright_glow_behind_copy_flags() {
     let css = format!(
         "{DARK} .glow {{ background-image: radial-gradient(circle, rgba(0,209,239,0.26), transparent 70%); }}"
     );
-    assert_eq!(glow_hits(&css, "<div class=\"glow\"><h2>Headline</h2></div>"), 1);
+    assert_eq!(
+        glow_hits(&css, "<div class=\"glow\"><h2>Headline</h2></div>"),
+        1
+    );
 }
 
 #[test]
@@ -37,7 +40,10 @@ fn faint_wash_on_its_own_ground_stays_silent() {
     let css = format!(
         "{DARK} .glow {{ background-image: radial-gradient(circle, rgba(26,189,226,0.10), transparent 70%); }}"
     );
-    assert_eq!(glow_hits(&css, "<div class=\"glow\"><h2>Headline</h2></div>"), 0);
+    assert_eq!(
+        glow_hits(&css, "<div class=\"glow\"><h2>Headline</h2></div>"),
+        0
+    );
 }
 
 #[test]
@@ -45,7 +51,10 @@ fn pastel_glow_on_a_white_surface_stays_silent() {
     let css = "body { background-color: #ffffff; } \
         .glow { width: 900px; height: 600px; \
         background-image: radial-gradient(circle, rgba(63,227,223,0.20), transparent 65%); }";
-    assert_eq!(glow_hits(css, "<div class=\"glow\"><h2>Headline</h2></div>"), 0);
+    assert_eq!(
+        glow_hits(css, "<div class=\"glow\"><h2>Headline</h2></div>"),
+        0
+    );
 }
 
 #[test]
@@ -53,7 +62,10 @@ fn element_opacity_scales_the_glow_away() {
     let css = format!(
         "{DARK} .glow {{ opacity: 0.35; background-image: radial-gradient(circle, rgba(0,209,239,0.38), transparent 70%); }}"
     );
-    assert_eq!(glow_hits(&css, "<div class=\"glow\"><h2>Headline</h2></div>"), 0);
+    assert_eq!(
+        glow_hits(&css, "<div class=\"glow\"><h2>Headline</h2></div>"),
+        0
+    );
 }
 
 #[test]
@@ -226,5 +238,8 @@ fn a_glow_reads_the_layers_beneath_it_in_its_own_value() {
     let css = format!(
         "{DARK} .glow {{ background-color: #0b0d13; background-image: radial-gradient(circle, rgba(63,227,223,0.20), transparent 65%), linear-gradient(180deg, #ecf4f8, #ffffff); }}"
     );
-    assert_eq!(glow_hits(&css, "<div class=\"glow\"><h2>Headline</h2></div>"), 0);
+    assert_eq!(
+        glow_hits(&css, "<div class=\"glow\"><h2>Headline</h2></div>"),
+        0
+    );
 }

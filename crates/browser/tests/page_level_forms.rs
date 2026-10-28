@@ -78,7 +78,9 @@ fn engine() -> Option<BrowserEngine> {
 /// `(rule, snippet)` for every finding of the five rules, sorted.
 fn scan(engine: &BrowserEngine, port: u16, fixture: &str) -> Vec<(String, String)> {
     let url = format!("http://127.0.0.1:{port}/{fixture}");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     let mut out: Vec<(String, String)> = findings
         .iter()
         .filter(|f| RULES.contains(&f.antipattern.as_str()))
@@ -128,7 +130,10 @@ fn each_declaration_reports_once_where_it_paints() {
         scan(&engine, port, "page-level-forms-dark.html"),
         pairs(&[
             ("dark-glow", "Zero-offset box-shadow glow (#22c55e)"),
-            ("radial-halo", "radial-gradient halo (#8fd8f2 → transparent) on dark page"),
+            (
+                "radial-halo",
+                "radial-gradient halo (#8fd8f2 → transparent) on dark page"
+            ),
         ])
     );
 }

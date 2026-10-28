@@ -66,7 +66,9 @@ fn scan(fixture: &str) -> Option<Vec<(String, String, String, bool)>> {
     let engine = BrowserEngine::new(env);
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/{fixture}");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     Some(
         findings
             .iter()
@@ -78,7 +80,12 @@ fn scan(fixture: &str) -> Option<Vec<(String, String, String, bool)>> {
                     .and_then(|s| s.as_str())
                     .unwrap_or("")
                     .to_string();
-                (f.snippet.clone(), selector, f.severity.clone(), f.advisory == Some(true))
+                (
+                    f.snippet.clone(),
+                    selector,
+                    f.severity.clone(),
+                    f.advisory == Some(true),
+                )
             })
             .collect(),
     )
@@ -90,7 +97,11 @@ fn by_selector<'a>(
     tail: &str,
 ) -> &'a (String, String, String, bool) {
     let hits: Vec<_> = findings.iter().filter(|f| f.1.ends_with(tail)).collect();
-    assert_eq!(hits.len(), 1, "expected one finding on {tail}, got {findings:#?}");
+    assert_eq!(
+        hits.len(),
+        1,
+        "expected one finding on {tail}, got {findings:#?}"
+    );
     hits[0]
 }
 
@@ -128,7 +139,10 @@ fn near_bar_ratios_are_advisory_on_every_pass() {
         assert_severity(f, advisory);
     }
     for readable in ["pass-body", "pass-link", "pass-large"] {
-        assert!(findings.iter().all(|f| !f.1.contains(readable)), "{findings:#?}");
+        assert!(
+            findings.iter().all(|f| !f.1.contains(readable)),
+            "{findings:#?}"
+        );
     }
 }
 
@@ -173,10 +187,21 @@ fn decorative_shapes_are_advisory_on_every_pass() {
     }
     // The svg avatar initial is measured by the pixel pass alone, and the
     // svg digit beside it keeps failing there.
-    let svg: Vec<_> = findings.iter().filter(|f| f.0.starts_with("pixel contrast")).collect();
-    let initial = svg.iter().find(|f| f.0.ends_with("\"S\"")).expect("the svg initial");
+    let svg: Vec<_> = findings
+        .iter()
+        .filter(|f| f.0.starts_with("pixel contrast"))
+        .collect();
+    let initial = svg
+        .iter()
+        .find(|f| f.0.ends_with("\"S\""))
+        .expect("the svg initial");
     assert_severity(initial, true);
-    let digit = svg.iter().find(|f| f.0.ends_with("\"7\"")).expect("the svg digit");
+    let digit = svg
+        .iter()
+        .find(|f| f.0.ends_with("\"7\""))
+        .expect("the svg digit");
     assert_severity(digit, false);
-    assert!(findings.iter().all(|f| !f.0.contains("#1d4ed8") && !f.1.contains("stamp-ok")));
+    assert!(findings
+        .iter()
+        .all(|f| !f.0.contains("#1d4ed8") && !f.1.contains("stamp-ok")));
 }

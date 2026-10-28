@@ -10,7 +10,7 @@ use regex::Regex;
 
 use crate::config::{match_configured_extension, ExtensionEntry};
 use crate::jsp;
-use crate::util::{re, read_text, ANY, D, WS};
+use crate::util::{re, read_text, ANY, WS};
 
 /// JS `SKIP_DIRS`.
 pub const SKIP_DIRS: &[&str] = &["node_modules", "dist", "build", "__pycache__"];
@@ -142,18 +142,18 @@ pub fn resolve_import(specifier: &str, from_dir: &str, file_set: &[String]) -> O
         return None;
     }
     let base = jsp::resolve(from_dir, &[specifier]);
-    if file_set.iter().any(|f| *f == base) {
+    if file_set.contains(&base) {
         return Some(base);
     }
     for ext in SCANNABLE_EXTENSIONS {
         let with_ext = format!("{base}{ext}");
-        if file_set.iter().any(|f| *f == with_ext) {
+        if file_set.contains(&with_ext) {
             return Some(with_ext);
         }
     }
     for ext in SCANNABLE_EXTENSIONS {
         let index_file = jsp::join(&[&base, &format!("index{ext}")]);
-        if file_set.iter().any(|f| *f == index_file) {
+        if file_set.contains(&index_file) {
             return Some(index_file);
         }
     }
@@ -569,7 +569,10 @@ mod tests {
         assert!(has_scannable_extension_with("A.HTML.ERB", &erb));
         assert!(!has_scannable_extension_with("notes.txt", &erb));
         assert!(uses_html_engine("/x/first.html.erb", &erb));
-        assert!(!uses_html_engine("/x/first.html", &[entry(".html", "text")]));
+        assert!(!uses_html_engine(
+            "/x/first.html",
+            &[entry(".html", "text")]
+        ));
         assert!(!uses_html_engine("/x/a.vue", &erb));
         assert!(uses_html_engine("/x/a.HTM", &[]));
     }
@@ -583,8 +586,14 @@ mod tests {
         let a = jsp::join(&[root, "a.tsx"]);
         let b_index = jsp::join(&[root, "b", "index.css"]);
         let files = vec![a.clone(), b_index.clone()];
-        assert_eq!(resolve_import("./a", root, &files).as_deref(), Some(a.as_str()));
-        assert_eq!(resolve_import("./b", root, &files).as_deref(), Some(b_index.as_str()));
+        assert_eq!(
+            resolve_import("./a", root, &files).as_deref(),
+            Some(a.as_str())
+        );
+        assert_eq!(
+            resolve_import("./b", root, &files).as_deref(),
+            Some(b_index.as_str())
+        );
         assert_eq!(resolve_import("react", root, &files), None);
     }
 }

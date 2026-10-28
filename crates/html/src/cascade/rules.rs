@@ -189,7 +189,11 @@ fn internal_border_style_expansion(prop: &str, value: &str) -> Vec<(String, Stri
     let style = tokens
         .iter()
         .find(|token| BORDER_STYLE_VALUE_RE.is_match(token))
-        .or_else(|| tokens.iter().find(|token| token.to_ascii_lowercase().contains("var(")));
+        .or_else(|| {
+            tokens
+                .iter()
+                .find(|token| token.to_ascii_lowercase().contains("var("))
+        });
     let Some(style) = style else {
         return Vec::new();
     };
@@ -295,8 +299,14 @@ mod place_alignment_tests {
     #[test]
     fn overflow_and_baseline_keywords_join_their_value() {
         assert_eq!(comps("safe center"), vec!["safe center"]);
-        assert_eq!(comps("unsafe end safe start"), vec!["unsafe end", "safe start"]);
-        assert_eq!(comps("first baseline center"), vec!["first baseline", "center"]);
+        assert_eq!(
+            comps("unsafe end safe start"),
+            vec!["unsafe end", "safe start"]
+        );
+        assert_eq!(
+            comps("first baseline center"),
+            vec!["first baseline", "center"]
+        );
         assert_eq!(comps("center start"), vec!["center", "start"]);
     }
 }
@@ -358,7 +368,10 @@ fn extra_specified_expansions(prop: &str, value: &str) -> Vec<Expanded> {
             match tokens.first() {
                 Some(align) => {
                     let justify = tokens.get(1).unwrap_or(align).clone();
-                    vec![("alignItems".into(), align.clone()), ("justifyItems".into(), justify)]
+                    vec![
+                        ("alignItems".into(), align.clone()),
+                        ("justifyItems".into(), justify),
+                    ]
                 }
                 None => Vec::new(),
             }
@@ -458,10 +471,12 @@ fn expand_border_radius_corners(prop: &str, value: &str) -> Vec<(String, String)
         .iter()
         .enumerate()
         .zip(vals)
-        .map(|((i, c), val)| match vertical.as_ref().and_then(|v| v.get(i)) {
-            Some(v) => (c.to_string(), format!("{val} {v}")),
-            None => (c.to_string(), val),
-        })
+        .map(
+            |((i, c), val)| match vertical.as_ref().and_then(|v| v.get(i)) {
+                Some(v) => (c.to_string(), format!("{val} {v}")),
+                None => (c.to_string(), val),
+            },
+        )
         .collect()
 }
 
@@ -678,7 +693,10 @@ mod border_radius_corner_tests {
     use super::*;
 
     fn corners(v: &str) -> Vec<String> {
-        expand_border_radius_corners("border-radius", v).into_iter().map(|(_, v)| v).collect()
+        expand_border_radius_corners("border-radius", v)
+            .into_iter()
+            .map(|(_, v)| v)
+            .collect()
     }
 
     /// review of #941: the vertical half of an elliptical shorthand reaches
@@ -686,7 +704,13 @@ mod border_radius_corner_tests {
     #[test]
     fn each_corner_carries_its_vertical_radius() {
         assert_eq!(corners("0 12px 12px 0"), vec!["0", "12px", "12px", "0"]);
-        assert_eq!(corners("0 12px 12px 0 / 0"), vec!["0 0", "12px 0", "12px 0", "0 0"]);
-        assert_eq!(corners("10px / 4px 0"), vec!["10px 4px", "10px 0", "10px 4px", "10px 0"]);
+        assert_eq!(
+            corners("0 12px 12px 0 / 0"),
+            vec!["0 0", "12px 0", "12px 0", "0 0"]
+        );
+        assert_eq!(
+            corners("10px / 4px 0"),
+            vec!["10px 4px", "10px 0", "10px 4px", "10px 0"]
+        );
     }
 }

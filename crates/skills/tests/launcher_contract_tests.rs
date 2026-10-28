@@ -22,7 +22,9 @@ fn launcher_file(name: &str) -> String {
 fn sh_launcher_asset_naming_matches_engine() {
     let sh = launcher_file("impeccable");
     // The composed URL is <base>/engine-v<version>/impeccable-<os>-<arch>[.exe].
-    assert!(sh.contains(&format!("IMPECCABLE_DOWNLOAD_BASE:-{DEFAULT_DOWNLOAD_BASE}")));
+    assert!(sh.contains(&format!(
+        "IMPECCABLE_DOWNLOAD_BASE:-{DEFAULT_DOWNLOAD_BASE}"
+    )));
     assert!(sh.contains(r#"asset="impeccable-$os-$arch""#));
     assert!(sh.contains(r#"url="$base/engine-v$version/$asset""#));
     // Windows-on-ARM fallback, same naming the engine computes.
@@ -160,7 +162,11 @@ fn sh_launcher_passes_skill_dir_to_the_env_bin() {
     std::fs::create_dir_all(&dir).unwrap();
     // A stub "engine binary" that just prints the skill dir it was handed.
     let stub = dir.join("stub");
-    std::fs::write(&stub, "#!/bin/sh\nprintf 'SKILL_DIR=%s\\n' \"${IMPECCABLE_SKILL_DIR:-UNSET}\"\n").unwrap();
+    std::fs::write(
+        &stub,
+        "#!/bin/sh\nprintf 'SKILL_DIR=%s\\n' \"${IMPECCABLE_SKILL_DIR:-UNSET}\"\n",
+    )
+    .unwrap();
     std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
     let out = std::process::Command::new("sh")
         .arg(&launcher)

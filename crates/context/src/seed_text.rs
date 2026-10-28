@@ -17,8 +17,8 @@ pub const RICHNESS: &str = "The CREATIVE SPARK is a complete visual system, not 
 
 pub const MODE_RULES_BLOCK: &str = "MODE RULES (@@MODE@@, from @@PATH@@). They govern this surface's directions and every comp you write or judge for it, the decision comps included; where shared guidance conflicts, these win.\nDIRECTIONS\n@@DIRECTIONS@@\nCOMPS\n@@COMPS@@";
 
-pub const MODE_RULES_UNAVAILABLE: &str = "MODE RULES unavailable: read @@PATH@@ before writing directions or comps.";
-
+pub const MODE_RULES_UNAVAILABLE: &str =
+    "MODE RULES unavailable: read @@PATH@@ before writing directions or comps.";
 
 pub const DEGRADED_HEADER: &str = "@@SCOPE_UPPER@@ CONCEPT SEED (key: @@KEY@@; mode: @@MODE_OR_UNSCOPED@@; source: degraded; rerun with --scope @@SCOPE@@@@MODE_FLAG@@ --from @@KEY@@@@REROLL_FLAG@@@@REGISTER_FLAG@@ --candidate-count @@CANDIDATECOUNT@@)";
 
@@ -98,7 +98,8 @@ pub const BUILD_PATH_MODE: &str = "- Build path: code-led. A surface in @@MODE@@
 
 pub const BUILD_PATH_NONE: &str = "- Build path: none recorded in .impeccable/config.json or .impeccable/config.local.json, so comp-led whenever image generation exists. Then put \"buildPath\": {\"value\": \"comp\", \"toggle\": true} in the payload; without image generation there is no toggle and the build is code-led. Never ask about the build path during the round; only when the ANSWER returns buildPathFlipped: true, offer once afterwards to keep the flipped value as the default.";
 
-pub const WAIT_AFTER_COMPS: &str = "After the last comp or sketch lands (at once when this round makes none),";
+pub const WAIT_AFTER_COMPS: &str =
+    "After the last comp or sketch lands (at once when this round makes none),";
 
 pub const WAIT_AFTER_SKETCHES: &str = "After the last sketch lands,";
 

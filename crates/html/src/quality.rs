@@ -15,9 +15,9 @@ use impeccable_core::checks::measures::{
 use impeccable_core::checks::rules::RuleHit;
 use impeccable_core::checks::text_context::FinePrint;
 use impeccable_core::checks::text_rules::{
-    font_weight_number, is_bold_title_leading, is_cjk_text, is_line_clamp,
-    is_under_ui_text_floor, justifies_without_word_spaces_text, tracking_is_crushed,
-    ALL_CAPS_LONG_RUN, JUSTIFY_NARROW_CHARS_PER_LINE, LEADING_CAPS_LABEL_MIN_RATIO, LEADING_DISPLAY_TYPE_PX,
+    font_weight_number, is_bold_title_leading, is_cjk_text, is_line_clamp, is_under_ui_text_floor,
+    justifies_without_word_spaces_text, tracking_is_crushed, ALL_CAPS_LONG_RUN,
+    JUSTIFY_NARROW_CHARS_PER_LINE, LEADING_CAPS_LABEL_MIN_RATIO, LEADING_DISPLAY_TYPE_PX,
     LEADING_HEADING_CONTEXT, NON_RENDERED_TAGS, QUALITY_TEXT_TAGS, SMALLPRINT_TEXT_FLOOR_PX,
     SR_ONLY_SELECTOR, UI_TEXT_FLOOR_PX,
 };
@@ -29,8 +29,9 @@ use regex::Regex;
 
 static WS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(&format!("{}+", js::WS)).expect("WS_RE"));
 // JS `/url\(/i` in checkQuality's buried-raster branch.
-static RASTER_URL_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(&format!(r"{}\(", impeccable_core::js::ci("url"))).expect("RASTER_URL_RE"));
+static RASTER_URL_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(&format!(r"{}\(", impeccable_core::js::ci("url"))).expect("RASTER_URL_RE")
+});
 static CLIP_RECT_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(&format!(r"rect\({}*0", js::WS)).expect("CLIP_RECT_RE"));
 static CLIP_INSET_RE: Lazy<Regex> = Lazy::new(|| {
@@ -79,9 +80,9 @@ pub fn resolve_font_size_px(el: &StaticElement<'_>) -> Option<f64> {
         } else if v.ends_with("rem") {
             px = num * 16.0;
         } else if v.ends_with("em") {
-            px = num * px;
+            px *= num;
         } else if v.ends_with('%') {
-            px = (num / 100.0) * px;
+            px *= num / 100.0;
         } else {
             px = num;
         }
@@ -269,7 +270,7 @@ fn hidden_by_closed_details(details: &StaticElement<'_>, child: &StaticElement<'
         .children()
         .into_iter()
         .find(|c| c.tag_lower() == "summary");
-    summary.map_or(true, |s| s.id() != child.id())
+    summary.is_none_or(|s| s.id() != child.id())
 }
 
 /// Markup a browser lays out nowhere, at any viewport: a `<template>`'s
@@ -355,7 +356,8 @@ fn is_in_control(el: &StaticElement<'_>) -> bool {
             let index = parse_float(js::trim(value));
             let focusable = !(index.is_finite() && index < 0.0);
             if focusable
-                && utf16_len(js::trim(&collapse_ws(&c.text_content()))) <= FOCUSABLE_CONTROL_MAX_CHARS
+                && utf16_len(js::trim(&collapse_ws(&c.text_content())))
+                    <= FOCUSABLE_CONTROL_MAX_CHARS
             {
                 return true;
             }
@@ -383,7 +385,7 @@ fn is_button_label(el: &StaticElement<'_>) -> bool {
         {
             return false;
         }
-        if c.get_attribute("class").is_some_and(|cls| names_button(cls)) {
+        if c.get_attribute("class").is_some_and(names_button) {
             return !crate::text_context::is_fine_print(el);
         }
         cur = c.parent_element();
@@ -404,9 +406,9 @@ fn has_furniture_class(el: StaticElement<'_>) -> bool {
         if c.tag_lower() == "html" {
             return false;
         }
-        if c.get_attribute("class").is_some_and(|cls| {
-            impeccable_core::checks::decorative_text::class_names_furniture(cls)
-        }) {
+        if c.get_attribute("class")
+            .is_some_and(impeccable_core::checks::decorative_text::class_names_furniture)
+        {
             return true;
         }
         cur = c.parent_element();
@@ -495,10 +497,7 @@ fn is_transparent_wrapper_static(el: &StaticElement<'_>, style: &StyleValues) ->
     // clipped, not inset. Only layout can clear those (pass-table-wrap).
     for key in ["overflow", "overflowX", "overflowY"] {
         let v = js::to_lower_case(js::trim(sv(style, key)));
-        if matches!(
-            v.as_str(),
-            "scroll" | "auto" | "hidden" | "clip"
-        ) {
+        if matches!(v.as_str(), "scroll" | "auto" | "hidden" | "clip") {
             return false;
         }
     }
@@ -586,9 +585,8 @@ fn insulates_side(
     let style = el.style();
     // A side this engine cannot resolve (an unresolved var(), or an em or %
     // length on an unknown font size) may well insulate, so it does.
-    let insulates = |key: &str| {
-        side_len(style, key, font_size).is_none_or(|v| v >= CHILD_INSULATE_THRESHOLD)
-    };
+    let insulates =
+        |key: &str| side_len(style, key, font_size).is_none_or(|v| v >= CHILD_INSULATE_THRESHOLD);
     if insulates(PAD_KEYS[s]) || (margins_count && insulates(MARGIN_KEYS[s])) {
         return true;
     }
@@ -639,8 +637,17 @@ fn insulates_side(
             // holds the margins inside, so they inset the reader's view.
             // A border of any colour or padding on the shell's side holds
             // them too (a transparent wrapper may carry either).
-            let shell_border = side_len(style, ["borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth"][s], font_size)
-                .is_none_or(|v| v > 0.0);
+            let shell_border = side_len(
+                style,
+                [
+                    "borderTopWidth",
+                    "borderRightWidth",
+                    "borderBottomWidth",
+                    "borderLeftWidth",
+                ][s],
+                font_size,
+            )
+            .is_none_or(|v| v > 0.0);
             let shell_pad = side_len(style, PAD_KEYS[s], font_size).is_none_or(|v| v > 0.0);
             // A float holds them as a flow-root does.
             let shell_stops = holds_child_margins_static(style) || shell_border || shell_pad;
@@ -711,7 +718,7 @@ pub fn check_quality(q: &QualityInput<'_, '_>) -> Vec<RuleHit> {
     // catches computed opacity on the element itself (both engines).
     {
         let op = parse_float(sv(style, "opacity"));
-        if op.is_finite() && op < 0.15 && op >= 0.0 {
+        if op.is_finite() && (0.0..0.15).contains(&op) {
             let bg = sv(style, "backgroundImage");
             if (tag == "img" || RASTER_URL_RE.is_match(bg))
                 && !impeccable_core::checks::measures::raster_source_is_svg(
@@ -729,7 +736,11 @@ pub fn check_quality(q: &QualityInput<'_, '_>) -> Vec<RuleHit> {
                     "buried-raster",
                     format!(
                         "{} at opacity {}{}",
-                        if tag == "img" { "<img>" } else { "raster background" },
+                        if tag == "img" {
+                            "<img>"
+                        } else {
+                            "raster background"
+                        },
                         number_to_string(op),
                         if label.is_empty() {
                             String::new()
@@ -825,7 +836,13 @@ pub fn check_quality(q: &QualityInput<'_, '_>) -> Vec<RuleHit> {
                 let holds_margins = holds_child_margins_static(style);
                 let mut children_insulate = [false; 4];
                 for s in 0..4 {
-                    let stops_collapse = (border_w[s] > 0.0 && bs(["borderTopStyle", "borderRightStyle", "borderBottomStyle", "borderLeftStyle"][s]))
+                    let stops_collapse = (border_w[s] > 0.0
+                        && bs([
+                            "borderTopStyle",
+                            "borderRightStyle",
+                            "borderBottomStyle",
+                            "borderLeftStyle",
+                        ][s]))
                         || pad[s].is_some_and(|v| v > 0.0)
                         || clips
                         || holds_margins;
@@ -924,7 +941,8 @@ pub fn check_quality(q: &QualityInput<'_, '_>) -> Vec<RuleHit> {
                 // monospace by the browser's default unless a face is set.
                 let family = sv(style, "fontFamily");
                 let is_code_run = el.closest("pre").is_some()
-                    && (family.is_empty() || impeccable_core::checks::text_rules::is_monospace_family(family));
+                    && (family.is_empty()
+                        || impeccable_core::checks::text_rules::is_monospace_family(family));
                 // Capitals have no descenders to crowd the line below
                 // (r13-t3), as the browser engine reads them. With no layout
                 // the lead-text exemption, which counts lines, is browser-only.
@@ -966,9 +984,9 @@ pub fn check_quality(q: &QualityInput<'_, '_>) -> Vec<RuleHit> {
     // Only a narrow column stretches word spaces far enough to open rivers,
     // and only in a script that justifies on word spaces at all.
     // An unresolved font size gives no measure to judge the column by.
-    if let Some(font_size) = font_size
-        .filter(|fs| q.has_direct_text && sv_opt(style, "textAlign") == Some("justify") && *fs > 0.0)
-    {
+    if let Some(font_size) = font_size.filter(|fs| {
+        q.has_direct_text && sv_opt(style, "textAlign") == Some("justify") && *fs > 0.0
+    }) {
         let hyphens = {
             let a = sv(style, "hyphens");
             if !a.is_empty() {
@@ -983,7 +1001,8 @@ pub fn check_quality(q: &QualityInput<'_, '_>) -> Vec<RuleHit> {
         let direct = el.direct_text();
         let narrow = declared_measure_px(el, font_size).is_some_and(|w| {
             let per_line = chars_per_line(w, font_size);
-            per_line <= JUSTIFY_NARROW_CHARS_PER_LINE && utf16_len(js::trim(&direct)) as f64 > per_line
+            per_line <= JUSTIFY_NARROW_CHARS_PER_LINE
+                && utf16_len(js::trim(&direct)) as f64 > per_line
         });
         if hyphens != "auto" && narrow && !justifies_without_word_spaces_text(&direct) {
             findings.push(RuleHit::new(
@@ -994,8 +1013,7 @@ pub fn check_quality(q: &QualityInput<'_, '_>) -> Vec<RuleHit> {
     }
 
     // --- Tiny body text ---
-    if let Some(font_size) =
-        font_size.filter(|fs| q.has_direct_text && text_len > 20 && *fs < 12.0)
+    if let Some(font_size) = font_size.filter(|fs| q.has_direct_text && text_len > 20 && *fs < 12.0)
     {
         let skip_tags = [
             "sub",
@@ -1020,7 +1038,10 @@ pub fn check_quality(q: &QualityInput<'_, '_>) -> Vec<RuleHit> {
             let fine_print = crate::text_context::fine_print(el);
             if fine_print != FinePrint::Exempt {
                 findings.push(advisory_if(
-                    RuleHit::new("tiny-text", format!("{}px body text", number_to_string(font_size))),
+                    RuleHit::new(
+                        "tiny-text",
+                        format!("{}px body text", number_to_string(font_size)),
+                    ),
                     fine_print == FinePrint::Advisory || crate::text_context::in_mock_context(el),
                 ));
             }
@@ -1049,8 +1070,8 @@ pub fn check_quality(q: &QualityInput<'_, '_>) -> Vec<RuleHit> {
             let is_exempt_context = el.closest(EXEMPT_CONTEXT).is_some();
             if !is_exempt_context && !is_visually_hidden(el, style) {
                 let is_interactive = is_in_control(el);
-                let is_furniture = el.closest(FURNITURE_ELEMENTS).is_some()
-                    || has_furniture_class(*el);
+                let is_furniture =
+                    el.closest(FURNITURE_ELEMENTS).is_some() || has_furniture_class(*el);
                 let is_smallprint = el.closest(SMALLPRINT).is_some();
                 let floor = if !is_interactive && is_smallprint {
                     SMALLPRINT_TEXT_FLOOR_PX
@@ -1098,7 +1119,10 @@ pub fn check_quality(q: &QualityInput<'_, '_>) -> Vec<RuleHit> {
         if own_len >= ALL_CAPS_LONG_RUN {
             findings.push(RuleHit::new(
                 "all-caps-body",
-                format!("text-transform: uppercase on {} chars of body text", own_len),
+                format!(
+                    "text-transform: uppercase on {} chars of body text",
+                    own_len
+                ),
             ));
         }
     }
@@ -1120,19 +1144,27 @@ pub fn check_quality(q: &QualityInput<'_, '_>) -> Vec<RuleHit> {
                     let own = collapse_ws(js::trim(&el.text_content()));
                     let every_letter_caps = utf16_len(&own) < ALL_CAPS_LONG_RUN
                         && is_capitalized_run(&own)
-                        && own.chars().filter(|c| c.is_alphabetic()).all(|c| c.is_uppercase());
+                        && own
+                            .chars()
+                            .filter(|c| c.is_alphabetic())
+                            .all(|c| c.is_uppercase());
                     let lowered = sv_opt(style, "textTransform") == Some("lowercase");
                     let caps_label = sv_opt(style, "textTransform") == Some("uppercase")
                         || (!lowered
                             && (every_letter_caps
-                                || (text_len <= TRACKED_LABEL_MAX_CHARS && is_capitalized_run(&own))));
+                                || (text_len <= TRACKED_LABEL_MAX_CHARS
+                                    && is_capitalized_run(&own))));
                     // CJK text takes open tracking by convention, as the
                     // browser engine and extreme-negative-tracking read it.
                     // The script is read from the element's own text, not a
                     // child's; text with no letters of its own is read whole.
                     let cjk = {
                         let direct = collapse_ws(js::trim(&el.direct_text()));
-                        let sample = if direct.chars().any(char::is_alphabetic) { &direct } else { &own };
+                        let sample = if direct.chars().any(char::is_alphabetic) {
+                            &direct
+                        } else {
+                            &own
+                        };
                         impeccable_core::checks::text_rules::is_cjk_text(sample)
                     };
                     if !caps_label && !cjk {

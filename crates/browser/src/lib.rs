@@ -37,11 +37,11 @@
 pub mod attach;
 pub mod cdp;
 pub mod consent;
-pub mod overlays;
-pub mod response_capture;
-pub mod html_snapshot;
 pub mod discovery;
 pub mod fullpage;
+pub mod html_snapshot;
+pub mod overlays;
+pub mod response_capture;
 pub mod screenshot_contrast;
 pub mod snapshot_engine;
 pub mod validity;
@@ -50,8 +50,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use impeccable_core::browser::driver::{collect_browser_findings, serialize_findings};
 use impeccable_core::browser::dom::{Dom, ElId};
+use impeccable_core::browser::driver::{collect_browser_findings, serialize_findings};
 use impeccable_core::browser::page_checks::measure_hidden_text_dom;
 use impeccable_core::browser::snapshot::{Facts, SnapshotDom};
 use impeccable_core::checks::measures::{check_content_hidden_at_rest, ContentHiddenInput};
@@ -63,8 +63,8 @@ use serde_json::{json, Map, Value};
 
 use cdp::{Browser, CdpError, Page, Viewport};
 use consent::ConsentReport;
-use overlays::OverlayReport;
 pub use fullpage::ElementShot;
+use overlays::OverlayReport;
 use validity::{DocumentResponse, PageProbe, PageValidity};
 
 /// puppeteer's default `page.goto` timeout the JS passes explicitly.
@@ -680,7 +680,10 @@ pub fn detect_url_evidence(
         &mut overlays,
     );
     evidence.capture_notes = capture_notes;
-    let blocked = evidence.validity.as_ref().is_some_and(PageValidity::is_blocked);
+    let blocked = evidence
+        .validity
+        .as_ref()
+        .is_some_and(PageValidity::is_blocked);
     if !options.keep_consent_banners && !blocked {
         evidence.consent = Some(consent);
     }
@@ -688,7 +691,8 @@ pub fn detect_url_evidence(
         evidence.overlays = Some(overlays);
     }
     let results = results?;
-    let (findings, origins, anchors) = results_to_findings_with(&url, results, options.design_system.as_deref())?;
+    let (findings, origins, anchors) =
+        results_to_findings_with(&url, results, options.design_system.as_deref())?;
     evidence.origins = origins;
     evidence.page_anchors = anchors;
     Ok((findings, evidence))
@@ -747,10 +751,13 @@ pub fn replay_url_scan(
     // A recording made before the scroll probe answers none of its
     // questions, and those boxes count as hidden, as they did when recorded.
     let _ = dom.take_scroll_probes();
-    let capture_notes: Vec<String> =
-        unstarted_slider_note(url, measured.unstarted_slider_chars, &measured.unstarted_slider_samples)
-            .into_iter()
-            .collect();
+    let capture_notes: Vec<String> = unstarted_slider_note(
+        url,
+        measured.unstarted_slider_chars,
+        &measured.unstarted_slider_samples,
+    )
+    .into_iter()
+    .collect();
     results.extend(content_hidden_results(
         measured.total_chars,
         measured.hidden_chars,
@@ -791,7 +798,9 @@ fn results_to_findings_with(
     let mut origins = Vec::with_capacity(results.len());
     let mut anchors = Vec::with_capacity(results.len());
     for r in results {
-        if purple_off && impeccable_core::checks::rules::is_purple_palette_finding(&r.id, &r.snippet) {
+        if purple_off
+            && impeccable_core::checks::rules::is_purple_palette_finding(&r.id, &r.snippet)
+        {
             continue;
         }
         let Some(mut item) = try_finding(&r.id, url, &r.snippet, 0.0) else {
@@ -805,10 +814,12 @@ fn results_to_findings_with(
                 .insert("ignoreValue".into(), Value::String(r.ignore_value));
         }
         if let Some(selector) = r.selector {
-            item.extras.insert("selector".into(), Value::String(selector));
+            item.extras
+                .insert("selector".into(), Value::String(selector));
         }
         if let Some(vendor) = r.third_party {
-            item.extras.insert("thirdParty".into(), Value::String(vendor));
+            item.extras
+                .insert("thirdParty".into(), Value::String(vendor));
         }
         if !r.severity.is_empty() && r.severity != item.severity {
             item.severity = r.severity;
@@ -858,7 +869,10 @@ fn results_from_groups(groups: &[Value]) -> Vec<RawResult> {
 /// visual-contrast pass's to report, and a replay leaves it out. A handed
 /// verdict whose ratio was taken against a ground a picture covers measured
 /// nothing ([`impeccable_core::browser::visual::handed_over_unmeasured`]).
-fn handed_over(dom: &SnapshotDom, groups: &[impeccable_core::browser::FindingGroup]) -> Vec<Handed> {
+fn handed_over(
+    dom: &SnapshotDom,
+    groups: &[impeccable_core::browser::FindingGroup],
+) -> Vec<Handed> {
     let mut out = Vec::new();
     for g in groups {
         let mut routed: Option<bool> = None;
@@ -869,7 +883,9 @@ fn handed_over(dom: &SnapshotDom, groups: &[impeccable_core::browser::FindingGro
                 });
             out.push(if handed {
                 Handed::Yes {
-                    unmeasured: impeccable_core::browser::visual::handed_over_unmeasured(dom, g.el, &f.detail),
+                    unmeasured: impeccable_core::browser::visual::handed_over_unmeasured(
+                        dom, g.el, &f.detail,
+                    ),
                 }
             } else {
                 Handed::No
@@ -885,7 +901,9 @@ enum Handed {
     No,
     /// Handed to the pixels; `unmeasured` where its ratio measured nothing a
     /// reader sees, so it stands only on a pixel verdict.
-    Yes { unmeasured: bool },
+    Yes {
+        unmeasured: bool,
+    },
 }
 
 /// Move the verdicts [`handed_over`] marks to [`origin::VISUAL_CONTRAST`],
@@ -955,7 +973,10 @@ fn unstarted_slider_note(url: &str, chars: f64, samples: &[String]) -> Option<St
     if chars < UNSTARTED_SLIDER_NOTE_CHARS {
         return None;
     }
-    let sample = samples.first().map(|s| format!(", e.g. \"{s}\"")).unwrap_or_default();
+    let sample = samples
+        .first()
+        .map(|s| format!(", e.g. \"{s}\""))
+        .unwrap_or_default();
     Some(format!(
         "Capture note: {} chars of text on {url} sit in sliders that never started (every slide hidden{sample}), so content-hidden-at-rest left them out. The page may not have finished loading; scan it again to check that text.",
         impeccable_core::js::number_to_string(chars)
@@ -1001,7 +1022,17 @@ fn scan_on_browser(
     let page = step(profile, "load", "new-page", url, || browser.new_page()).map_err(cdp_err);
     match page {
         Ok(page) => scan_page(
-            page, url, credentials, options, wait_until, settle_ms, viewport, profile, evidence, consent, notes,
+            page,
+            url,
+            credentials,
+            options,
+            wait_until,
+            settle_ms,
+            viewport,
+            profile,
+            evidence,
+            consent,
+            notes,
             overlays,
         ),
         Err(e) => Err(e),
@@ -1090,7 +1121,10 @@ fn late_consent_pass(page: &mut Page<'_>, consent: &mut ConsentReport) -> LateCo
     // theirs ([`consent::STAMP_IS_OURS_JS`]): a manager that has since set its
     // own display (closing its dialog) keeps what it set. The probe only runs
     // when a manager's root is in the page, since it is a wall check.
-    let roots: Vec<&str> = consent::CONSENT_MANAGERS.iter().flat_map(|m| m.roots.iter().copied()).collect();
+    let roots: Vec<&str> = consent::CONSENT_MANAGERS
+        .iter()
+        .flat_map(|m| m.roots.iter().copied())
+        .collect();
     let expr = format!(
         "(() => {{ const roots = {roots}; let any = false; for (const sel of roots) {{ try {{ if (document.querySelector(sel)) {{ any = true; break; }} }} catch (e) {{}} }} let probe = null; if (any) {{ try {{ probe = (() => {{ const s = document.getElementById({id}); const marked = Array.from(document.querySelectorAll('[' + {mark} + ']')).filter({ours}); const put = marked.map(el => {{ let prev = ['', '']; try {{ prev = JSON.parse(el.getAttribute({mark})); }} catch (e) {{}} if (prev[0]) el.style.setProperty('display', prev[0], prev[1]); else el.style.removeProperty('display'); return el; }}); if (s) s.disabled = true; try {{ return {probe}; }} finally {{ if (s) s.disabled = false; for (const el of put) el.style.setProperty('display', 'none', 'important'); }} }})(); }} catch (e) {{ probe = null; }} }} const hide = {hide}; return {{ probe, hide }}; }})()",
         roots = serde_json::json!(roots),
@@ -1102,15 +1136,32 @@ fn late_consent_pass(page: &mut Page<'_>, consent: &mut ConsentReport) -> LateCo
     );
     let raw = match page.evaluate_value(&expr) {
         Ok(v) => v,
-        Err(_) => return LateConsent::Clear { changed: hide_consent_banners(page, consent) },
+        Err(_) => {
+            return LateConsent::Clear {
+                changed: hide_consent_banners(page, consent),
+            }
+        }
     };
     let hide = raw.get("hide").cloned().unwrap_or(Value::Null);
     consent.merge(&hide);
-    let changed = hide.get("changed").and_then(Value::as_bool).unwrap_or(false);
-    if let Some(probe) = raw.get("probe").filter(|p| p.is_object()).map(PageProbe::from_value) {
+    let changed = hide
+        .get("changed")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if let Some(probe) = raw
+        .get("probe")
+        .filter(|p| p.is_object())
+        .map(PageProbe::from_value)
+    {
         if !probe.consent.is_empty() {
             let verdict = validity::classify_with(None, &probe, true);
-            if matches!(verdict, PageValidity::Blocked { kind: validity::BlockKind::ConsentWall, .. }) {
+            if matches!(
+                verdict,
+                PageValidity::Blocked {
+                    kind: validity::BlockKind::ConsentWall,
+                    ..
+                }
+            ) {
                 return LateConsent::Wall(probe, verdict);
             }
         }
@@ -1173,7 +1224,9 @@ fn scan_page_inner(
             std::thread::sleep(Duration::from_millis(settle_ms))
         });
     }
-    scan_loaded(page, url, options, viewport, profile, evidence, consent, notes, overlays)
+    scan_loaded(
+        page, url, options, viewport, profile, evidence, consent, notes, overlays,
+    )
 }
 
 /// Every pass over a page that is already showing what is to be scanned: a
@@ -1195,8 +1248,10 @@ fn scan_loaded(
     // is a consent wall, unless the scan keeps the banners: then the banner
     // is what the caller asked to read.
     let hide_consent = !options.keep_consent_banners;
-    let (response, probe, verdict) =
-        step(profile, "load", "validity", url, || check_validity(page, hide_consent)).map_err(cdp_err)?;
+    let (response, probe, verdict) = step(profile, "load", "validity", url, || {
+        check_validity(page, hide_consent)
+    })
+    .map_err(cdp_err)?;
     let blocked = verdict.error_message();
     if let Some((ev, _)) = evidence.as_mut() {
         ev.response = response;
@@ -1221,14 +1276,20 @@ fn scan_loaded(
     // pass is best-effort: a failed one leaves the banner showing, the way a
     // scan with `--no-consent-hiding` reads the page.
     if hide_consent {
-        step(profile, "load", "hide-consent", url, || hide_consent_banners(page, consent));
+        step(profile, "load", "hide-consent", url, || {
+            hide_consent_banners(page, consent)
+        });
     }
     // Then tours and preloaders ([`overlays`]), the same way. A preloader
     // still covering the page gets a bounded wait to go on its own first.
     let hide_overlays = !options.keep_overlays;
     if hide_overlays {
-        overlays.waited_ms = step(profile, "load", "wait-preloader", url, || wait_for_preloaders(page));
-        step(profile, "load", "hide-overlays", url, || hide_page_overlays(page, overlays));
+        overlays.waited_ms = step(profile, "load", "wait-preloader", url, || {
+            wait_for_preloaders(page)
+        });
+        step(profile, "load", "hide-overlays", url, || {
+            hide_page_overlays(page, overlays)
+        });
     }
 
     // Inject the plain-JS snapshot producer (no WebAssembly runs in the page).
@@ -1256,13 +1317,17 @@ fn scan_loaded(
     // first: hiding a wall would leave nothing to read and report it clean.
     if hide_consent {
         if let LateConsent::Wall(probe, verdict) =
-            step(profile, "scan", "hide-consent", url, || late_consent_pass(page, consent))
+            step(profile, "scan", "hide-consent", url, || {
+                late_consent_pass(page, consent)
+            })
         {
             return refuse_late_wall(page, evidence, probe, verdict);
         }
     }
     if hide_overlays {
-        step(profile, "scan", "hide-overlays", url, || hide_page_overlays(page, overlays));
+        step(profile, "scan", "hide-overlays", url, || {
+            hide_page_overlays(page, overlays)
+        });
     }
 
     // The one capture every pass below reads: the rule pass, the hidden-text
@@ -1275,12 +1340,18 @@ fn scan_loaded(
     // captured again, so the capture, the live hit tests and the pixel reads
     // all see the page without it.
     let consent_changed = hide_consent
-        && match step(profile, "scan", "hide-consent", url, || late_consent_pass(page, consent)) {
-            LateConsent::Wall(probe, verdict) => return refuse_late_wall(page, evidence, probe, verdict),
+        && match step(profile, "scan", "hide-consent", url, || {
+            late_consent_pass(page, consent)
+        }) {
+            LateConsent::Wall(probe, verdict) => {
+                return refuse_late_wall(page, evidence, probe, verdict)
+            }
             LateConsent::Clear { changed } => changed,
         };
-    let overlays_changed =
-        hide_overlays && step(profile, "scan", "hide-overlays", url, || hide_page_overlays(page, overlays));
+    let overlays_changed = hide_overlays
+        && step(profile, "scan", "hide-overlays", url, || {
+            hide_page_overlays(page, overlays)
+        });
     if consent_changed || overlays_changed {
         base_json = snapshot_engine::capture_snapshot_json(page).map_err(cdp_err)?;
     }
@@ -1320,12 +1391,16 @@ fn scan_loaded(
         // One serialized group per finding group, one result per finding, in
         // order. Anything else leaves the elements unset, and the evidence
         // resolves those selectors as before.
-        let counts = collected.groups.iter().map(|g| g.findings.len()).sum::<usize>();
+        let counts = collected
+            .groups
+            .iter()
+            .map(|g| g.findings.len())
+            .sum::<usize>();
         if counts == results.len() {
             let els = collected
                 .groups
                 .iter()
-                .flat_map(|g| std::iter::repeat(g.el).take(g.findings.len()));
+                .flat_map(|g| std::iter::repeat_n(g.el, g.findings.len()));
             for (r, el) in results.iter_mut().zip(els) {
                 r.scan_el = Some(el);
             }
@@ -1361,10 +1436,15 @@ fn scan_loaded(
                 snapshot_engine::probe_shown_on_scroll(page, &probes)
             })
             .map_err(cdp_err)?;
-            let answered = Facts { shown_on_scroll: answers, ..Facts::default() };
+            let answered = Facts {
+                shown_on_scroll: answers,
+                ..Facts::default()
+            };
             base.add_facts(&answered);
             if let Some(record) = facts.as_deref_mut() {
-                record.shown_on_scroll.extend(answered.shown_on_scroll.iter().copied());
+                record
+                    .shown_on_scroll
+                    .extend(answered.shown_on_scroll.iter().copied());
             }
             measured = snapshot_engine::resolve_needs_recording(
                 &base,
@@ -1376,7 +1456,10 @@ fn scan_loaded(
         }
         let _ = base.take_scroll_probes();
         if measured.unstarted_slider_chars > 0.0 {
-            unstarted = Some((measured.unstarted_slider_chars, measured.unstarted_slider_samples.clone()));
+            unstarted = Some((
+                measured.unstarted_slider_chars,
+                measured.unstarted_slider_samples.clone(),
+            ));
         }
         Ok::<_, EngineError>(content_hidden_results(
             measured.total_chars,
@@ -1393,21 +1476,29 @@ fn scan_loaded(
     if probed {
         if hide_consent {
             if let LateConsent::Wall(probe, verdict) =
-                step(profile, "scan", "hide-consent", url, || late_consent_pass(page, consent))
+                step(profile, "scan", "hide-consent", url, || {
+                    late_consent_pass(page, consent)
+                })
             {
                 return refuse_late_wall(page, evidence, probe, verdict);
             }
         }
         if hide_overlays {
-            step(profile, "scan", "hide-overlays", url, || hide_page_overlays(page, overlays));
+            step(profile, "scan", "hide-overlays", url, || {
+                hide_page_overlays(page, overlays)
+            });
         }
     }
-    if let Some(note) = unstarted.and_then(|(chars, samples)| unstarted_slider_note(url, chars, &samples)) {
+    if let Some(note) =
+        unstarted.and_then(|(chars, samples)| unstarted_slider_note(url, chars, &samples))
+    {
         notes.push(note);
     }
 
     results.extend(capped_script_errors(
-        page.page_errors().iter().map(|e| (e.message.as_str(), e.source.as_deref())),
+        page.page_errors()
+            .iter()
+            .map(|e| (e.message.as_str(), e.source.as_deref())),
     ));
 
     let analyses = step(profile, "visual-contrast", "browser-analyze", url, || {
@@ -1431,8 +1522,15 @@ fn scan_loaded(
             .ok()
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-    let (mut visual, superseded, stalled) =
-        run_visual_contrast_fallback(page, &analyses, &serialized_groups, viewport, profile, url, pixels_off)?;
+    let (mut visual, superseded, stalled) = run_visual_contrast_fallback(
+        page,
+        &analyses,
+        &serialized_groups,
+        viewport,
+        profile,
+        url,
+        pixels_off,
+    )?;
     if pixels_off {
         notes.push(format!(
             "Capture note: {url} was hidden (minimized, or a background tab or window), so the pixel pass read nothing there. Bring it on screen, focused or not, and scan again for those contrast verdicts."
@@ -1450,7 +1548,10 @@ fn scan_loaded(
     }
     if evidence.is_some() {
         for r in visual.iter_mut() {
-            r.scan_el = r.selector.as_deref().and_then(|s| visual_scan_element(&base, s, &analyses));
+            r.scan_el = r
+                .selector
+                .as_deref()
+                .and_then(|s| visual_scan_element(&base, s, &analyses));
         }
     }
     results.extend(visual);
@@ -1482,13 +1583,17 @@ fn scan_loaded(
         let anchors: Vec<Option<ElId>> = results
             .iter()
             .map(|r| {
-                let page_level = matches!(r.selector.as_deref(), Some("body") | Some("html") | None);
+                let page_level =
+                    matches!(r.selector.as_deref(), Some("body") | Some("html") | None);
                 (page_level && r.origin == origin::SCAN)
-                    .then(|| impeccable_core::browser::driver::page_form_anchor(&base, &r.id, &r.snippet))
+                    .then(|| {
+                        impeccable_core::browser::driver::page_form_anchor(&base, &r.id, &r.snippet)
+                    })
                     .flatten()
             })
             .collect();
-        let measured = capture_post_scan(page, ev, request, &selectors, &identities, &nodes, &anchors);
+        let measured =
+            capture_post_scan(page, ev, request, &selectors, &identities, &nodes, &anchors);
         for (r, anchor) in results.iter_mut().zip(measured) {
             r.anchor = anchor;
         }
@@ -1533,7 +1638,9 @@ const SCRIPT_ERROR_CAP: usize = 3;
 /// take the slots a first-party error needs: three failing ad scripts, or a
 /// hydration chain, ahead of a broken app bundle still report the bundle as
 /// an error.
-fn capped_script_errors<'a>(errors: impl IntoIterator<Item = (&'a str, Option<&'a str>)>) -> Vec<RawResult> {
+fn capped_script_errors<'a>(
+    errors: impl IntoIterator<Item = (&'a str, Option<&'a str>)>,
+) -> Vec<RawResult> {
     let (mut counted, mut ad_tech, mut hydration) = (0usize, 0usize, 0usize);
     let mut out = Vec::new();
     for (message, source) in errors {
@@ -1578,7 +1685,8 @@ fn script_error_result(message: &str, source: Option<&str>) -> RawResult {
                 impeccable_core::third_party::tag_detail(&snippet, vendor),
             )
         },
-        None if impeccable_core::script_errors::react_recoverable_hydration_error(message).is_some()
+        None if impeccable_core::script_errors::react_recoverable_hydration_error(message)
+            .is_some()
             || impeccable_core::script_errors::media_play_interrupted(message) =>
         {
             RawResult {
@@ -1598,8 +1706,12 @@ fn tag_widget_vendor(dom: &SnapshotDom, r: &mut RawResult) {
     if r.third_party.is_some() {
         return;
     }
-    let Some(selector) = r.selector.as_deref() else { return };
-    let Ok(Some(el)) = dom.query_one(None, selector) else { return };
+    let Some(selector) = r.selector.as_deref() else {
+        return;
+    };
+    let Ok(Some(el)) = dom.query_one(None, selector) else {
+        return;
+    };
     if let Some(vendor) = impeccable_core::third_party::widget_vendor(dom, el) {
         r.snippet = impeccable_core::third_party::tag_detail(&r.snippet, vendor);
         r.third_party = Some(vendor.to_string());
@@ -1620,7 +1732,9 @@ fn scan_identities(dom: &SnapshotDom, results: &[RawResult]) -> Map<String, Valu
     let mut out = Map::new();
     let mut seen: Vec<&str> = Vec::new();
     for r in results {
-        let Some(selector) = r.selector.as_deref() else { continue };
+        let Some(selector) = r.selector.as_deref() else {
+            continue;
+        };
         if seen.contains(&selector) {
             continue;
         }
@@ -1630,7 +1744,9 @@ fn scan_identities(dom: &SnapshotDom, results: &[RawResult]) -> Map<String, Valu
             continue;
         }
         let Some(el) = r.scan_el else { continue };
-        let Ok(matches) = dom.query_all(None, selector) else { continue };
+        let Ok(matches) = dom.query_all(None, selector) else {
+            continue;
+        };
         if matches.len() < 2 {
             continue;
         }
@@ -1658,13 +1774,18 @@ fn scan_nodes(dom: &SnapshotDom, results: &[RawResult]) -> Map<String, Value> {
     let mut out = Map::new();
     let (sx, sy) = (dom.scroll_x(), dom.scroll_y());
     for r in results {
-        let Some(selector) = r.selector.as_deref() else { continue };
+        let Some(selector) = r.selector.as_deref() else {
+            continue;
+        };
         if out.contains_key(selector) {
             continue;
         }
         if let Some(el) = r.scan_el {
             let b = dom.rect(el);
-            out.insert(selector.to_string(), json!([el, b.left + sx, b.top + sy, b.width, b.height]));
+            out.insert(
+                selector.to_string(),
+                json!([el, b.left + sx, b.top + sy, b.width, b.height]),
+            );
         }
     }
     out
@@ -1707,7 +1828,11 @@ fn visual_scan_element(dom: &SnapshotDom, selector: &str, analyses: &[Value]) ->
         let clip = analysis.get("clip")?;
         let num = |k: &str| clip.get(k).and_then(Value::as_f64);
         let want = [num("x")?, num("y")?, num("width")?, num("height")?];
-        let hits: Vec<ElId> = matches.iter().copied().filter(|el| clip_of(*el) == want).collect();
+        let hits: Vec<ElId> = matches
+            .iter()
+            .copied()
+            .filter(|el| clip_of(*el) == want)
+            .collect();
         match (hits.as_slice(), found) {
             ([el], None) => found = Some(*el),
             ([el], Some(f)) if *el == f => {}
@@ -1742,7 +1867,10 @@ fn capture_post_scan(
 ) -> Vec<Option<Value>> {
     let mut anchored: Vec<Option<Value>> = vec![None; anchors.len()];
     if !selectors.is_empty() || anchors.iter().any(Option::is_some) {
-        let anchor_ids: Vec<Value> = anchors.iter().map(|a| a.map_or(Value::Null, |id| json!(id))).collect();
+        let anchor_ids: Vec<Value> = anchors
+            .iter()
+            .map(|a| a.map_or(Value::Null, |id| json!(id)))
+            .collect();
         let expr = format!(
             r#"(() => {{
   const props = ['display', 'position', 'font-family', 'font-size', 'font-weight', 'font-style', 'line-height', 'letter-spacing', 'text-transform', 'text-align', 'color', 'background-color', 'background-image', 'border', 'border-radius', 'box-shadow', 'padding', 'margin', 'width', 'height', 'max-width', 'opacity'];
@@ -1807,7 +1935,12 @@ fn capture_post_scan(
             let strs = |k: &str| -> Vec<String> {
                 v.get(k)
                     .and_then(Value::as_array)
-                    .map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(Value::as_str)
+                            .map(String::from)
+                            .collect()
+                    })
                     .unwrap_or_default()
             };
             ev.transient = strs("missing");
@@ -1890,19 +2023,33 @@ fn remeasure_drifted(
             nodes = Value::Object(nodes.clone()),
             sels = json!(drifted),
         );
-        let Ok(v) = page.evaluate_value(&expr) else { break };
+        let Ok(v) = page.evaluate_value(&expr) else {
+            break;
+        };
         if let Some(Value::Object(rects)) = v.get("rects") {
             for (selector, rect) in rects {
                 ev.element_rects.insert(selector.clone(), rect.clone());
             }
         }
-        for selector in v.get("back").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str) {
+        for selector in v
+            .get("back")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+        {
             drifted.retain(|s| s != selector);
         }
         // One that left the page while it was away has no box in the
         // screenshot that follows: its earlier rect and details go, and it
         // is transient like one the first measure did not find.
-        for selector in v.get("gone").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str) {
+        for selector in v
+            .get("gone")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+        {
             drifted.retain(|s| s != selector);
             ev.element_rects.remove(selector);
             ev.element_details.remove(selector);
@@ -1912,10 +2059,14 @@ fn remeasure_drifted(
         }
     }
     for selector in drifted {
-        let scan = nodes.get(&selector).and_then(Value::as_array).map(|n| Value::Array(n[1..].to_vec()));
+        let scan = nodes
+            .get(&selector)
+            .and_then(Value::as_array)
+            .map(|n| Value::Array(n[1..].to_vec()));
         let measured = ev.element_rects.get(&selector).cloned();
         if let (Some(scan), Some(measured)) = (scan, measured) {
-            ev.element_drift.insert(selector, json!({ "scan": scan, "measured": measured }));
+            ev.element_drift
+                .insert(selector, json!({ "scan": scan, "measured": measured }));
         }
     }
 }
@@ -1958,16 +2109,26 @@ fn wait_for_preloaders(page: &mut Page<'_>) -> u64 {
     let mut waited = false;
     loop {
         let (covering, intro) = match page.evaluate_value(&js) {
-            Ok(Value::Array(a)) => {
-                (!a.is_empty(), a.iter().any(|v| v.as_str().is_some_and(|s| s.starts_with("intro "))))
-            }
+            Ok(Value::Array(a)) => (
+                !a.is_empty(),
+                a.iter()
+                    .any(|v| v.as_str().is_some_and(|s| s.starts_with("intro "))),
+            ),
             _ => (false, false),
         };
         // An intro gets longer than a preloader: it counts to its end on a
         // timer of its own, and the page under it may start on that end.
-        let budget = Duration::from_millis(if intro { overlays::INTRO_WAIT_MS } else { overlays::PRELOADER_WAIT_MS });
+        let budget = Duration::from_millis(if intro {
+            overlays::INTRO_WAIT_MS
+        } else {
+            overlays::PRELOADER_WAIT_MS
+        });
         if !covering || started.elapsed() >= budget {
-            return if waited { started.elapsed().as_millis() as u64 } else { 0 };
+            return if waited {
+                started.elapsed().as_millis() as u64
+            } else {
+                0
+            };
         }
         std::thread::sleep(Duration::from_millis(overlays::PRELOADER_POLL_MS));
         waited = true;
@@ -2061,18 +2222,28 @@ fn analysis_findings(
         .filter(|r| {
             let sel = r.get("selector").and_then(Value::as_str);
             truthy(r.get("finding"))
-                && (is_routed(r) || !existing_low_contrast.iter().any(|s| Some(s.as_str()) == sel))
+                && (is_routed(r)
+                    || !existing_low_contrast
+                        .iter()
+                        .any(|s| Some(s.as_str()) == sel))
         })
         .filter_map(|r| r.get("finding").map(|f| (f, selector_of(r))))
         .map(|(f, selector)| RawResult {
             selector,
             severity: js_str(f.get("severity")),
-            ..RawResult::new(origin::VISUAL_CONTRAST, js_str(f.get("id")), js_str(f.get("snippet")))
+            ..RawResult::new(
+                origin::VISUAL_CONTRAST,
+                js_str(f.get("id")),
+                js_str(f.get("snippet")),
+            )
         })
         .collect();
     let mut superseded: Vec<CandidateKey> = Vec::new();
     for r in browser_analyses {
-        let resolved = matches!(r.get("status").and_then(Value::as_str), Some("fail") | Some("pass"));
+        let resolved = matches!(
+            r.get("status").and_then(Value::as_str),
+            Some("fail") | Some("pass")
+        );
         if let Some(key) = CandidateKey::of(r).filter(|_| resolved && is_routed(r)) {
             if !superseded.contains(&key) {
                 superseded.push(key);
@@ -2159,7 +2330,11 @@ fn run_visual_contrast_fallback(
         .collect();
     // Where a clip's x 0 sits: the left edge of a right-to-left page's
     // overflow, asked once for every candidate.
-    let origin_x = if filtered.is_empty() { 0.0 } else { screenshot_contrast::scroll_origin_x(page) };
+    let origin_x = if filtered.is_empty() {
+        0.0
+    } else {
+        screenshot_contrast::scroll_origin_x(page)
+    };
     if !filtered.is_empty() {
         // The pixel pass reads one box twice, once with the text painted and
         // once without. A frame that advances between the two shots turns
@@ -2183,9 +2358,16 @@ fn run_visual_contrast_fallback(
         let sel = candidate.get("selector").and_then(Value::as_str);
         // A read the first budget's rules would not have made.
         let extra = is_routed(candidate)
-            && (candidate.get("reasons").and_then(Value::as_array).is_some_and(|rs| {
-                rs.iter().any(|r| matches!(r.as_str(), Some("unread layer") | Some("text outline")))
-            }) || existing_low_contrast.iter().any(|s| Some(s.as_str()) == sel));
+            && (candidate
+                .get("reasons")
+                .and_then(Value::as_array)
+                .is_some_and(|rs| {
+                    rs.iter()
+                        .any(|r| matches!(r.as_str(), Some("unread layer") | Some("text outline")))
+                })
+                || existing_low_contrast
+                    .iter()
+                    .any(|s| Some(s.as_str()) == sel));
         if extra && (routed_spent >= ROUTED_PIXEL_BUDGET || routed_misses >= ROUTED_PIXEL_MISSES) {
             continue;
         }
@@ -2237,13 +2419,15 @@ fn run_visual_contrast_fallback(
             }
         }
         let routed_candidate = is_routed(candidate);
-        findings.extend(
-            result
-                .into_iter()
-                .filter(|f| {
-                    keep_pixel_finding(&mut pixel_pairs, candidate, routed_candidate, &f.severity, &f.snippet)
-                }),
-        );
+        findings.extend(result.into_iter().filter(|f| {
+            keep_pixel_finding(
+                &mut pixel_pairs,
+                candidate,
+                routed_candidate,
+                &f.severity,
+                &f.snippet,
+            )
+        }));
     }
     Ok((findings, superseded, stalled))
 }
@@ -2264,9 +2448,14 @@ fn pixel_pair_key(candidate: &Value, severity: &str, snippet: &str) -> String {
     let bare = if text.is_empty() {
         snippet
     } else {
-        snippet.strip_suffix(&format!(" \"{text}\"")).unwrap_or(snippet)
+        snippet
+            .strip_suffix(&format!(" \"{text}\""))
+            .unwrap_or(snippet)
     };
-    let ink = candidate.get("textColor").map(Value::to_string).unwrap_or_default();
+    let ink = candidate
+        .get("textColor")
+        .map(Value::to_string)
+        .unwrap_or_default();
     format!("{ink}\u{1f}{severity}\u{1f}{bare}")
 }
 
@@ -2276,7 +2465,13 @@ fn pixel_pair_key(candidate: &Value, severity: &str, snippet: &str) -> String {
 /// auction.co.kr's five header links each sit on a divider sprite, each was
 /// routed to the pixels, and each printed the same 4.48:1 for the same ink.
 /// A first-budget finding always reports, and claims its pair.
-fn keep_pixel_finding(seen: &mut Vec<String>, candidate: &Value, routed: bool, severity: &str, snippet: &str) -> bool {
+fn keep_pixel_finding(
+    seen: &mut Vec<String>,
+    candidate: &Value,
+    routed: bool,
+    severity: &str,
+    snippet: &str,
+) -> bool {
     let key = pixel_pair_key(candidate, severity, snippet);
     if seen.contains(&key) {
         return !routed;
@@ -2304,9 +2499,15 @@ mod tests {
         assert!(is_screenshot_stall(
             "Page.captureScreenshot timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
         ));
-        assert!(!is_screenshot_stall("isolated capture context was destroyed or document changed"));
-        assert!(!is_screenshot_stall("Protocol error: connection closed (IO error)"));
-        assert!(!is_screenshot_stall("Runtime.evaluate timed out. Increase the 'protocolTimeout' setting"));
+        assert!(!is_screenshot_stall(
+            "isolated capture context was destroyed or document changed"
+        ));
+        assert!(!is_screenshot_stall(
+            "Protocol error: connection closed (IO error)"
+        ));
+        assert!(!is_screenshot_stall(
+            "Runtime.evaluate timed out. Increase the 'protocolTimeout' setting"
+        ));
     }
 
     #[test]
@@ -2314,23 +2515,77 @@ mod tests {
         let link = |text: &str| json!({"selector": "a", "text": text, "textColor": {"r": 51.0, "g": 51.0, "b": 51.0, "a": 1.0}});
         // The snippet the pixel pass writes for these links.
         let snippet = |text: &str| {
-            screenshot_contrast::pixel_contrast_snippet(4.48, 4.48, &json!(4.5), "image background, unread layer", &format!(" \"{text}\""))
+            screenshot_contrast::pixel_contrast_snippet(
+                4.48,
+                4.48,
+                &json!(4.5),
+                "image background, unread layer",
+                &format!(" \"{text}\""),
+            )
         };
         let mut seen = Vec::new();
-        assert!(keep_pixel_finding(&mut seen, &link("로그인"), true, "warning", &snippet("로그인")));
-        assert!(!keep_pixel_finding(&mut seen, &link("회원가입"), true, "warning", &snippet("회원가입")));
+        assert!(keep_pixel_finding(
+            &mut seen,
+            &link("로그인"),
+            true,
+            "warning",
+            &snippet("로그인")
+        ));
+        assert!(!keep_pixel_finding(
+            &mut seen,
+            &link("회원가입"),
+            true,
+            "warning",
+            &snippet("회원가입")
+        ));
         // Another ratio, or another ink, is another pair.
-        let other = screenshot_contrast::pixel_contrast_snippet(3.9, 3.9, &json!(4.5), "image background, unread layer", " \"고객센터\"");
+        let other = screenshot_contrast::pixel_contrast_snippet(
+            3.9,
+            3.9,
+            &json!(4.5),
+            "image background, unread layer",
+            " \"고객센터\"",
+        );
         assert!(other.starts_with("pixel contrast 3.9:1"), "{other}");
-        assert!(keep_pixel_finding(&mut seen, &link("고객센터"), true, "warning", &other));
+        assert!(keep_pixel_finding(
+            &mut seen,
+            &link("고객센터"),
+            true,
+            "warning",
+            &other
+        ));
         let red = json!({"selector": "a", "text": "장바구니", "textColor": {"r": 200.0, "g": 0.0, "b": 0.0, "a": 1.0}});
-        assert!(keep_pixel_finding(&mut seen, &red, true, "warning", &snippet("장바구니")));
+        assert!(keep_pixel_finding(
+            &mut seen,
+            &red,
+            true,
+            "warning",
+            &snippet("장바구니")
+        ));
         // The first budget always reports.
-        assert!(keep_pixel_finding(&mut seen, &link("마이페이지"), false, "warning", &snippet("마이페이지")));
+        assert!(keep_pixel_finding(
+            &mut seen,
+            &link("마이페이지"),
+            false,
+            "warning",
+            &snippet("마이페이지")
+        ));
         // An advisory read on decorative text does not claim the pair for
         // counted text wearing it (an avatar initial and a digit beside it).
-        assert!(keep_pixel_finding(&mut seen, &link("S"), true, "advisory", &snippet("S")));
-        assert!(!keep_pixel_finding(&mut seen, &link("T"), true, "advisory", &snippet("T")));
+        assert!(keep_pixel_finding(
+            &mut seen,
+            &link("S"),
+            true,
+            "advisory",
+            &snippet("S")
+        ));
+        assert!(!keep_pixel_finding(
+            &mut seen,
+            &link("T"),
+            true,
+            "advisory",
+            &snippet("T")
+        ));
     }
 
     #[test]
@@ -2347,10 +2602,20 @@ mod tests {
             // Routed but unresolved: the pixel pass decides.
             json!({"selector": "#vector", "routed": "unread layer", "status": "unresolved"}),
         ];
-        let existing: Vec<String> = ["#photo-copy", "#photo-ok", "#plain", "#vector"].iter().map(|s| s.to_string()).collect();
-        let routed: Vec<CandidateKey> = analyses.iter().filter(|a| a.get("routed").is_some()).filter_map(CandidateKey::of).collect();
+        let existing: Vec<String> = ["#photo-copy", "#photo-ok", "#plain", "#vector"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let routed: Vec<CandidateKey> = analyses
+            .iter()
+            .filter(|a| a.get("routed").is_some())
+            .filter_map(CandidateKey::of)
+            .collect();
         let (findings, superseded) = analysis_findings(&analyses, &existing, &routed);
-        let sels: Vec<&str> = findings.iter().filter_map(|f| f.selector.as_deref()).collect();
+        let sels: Vec<&str> = findings
+            .iter()
+            .filter_map(|f| f.selector.as_deref())
+            .collect();
         assert_eq!(sels, vec!["#photo-copy"]);
         let superseded: Vec<&str> = superseded.iter().map(|k| k.selector.as_str()).collect();
         assert_eq!(superseded, vec!["#photo-copy", "#photo-ok"]);
@@ -2368,7 +2633,13 @@ mod tests {
         let existing = vec!["#hero > p".to_string()];
         let routed: Vec<CandidateKey> = analyses.iter().filter_map(CandidateKey::of).collect();
         let (_, superseded) = analysis_findings(&analyses, &existing, &routed);
-        assert_eq!(superseded, vec![CandidateKey { selector: "#hero > p".into(), matched: Some(json!([0, 2])) }]);
+        assert_eq!(
+            superseded,
+            vec![CandidateKey {
+                selector: "#hero > p".into(),
+                matched: Some(json!([0, 2]))
+            }]
+        );
         // The unresolved copy is not taken for the resolved one.
         assert!(!superseded[0].names_value(&analyses[1]));
         assert!(superseded[0].names_value(&analyses[0]));
@@ -2378,32 +2649,63 @@ mod tests {
 
         let verdict = |n: u64| RawResult {
             selector: Some("#hero > p".into()),
-            ..RawResult::new(origin::VISUAL_CONTRAST, "low-contrast".into(), format!("copy {n}"))
+            ..RawResult::new(
+                origin::VISUAL_CONTRAST,
+                "low-contrast".into(),
+                format!("copy {n}"),
+            )
         };
         let mut results = vec![verdict(0), verdict(1)];
-        let copy_of = |r: &RawResult| r.snippet.strip_prefix("copy ").and_then(|n| n.parse::<u64>().ok());
-        settle_handed_over(&mut results, &superseded, |r| copy_of(r).map(|n| json!([n, 2])));
-        let left: Vec<(&str, &str)> = results.iter().map(|r| (r.snippet.as_str(), r.severity.as_str())).collect();
+        let copy_of = |r: &RawResult| {
+            r.snippet
+                .strip_prefix("copy ")
+                .and_then(|n| n.parse::<u64>().ok())
+        };
+        settle_handed_over(&mut results, &superseded, |r| {
+            copy_of(r).map(|n| json!([n, 2]))
+        });
+        let left: Vec<(&str, &str)> = results
+            .iter()
+            .map(|r| (r.snippet.as_str(), r.severity.as_str()))
+            .collect();
         assert_eq!(left, vec![("copy 1", "advisory")]);
     }
 
     #[test]
     fn ad_tech_errors_never_take_a_counted_errors_slot() {
-        let prebid = |n: u32| (format!("Uncaught Error: bid {n}"), Some(format!("at https://example.com/prebid/prebid-p{n}.js:1:1")));
+        let prebid = |n: u32| {
+            (
+                format!("Uncaught Error: bid {n}"),
+                Some(format!("at https://example.com/prebid/prebid-p{n}.js:1:1")),
+            )
+        };
         let mut errors: Vec<(String, Option<String>)> = (1..=4).map(prebid).collect();
-        errors.push(("Uncaught TypeError: cart is undefined".to_string(), Some("at https://example.com/js/app.js:1:1".to_string())));
+        errors.push((
+            "Uncaught TypeError: cart is undefined".to_string(),
+            Some("at https://example.com/js/app.js:1:1".to_string()),
+        ));
         for n in 1..=4 {
             errors.push((format!("Uncaught Error: first-party {n}"), None));
         }
         let results = capped_script_errors(errors.iter().map(|(m, s)| (m.as_str(), s.as_deref())));
-        let summary: Vec<(bool, &str)> =
-            results.iter().map(|r| (r.severity == "advisory", r.snippet.as_str())).collect();
+        let summary: Vec<(bool, &str)> = results
+            .iter()
+            .map(|r| (r.severity == "advisory", r.snippet.as_str()))
+            .collect();
         assert_eq!(summary.len(), 6, "{summary:?}");
         // Three ad-tech errors, in arrival order; the fourth is capped.
-        assert!(summary[..3].iter().all(|(advisory, s)| *advisory && s.contains("(third-party: Prebid)")));
+        assert!(summary[..3]
+            .iter()
+            .all(|(advisory, s)| *advisory && s.contains("(third-party: Prebid)")));
         // The first-party error after them still reports, counted, and the
         // counted cap stops at three of its own.
-        assert_eq!(summary[3], (false, "Uncaught TypeError: cart is undefined (at https://example.com/js/app.js:1:1)"));
+        assert_eq!(
+            summary[3],
+            (
+                false,
+                "Uncaught TypeError: cart is undefined (at https://example.com/js/app.js:1:1)"
+            )
+        );
         assert_eq!(summary[4], (false, "Uncaught Error: first-party 1"));
         assert_eq!(summary[5], (false, "Uncaught Error: first-party 2"));
     }
@@ -2434,23 +2736,38 @@ mod tests {
         settle_handed_over(
             &mut results,
             &[
-                CandidateKey { selector: "#read".into(), matched: None },
-                CandidateKey { selector: "#read-over-photo".into(), matched: None },
+                CandidateKey {
+                    selector: "#read".into(),
+                    matched: None,
+                },
+                CandidateKey {
+                    selector: "#read-over-photo".into(),
+                    matched: None,
+                },
             ],
             |_| None,
         );
-        let summary: Vec<(&str, &str, &str)> =
-            results.iter().map(|r| (r.origin, r.snippet.as_str(), r.severity.as_str())).collect();
+        let summary: Vec<(&str, &str, &str)> = results
+            .iter()
+            .map(|r| (r.origin, r.snippet.as_str(), r.severity.as_str()))
+            .collect();
         assert_eq!(
             summary,
             vec![
-                (origin::VISUAL_CONTRAST, "low-contrast on #unread", "advisory"),
+                (
+                    origin::VISUAL_CONTRAST,
+                    "low-contrast on #unread",
+                    "advisory"
+                ),
                 (origin::SCAN, "low-contrast on #scored", ""),
                 (origin::SCAN, "tiny-text on #unread", ""),
             ]
         );
         let (findings, _) = results_to_findings("https://example.com/", results, None).unwrap();
-        assert_eq!((findings[0].severity.as_str(), findings[0].advisory), ("advisory", Some(true)));
+        assert_eq!(
+            (findings[0].severity.as_str(), findings[0].advisory),
+            ("advisory", Some(true))
+        );
         assert_ne!(findings[1].severity, "advisory");
     }
 
@@ -2470,12 +2787,18 @@ mod tests {
             ],
         })];
         let (findings, origins) =
-            results_to_findings("https://example.com/", results_from_groups(&groups), None).unwrap();
+            results_to_findings("https://example.com/", results_from_groups(&groups), None)
+                .unwrap();
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].extras.get("selector"), Some(&json!("main > h1")));
+        assert_eq!(
+            findings[0].extras.get("selector"),
+            Some(&json!("main > h1"))
+        );
         assert_eq!(origins, vec![origin::SCAN]);
         let text = serde_json::to_string(&findings[0]).unwrap();
-        assert!(text.ends_with(r#""line":0,"snippet":"line-height 1.15x (need >=1.3)","selector":"main > h1"}"#));
+        assert!(text.ends_with(
+            r#""line":0,"snippet":"line-height 1.15x (need >=1.3)","selector":"main > h1"}"#
+        ));
     }
 
     /// A vendor the serialized group names travels onto the finding, after
@@ -2489,7 +2812,8 @@ mod tests {
             ],
         })];
         let (findings, _) =
-            results_to_findings("https://example.com/", results_from_groups(&groups), None).unwrap();
+            results_to_findings("https://example.com/", results_from_groups(&groups), None)
+                .unwrap();
         assert_eq!(findings[0].severity, "warning");
         let text = serde_json::to_string(&findings[0]).unwrap();
         assert!(text.ends_with(r#"(third-party: Taboola)","selector":"div.videoCube > button","thirdParty":"Taboola"}"#), "{text}");
@@ -2512,9 +2836,15 @@ mod tests {
         );
         assert_eq!(f.extras.get("thirdParty"), Some(&json!("Meta Pixel")));
 
-        let r = script_error_result("Uncaught TypeError: cart is undefined", Some("at renderCart, https://shop.example/app.js:1:1"));
+        let r = script_error_result(
+            "Uncaught TypeError: cart is undefined",
+            Some("at renderCart, https://shop.example/app.js:1:1"),
+        );
         let (findings, _) = results_to_findings("https://example.com/", vec![r], None).unwrap();
-        assert_eq!((findings[0].severity.as_str(), findings[0].advisory), ("error", None));
+        assert_eq!(
+            (findings[0].severity.as_str(), findings[0].advisory),
+            ("error", None)
+        );
         assert!(findings[0].extras.get("thirdParty").is_none());
     }
 
@@ -2538,17 +2868,33 @@ mod tests {
         ];
         let results = capped_script_errors(chain.iter().chain(own.iter()).map(|m| (*m, src)));
         let (findings, _) = results_to_findings("https://example.com/", results, None).unwrap();
-        let summary: Vec<(&str, Option<bool>, &str)> =
-            findings.iter().map(|f| (f.severity.as_str(), f.advisory, f.snippet.as_str())).collect();
+        let summary: Vec<(&str, Option<bool>, &str)> = findings
+            .iter()
+            .map(|f| (f.severity.as_str(), f.advisory, f.snippet.as_str()))
+            .collect();
         // Three of the four hydration errors (their own cap), then three of
         // the four counted ones.
         assert_eq!(summary.len(), 6, "{summary:#?}");
         for (i, message) in chain[..3].iter().enumerate() {
-            assert_eq!(summary[i], ("advisory", Some(true), format!("{message} ({})", src.unwrap()).as_str()));
+            assert_eq!(
+                summary[i],
+                (
+                    "advisory",
+                    Some(true),
+                    format!("{message} ({})", src.unwrap()).as_str()
+                )
+            );
             assert!(findings[i].extras.get("thirdParty").is_none());
         }
         for (i, message) in own[..3].iter().enumerate() {
-            assert_eq!(summary[3 + i], ("error", None, format!("{message} ({})", src.unwrap()).as_str()));
+            assert_eq!(
+                summary[3 + i],
+                (
+                    "error",
+                    None,
+                    format!("{message} ({})", src.unwrap()).as_str()
+                )
+            );
         }
     }
 
@@ -2556,16 +2902,39 @@ mod tests {
     /// ai-color-palette from a URL scan and keeps the evidence origins in step.
     #[test]
     fn a_declared_purple_drops_the_purple_forms() {
-        let fm: Map<String, Value> = serde_json::from_value(json!({ "colors": { "primary": "#6d28d9" } })).unwrap();
-        let ds = impeccable_detect::design_system::normalize_design_system(Some(&fm), None, None, None, false);
+        let fm: Map<String, Value> =
+            serde_json::from_value(json!({ "colors": { "primary": "#6d28d9" } })).unwrap();
+        let ds = impeccable_detect::design_system::normalize_design_system(
+            Some(&fm),
+            None,
+            None,
+            None,
+            false,
+        );
         let results = vec![
-            RawResult::new(origin::SCAN, "ai-color-palette".into(), "Purple/violet gradient background".into()),
-            RawResult::new(origin::SCAN, "ai-color-palette".into(), "Cyan gradient background".into()),
-            RawResult::new(origin::SCRIPT_ERROR, "script-error".into(), "Uncaught Error: x".into()),
+            RawResult::new(
+                origin::SCAN,
+                "ai-color-palette".into(),
+                "Purple/violet gradient background".into(),
+            ),
+            RawResult::new(
+                origin::SCAN,
+                "ai-color-palette".into(),
+                "Cyan gradient background".into(),
+            ),
+            RawResult::new(
+                origin::SCRIPT_ERROR,
+                "script-error".into(),
+                "Uncaught Error: x".into(),
+            ),
         ];
-        let (findings, origins) = results_to_findings("file:///p/index.html", results, Some(&ds)).unwrap();
+        let (findings, origins) =
+            results_to_findings("file:///p/index.html", results, Some(&ds)).unwrap();
         let snippets: Vec<&str> = findings.iter().map(|f| f.snippet.as_str()).collect();
-        assert_eq!(snippets, vec!["Cyan gradient background", "Uncaught Error: x"]);
+        assert_eq!(
+            snippets,
+            vec!["Cyan gradient background", "Uncaught Error: x"]
+        );
         assert_eq!(origins, vec![origin::SCAN, origin::SCRIPT_ERROR]);
     }
 
@@ -2613,9 +2982,6 @@ mod tests {
             split_scan_url("file:///tmp/a.html"),
             ("file:///tmp/a.html".to_string(), None)
         );
-        assert_eq!(
-            split_scan_url("not a url"),
-            ("not a url".to_string(), None)
-        );
+        assert_eq!(split_scan_url("not a url"), ("not a url".to_string(), None));
     }
 }

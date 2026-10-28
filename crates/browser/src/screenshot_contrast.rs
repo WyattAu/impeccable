@@ -7,9 +7,7 @@
 //! are decisions in `impeccable_core::browser::visual`.
 
 use base64::Engine as _;
-use impeccable_core::browser::visual::{
-    self, GlyphPixel, PixelContrastOutcome, GLYPH_MIN_PIXELS,
-};
+use impeccable_core::browser::visual::{self, GlyphPixel, PixelContrastOutcome, GLYPH_MIN_PIXELS};
 use impeccable_core::js::{math_max, number_to_string};
 use serde_json::{json, Value};
 
@@ -212,8 +210,8 @@ pub fn compare_screenshot_contrast(
             });
         }
     }
-    let surround = (surround_count >= GLYPH_MIN_PIXELS)
-        .then(|| surround_sum / surround_count as f64);
+    let surround =
+        (surround_count >= GLYPH_MIN_PIXELS).then(|| surround_sum / surround_count as f64);
     Ok(Some(ContrastMetrics {
         glyph_pixels: pixels.len(),
         strongest_delta,
@@ -289,7 +287,10 @@ fn document_clip(page: &mut Page<'_>, candidate: &Value, origin_x: f64) -> Optio
     if !(origin_x < 0.0) || !clip.is_object() || num(clip.get("x")) > 0.0 {
         return Some(clip.clone());
     }
-    let selector = candidate.get("selector").and_then(Value::as_str).filter(|s| !s.is_empty());
+    let selector = candidate
+        .get("selector")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty());
     let left = selector.and_then(|selector| {
         page.evaluate_value(&format!(
             "({LIVE_TEXT_LEFT_JS})(({PICK_CANDIDATE_JS})({}, {}))",
@@ -442,7 +443,10 @@ pub fn clip_beyond_content(clip: &Clip, content: (f64, f64)) -> bool {
 /// coordinates), allowing the rounding a clip carries.
 fn clip_within(clip: &Clip, view: (f64, f64, f64, f64)) -> bool {
     let (x, y, w, h) = view;
-    clip.x >= x - 1.0 && clip.y >= y - 1.0 && clip.x + clip.width <= x + w + 1.0 && clip.y + clip.height <= y + h + 1.0
+    clip.x >= x - 1.0
+        && clip.y >= y - 1.0
+        && clip.x + clip.width <= x + w + 1.0
+        && clip.y + clip.height <= y + h + 1.0
 }
 
 /// For a clip past the content box, scroll its element into view and return
@@ -492,7 +496,10 @@ fn bring_into_view(
         }),
         _ => Value::Null,
     };
-    let Some(moved_clip) = sanitize_screenshot_clip(capture_clip(Some(&live), origin_x).as_ref(), Some(viewport_width)) else {
+    let Some(moved_clip) = sanitize_screenshot_clip(
+        capture_clip(Some(&live), origin_x).as_ref(),
+        Some(viewport_width),
+    ) else {
         let _ = page.evaluate(RESTORE_SCROLL_JS);
         return None;
     };
@@ -532,7 +539,9 @@ fn measure_candidate(
     let Some(mut metrics) = hidden_reading(page, candidate, clip, &before, false)? else {
         return Ok(PixelMeasure::default());
     };
-    if metrics.outcome == PixelContrastOutcome::Unresolved(visual::BOX_REPAINTED) && may_keep_halo(candidate, reasons) {
+    if metrics.outcome == PixelContrastOutcome::Unresolved(visual::BOX_REPAINTED)
+        && may_keep_halo(candidate, reasons)
+    {
         match hidden_reading(page, candidate, clip, &before, true)? {
             Some(kept) => metrics = kept,
             None => return Ok(PixelMeasure::default()),
@@ -549,7 +558,10 @@ fn measure_candidate(
     }
     let threshold = num(candidate.get("threshold"));
     if measured >= threshold {
-        return Ok(PixelMeasure { finding: None, measured: true });
+        return Ok(PixelMeasure {
+            finding: None,
+            measured: true,
+        });
     }
     let text_label = match candidate.get("text") {
         Some(Value::String(t)) if !t.is_empty() => format!(" \"{t}\""),
@@ -569,19 +581,22 @@ fn measure_candidate(
     } else {
         joined
     };
-    Ok(PixelMeasure { measured: true, finding: Some(RawFinding {
-        id: "low-contrast",
-        severity: impeccable_core::browser::visual::visual_contrast_severity(
-            candidate, measured, threshold,
-        ),
-        snippet: pixel_contrast_snippet(
-            measured,
-            median,
-            candidate.get("threshold").unwrap_or(&Value::Null),
-            &reason_label,
-            &text_label,
-        ),
-    }) })
+    Ok(PixelMeasure {
+        measured: true,
+        finding: Some(RawFinding {
+            id: "low-contrast",
+            severity: impeccable_core::browser::visual::visual_contrast_severity(
+                candidate, measured, threshold,
+            ),
+            snippet: pixel_contrast_snippet(
+                measured,
+                median,
+                candidate.get("threshold").unwrap_or(&Value::Null),
+                &reason_label,
+                &text_label,
+            ),
+        }),
+    })
 }
 
 /// Hide the candidate's glyphs (and, unless `keep_halo`, its `text-shadow`),
@@ -726,9 +741,15 @@ mod tests {
     #[test]
     fn only_a_separating_halo_is_kept() {
         let halo = vec!["text shadow".to_string(), "unread layer".to_string()];
-        assert!(may_keep_halo(&json!({ "routed": "unread layer", "haloSeparates": true }), &halo));
+        assert!(may_keep_halo(
+            &json!({ "routed": "unread layer", "haloSeparates": true }),
+            &halo
+        ));
         assert!(!may_keep_halo(&json!({ "routed": "unread layer" }), &halo));
-        assert!(!may_keep_halo(&json!({ "routed": "text outline", "haloSeparates": true }), &halo));
+        assert!(!may_keep_halo(
+            &json!({ "routed": "text outline", "haloSeparates": true }),
+            &halo
+        ));
         let outlined = vec!["text shadow".to_string(), "text outline".to_string()];
         assert!(!may_keep_halo(&json!({ "haloSeparates": true }), &outlined));
         // The first reading hides every shadow, as it always did.
@@ -742,10 +763,15 @@ mod tests {
     #[test]
     fn a_shadow_frame_the_scroll_moves_is_put_back() {
         let env: std::collections::HashMap<String, String> = std::env::vars().collect();
-        let Ok(exe) = crate::discovery::find_browser(&env) else { return };
-        let Ok(mut browser) = crate::cdp::Browser::launch(&exe, &[], false) else { return };
+        let Ok(exe) = crate::discovery::find_browser(&env) else {
+            return;
+        };
+        let Ok(mut browser) = crate::cdp::Browser::launch(&exe, &[], false) else {
+            return;
+        };
         let mut page = browser.new_page().unwrap();
-        page.goto("about:blank", "load", std::time::Duration::from_secs(15)).unwrap();
+        page.goto("about:blank", "load", std::time::Duration::from_secs(15))
+            .unwrap();
         let setup = r#"(() => {
   document.body.innerHTML = '<x-frame><p id="deep">Deep copy</p></x-frame>';
   document.querySelector('x-frame').attachShadow({ mode: 'open' }).innerHTML =
@@ -754,10 +780,17 @@ mod tests {
 })()"#;
         page.evaluate_value(setup).unwrap();
         let moved = page
-            .evaluate_value(&format!("({BRING_INTO_VIEW_JS})(document.getElementById('deep'))"))
+            .evaluate_value(&format!(
+                "({BRING_INTO_VIEW_JS})(document.getElementById('deep'))"
+            ))
             .unwrap();
-        assert_eq!(moved.get("moved").and_then(Value::as_bool), Some(true), "{moved}");
-        let frame = "document.querySelector('x-frame').shadowRoot.getElementById('frame').scrollTop";
+        assert_eq!(
+            moved.get("moved").and_then(Value::as_bool),
+            Some(true),
+            "{moved}"
+        );
+        let frame =
+            "document.querySelector('x-frame').shadowRoot.getElementById('frame').scrollTop";
         assert!(page.evaluate_value(frame).unwrap().as_f64().unwrap() > 0.0);
         page.evaluate_value(RESTORE_SCROLL_JS).unwrap();
         assert_eq!(page.evaluate_value(frame).unwrap().as_f64(), Some(0.0));
@@ -806,26 +839,53 @@ mod tests {
         // A page that scrolls from the left keeps the document x.
         assert_eq!(capture_clip(Some(&clip), 0.0), Some(clip.clone()));
         // 321px of overflow left of the viewport: document x -40 is clip x 281.
-        let c = sanitize_screenshot_clip(capture_clip(Some(&clip), -321.0).as_ref(), Some(390.0)).unwrap();
+        let c = sanitize_screenshot_clip(capture_clip(Some(&clip), -321.0).as_ref(), Some(390.0))
+            .unwrap();
         assert_eq!((c.x, c.y), (281.0, 300.0));
         assert_eq!(capture_clip(None, -321.0), None);
     }
 
     #[test]
     fn clips_past_the_content_box_are_brought_into_view() {
-        let clip = |x: f64, y: f64, width: f64, height: f64| Clip { x, y, width, height };
+        let clip = |x: f64, y: f64, width: f64, height: f64| Clip {
+            x,
+            y,
+            width,
+            height,
+        };
         // A body scroller: the document is one 844px viewport tall.
-        assert!(clip_beyond_content(&clip(42.0, 2709.0, 357.0, 47.0), (390.0, 844.0)));
+        assert!(clip_beyond_content(
+            &clip(42.0, 2709.0, 357.0, 47.0),
+            (390.0, 844.0)
+        ));
         // Text at the document's foot, the clip's pad and rounding included.
-        assert!(!clip_beyond_content(&clip(40.0, 3380.0, 200.0, 24.0), (1280.0, 3401.0)));
-        assert!(!clip_beyond_content(&clip(40.0, 300.0, 200.0, 24.0), (1280.0, 3401.0)));
+        assert!(!clip_beyond_content(
+            &clip(40.0, 3380.0, 200.0, 24.0),
+            (1280.0, 3401.0)
+        ));
+        assert!(!clip_beyond_content(
+            &clip(40.0, 300.0, 200.0, 24.0),
+            (1280.0, 3401.0)
+        ));
         // Starting past the right edge.
-        assert!(clip_beyond_content(&clip(1400.0, 300.0, 200.0, 24.0), (1280.0, 3401.0)));
+        assert!(clip_beyond_content(
+            &clip(1400.0, 300.0, 200.0, 24.0),
+            (1280.0, 3401.0)
+        ));
         // Straddling the right edge still paints.
-        assert!(!clip_beyond_content(&clip(1200.0, 300.0, 200.0, 24.0), (1280.0, 3401.0)));
+        assert!(!clip_beyond_content(
+            &clip(1200.0, 300.0, 200.0, 24.0),
+            (1280.0, 3401.0)
+        ));
         // No usable content size: leave the clip as it is.
-        assert!(!clip_beyond_content(&clip(0.0, 5000.0, 10.0, 10.0), (0.0, 0.0)));
-        assert!(!clip_beyond_content(&clip(0.0, 5000.0, 10.0, 10.0), (f64::NAN, 800.0)));
+        assert!(!clip_beyond_content(
+            &clip(0.0, 5000.0, 10.0, 10.0),
+            (0.0, 0.0)
+        ));
+        assert!(!clip_beyond_content(
+            &clip(0.0, 5000.0, 10.0, 10.0),
+            (f64::NAN, 800.0)
+        ));
     }
 
     fn png_base64(w: u32, h: u32, rgba: &[u8]) -> String {
@@ -939,7 +999,11 @@ mod tests {
         .unwrap()
         .unwrap();
         match m.outcome {
-            PixelContrastOutcome::Verdict { measured, median, core_pixels } => {
+            PixelContrastOutcome::Verdict {
+                measured,
+                median,
+                core_pixels,
+            } => {
                 assert_eq!(core_pixels, 12);
                 assert!(measured > 15.0, "{measured}");
                 assert!(measured <= median, "{measured} above {median}");

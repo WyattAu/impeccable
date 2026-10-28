@@ -16,8 +16,9 @@ use crate::util::exists;
 static COMMENT_RE: once_cell::sync::Lazy<regex::Regex> =
     once_cell::sync::Lazy::new(|| regex::Regex::new(r"(?s)/\*.*?\*/").expect("COMMENT_RE"));
 
-static LINE_COMMENT_RE: once_cell::sync::Lazy<regex::Regex> =
-    once_cell::sync::Lazy::new(|| regex::Regex::new(r#"(?m)(^|[^:"'(\\])//[^\n]*"#).expect("LINE_COMMENT_RE"));
+static LINE_COMMENT_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+    regex::Regex::new(r#"(?m)(^|[^:"'(\\])//[^\n]*"#).expect("LINE_COMMENT_RE")
+});
 
 const SHEET_EXTS: &[&str] = &[".css", ".scss", ".sass", ".less"];
 /// Bounds on the walk: a token sheet is small, and a project with more
@@ -50,7 +51,8 @@ pub fn project_roots(file_path: &str) -> Vec<String> {
         }
     };
     let git = nearest(".git");
-    let package = nearest("package.json").filter(|p| git.as_ref().map_or(true, |g| p.len() > g.len()));
+    let package =
+        nearest("package.json").filter(|p| git.as_ref().is_none_or(|g| p.len() > g.len()));
     let mut roots: Vec<String> = package.into_iter().chain(git).collect();
     if roots.is_empty() {
         roots.push(start);
@@ -94,7 +96,11 @@ fn read_sheet(path: &str) -> Option<String> {
         return None;
     }
     let mut bytes = Vec::new();
-    std::fs::File::open(path).ok()?.take(MAX_SHEET_BYTES + 1).read_to_end(&mut bytes).ok()?;
+    std::fs::File::open(path)
+        .ok()?
+        .take(MAX_SHEET_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .ok()?;
     if bytes.len() as u64 > MAX_SHEET_BYTES {
         return None;
     }
@@ -108,7 +114,9 @@ fn stylesheets(root: &str) -> Vec<String> {
     let mut queue = std::collections::VecDeque::from([root.to_string()]);
     let mut entries = 0usize;
     while let Some(dir) = queue.pop_front() {
-        let Ok(read) = std::fs::read_dir(&dir) else { continue };
+        let Ok(read) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         let mut names: Vec<(String, bool)> = read
             .flatten()
             .map(|e| {
@@ -129,7 +137,10 @@ fn stylesheets(root: &str) -> Vec<String> {
                 {
                     queue.push_back(jsp::join(&[&dir, &name]));
                 }
-            } else if SHEET_EXTS.iter().any(|ext| name.to_ascii_lowercase().ends_with(ext)) {
+            } else if SHEET_EXTS
+                .iter()
+                .any(|ext| name.to_ascii_lowercase().ends_with(ext))
+            {
                 sheets.push(jsp::join(&[&dir, &name]));
             }
         }
@@ -201,32 +212,63 @@ mod tests {
             "/* --mark-danger: #ddd; */\n:root { --mark-danger: oklch(63% .23 27); }\n[data-theme=dark] { --mark-danger: #f00; }\n",
         )
         .unwrap();
-        std::fs::write(dir.join("design-system/theme.scss"), "// --mark-ok: #ddd;\n:root { --mark-ok: #16a34a; }\n").unwrap();
+        std::fs::write(
+            dir.join("design-system/theme.scss"),
+            "// --mark-ok: #ddd;\n:root { --mark-ok: #16a34a; }\n",
+        )
+        .unwrap();
         #[cfg(unix)]
         std::os::unix::fs::symlink("/dev/zero", dir.join("design-system/zero.css")).unwrap();
-        let file = dir.join("app/src/Table.svelte").to_string_lossy().into_owned();
+        let file = dir
+            .join("app/src/Table.svelte")
+            .to_string_lossy()
+            .into_owned();
         assert_eq!(project_roots(&file), vec![root]);
         let tokens = ProjectTokens::default().for_file(&file);
-        assert_eq!(tokens.get("--mark-danger").map(String::as_str), Some("oklch(63% .23 27)"));
+        assert_eq!(
+            tokens.get("--mark-danger").map(String::as_str),
+            Some("oklch(63% .23 27)")
+        );
         assert_eq!(tokens.get("--mark-ok").map(String::as_str), Some("#16a34a"));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn an_apps_own_tokens_beat_a_sibling_apps_and_shared_ones_still_resolve() {
-        let dir = std::env::temp_dir().join(format!("impeccable-tokens-{}-monorepo", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("impeccable-tokens-{}-monorepo", std::process::id()));
         let root = dir.to_string_lossy().into_owned();
         std::fs::create_dir_all(dir.join(".git")).unwrap();
         std::fs::create_dir_all(dir.join("packages/ui")).unwrap();
-        std::fs::write(dir.join("packages/ui/tokens.css"), ":root { --shared: #16a34a; }\n").unwrap();
+        std::fs::write(
+            dir.join("packages/ui/tokens.css"),
+            ":root { --shared: #16a34a; }\n",
+        )
+        .unwrap();
         for (app, danger) in [("a", "#dc2626"), ("b", "#2563eb")] {
             std::fs::create_dir_all(dir.join(format!("apps/{app}/src"))).unwrap();
             std::fs::write(dir.join(format!("apps/{app}/package.json")), "{}").unwrap();
-            std::fs::write(dir.join(format!("apps/{app}/tokens.css")), format!(":root {{ --danger: {danger}; }}\n")).unwrap();
+            std::fs::write(
+                dir.join(format!("apps/{app}/tokens.css")),
+                format!(":root {{ --danger: {danger}; }}\n"),
+            )
+            .unwrap();
         }
-        let file_a = dir.join("apps/a/src/Table.svelte").to_string_lossy().into_owned();
-        let file_b = dir.join("apps/b/src/Table.svelte").to_string_lossy().into_owned();
-        assert_eq!(project_roots(&file_b), vec![dir.join("apps").join("b").to_string_lossy().into_owned(), root]);
+        let file_a = dir
+            .join("apps/a/src/Table.svelte")
+            .to_string_lossy()
+            .into_owned();
+        let file_b = dir
+            .join("apps/b/src/Table.svelte")
+            .to_string_lossy()
+            .into_owned();
+        assert_eq!(
+            project_roots(&file_b),
+            vec![
+                dir.join("apps").join("b").to_string_lossy().into_owned(),
+                root
+            ]
+        );
         let mut project = ProjectTokens::default();
         let tokens = project.for_file(&file_b);
         assert_eq!(tokens.get("--danger").map(String::as_str), Some("#2563eb"));
@@ -238,11 +280,18 @@ mod tests {
 
     #[test]
     fn a_package_above_the_checkout_is_not_a_root() {
-        let dir = std::env::temp_dir().join(format!("impeccable-tokens-{}-above", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("impeccable-tokens-{}-above", std::process::id()));
         std::fs::create_dir_all(dir.join("site/.git")).unwrap();
         std::fs::write(dir.join("package.json"), "{}").unwrap();
-        let file = dir.join("site/templates/table.html").to_string_lossy().into_owned();
-        assert_eq!(project_roots(&file), vec![dir.join("site").to_string_lossy().into_owned()]);
+        let file = dir
+            .join("site/templates/table.html")
+            .to_string_lossy()
+            .into_owned();
+        assert_eq!(
+            project_roots(&file),
+            vec![dir.join("site").to_string_lossy().into_owned()]
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -103,7 +103,7 @@ fn shortest_digits(v: f64) -> (String, i32) {
             if exact.len() == k + 1 && exact.ends_with('5') {
                 let lower = &exact[..k];
                 let last = lower.as_bytes()[k - 1] - b'0';
-                if last % 2 == 0 {
+                if last.is_multiple_of(2) {
                     digits = lower.to_string();
                 } else {
                     let mut up = lower.as_bytes().to_vec();
@@ -256,30 +256,28 @@ pub fn number_to_string_radix(value: f64, radix: u32) -> String {
             let digit = fraction as i32;
             frac_digits.push(CHARS[digit as usize]);
             fraction -= digit as f64;
-            if fraction > 0.5 || (fraction == 0.5 && (digit & 1) == 1) {
-                if fraction + delta > 1.0 {
-                    // Carry over into already written digits.
-                    loop {
-                        match frac_digits.pop() {
-                            None => {
-                                integer += 1.0;
+            if (fraction > 0.5 || (fraction == 0.5 && (digit & 1) == 1)) && fraction + delta > 1.0 {
+                // Carry over into already written digits.
+                loop {
+                    match frac_digits.pop() {
+                        None => {
+                            integer += 1.0;
+                            break;
+                        }
+                        Some(c) => {
+                            let d = if c > b'9' {
+                                (c - b'a') as u32 + 10
+                            } else {
+                                (c - b'0') as u32
+                            };
+                            if d + 1 < radix {
+                                frac_digits.push(CHARS[(d + 1) as usize]);
                                 break;
-                            }
-                            Some(c) => {
-                                let d = if c > b'9' {
-                                    (c - b'a') as u32 + 10
-                                } else {
-                                    (c - b'0') as u32
-                                };
-                                if d + 1 < radix {
-                                    frac_digits.push(CHARS[(d + 1) as usize]);
-                                    break;
-                                }
                             }
                         }
                     }
-                    break;
                 }
+                break;
             }
             if !(fraction >= delta) {
                 break;
@@ -336,7 +334,7 @@ pub fn to_fixed(v: f64, digits: usize) -> String {
     let rest = &frac_part[digits..];
     let round_up = match rest.as_bytes().first() {
         None => false,
-        Some(&c) => c > b'5' || (c == b'5'), // remainder >= .5 rounds up (half-up)
+        Some(&c) => c >= b'5', // remainder >= .5 rounds up (half-up)
     };
     let mut buf: Vec<u8> = format!("{}{}", int_part, keep).into_bytes();
     if round_up {
@@ -508,7 +506,7 @@ pub fn parse_int(s: &str, radix: u32) -> f64 {
     }
     let end = t
         .chars()
-        .take_while(|c| c.to_digit(r).is_some())
+        .take_while(|c| c.is_digit(r))
         .map(|c| c.len_utf8())
         .sum::<usize>();
     if end == 0 {
@@ -693,9 +691,12 @@ mod tests {
         assert_eq!(number_to_string(100.0), "100");
         assert_eq!(number_to_string(255.0), "255");
         // Shortest-digit ties pick the even candidate (ECMA-262), not the upper.
-        assert_eq!(number_to_string(980014115057302.25), "980014115057302.2");
-        assert_eq!(number_to_string(896675801537170.25), "896675801537170.2");
-        assert_eq!(number_to_string(-980014115057302.25), "-980014115057302.2");
+        assert_eq!(number_to_string(980_014_115_057_302.3), "980014115057302.2");
+        assert_eq!(number_to_string(896_675_801_537_170.3), "896675801537170.2");
+        assert_eq!(
+            number_to_string(-980_014_115_057_302.3),
+            "-980014115057302.2"
+        );
     }
 
     #[test]
@@ -748,7 +749,7 @@ mod tests {
         assert_eq!(parse_float("Infinityx"), f64::INFINITY);
         assert_eq!(parse_float("-Infinity"), f64::NEG_INFINITY);
         assert_eq!(parse_float("\u{a0}\u{feff}42"), 42.0);
-        assert!(parse_float("0x10").is_nan() == false && parse_float("0x10") == 0.0);
+        assert!(!parse_float("0x10").is_nan() && parse_float("0x10") == 0.0);
         assert_eq!(parse_float("21.5%"), 21.5);
     }
 

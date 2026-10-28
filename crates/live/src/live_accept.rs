@@ -57,7 +57,9 @@ struct BakeRequest {
 
 /// The `element` of the session's journaled generate event, if any.
 fn journaled_element(cwd: &str, env: &Env, id: &str) -> Option<Map<String, Value>> {
-    let state = crate::session::create_live_session_store(cwd, env, Some(id)).read_state(id, true).ok()?;
+    let state = crate::session::create_live_session_store(cwd, env, Some(id))
+        .read_state(id, true)
+        .ok()?;
     let journal = safe_read(&state.journal_path)?;
     journal
         .lines()
@@ -431,7 +433,11 @@ fn accept_cli(args: &[String], io: &mut Io) -> i32 {
         // which is what makes the result read as designed rather than
         // appended.
         let bake = if !no_bake && bake_flag {
-            Some(BakeRequest { cwd: cwd.clone(), session_id: id.clone(), element: journaled_element(&cwd, &env, &id) })
+            Some(BakeRequest {
+                cwd: cwd.clone(),
+                session_id: id.clone(),
+                element: journaled_element(&cwd, &env, &id),
+            })
         } else {
             None
         };
@@ -478,7 +484,11 @@ fn accept_cli(args: &[String], io: &mut Io) -> i32 {
                 m.insert("handled".into(), Value::Bool(true));
                 m.insert("file".into(), Value::String(rel_file.clone()));
                 let accepted_original_text = match outcome {
-                    AcceptOutcome::Carbonized { carbonize, original, bake_skipped } => {
+                    AcceptOutcome::Carbonized {
+                        carbonize,
+                        original,
+                        bake_skipped,
+                    } => {
                         m.insert("carbonize".into(), Value::Bool(carbonize));
                         if carbonize {
                             m.insert(
@@ -494,7 +504,12 @@ fn accept_cli(args: &[String], io: &mut Io) -> i32 {
                         }
                         original
                     }
-                    AcceptOutcome::Baked { original, css_file, rules, anchor } => {
+                    AcceptOutcome::Baked {
+                        original,
+                        css_file,
+                        rules,
+                        anchor,
+                    } => {
                         m.insert("carbonize".into(), Value::Bool(false));
                         m.insert("baked".into(), Value::Bool(true));
                         m.insert("variant".into(), Value::String(variant_num.clone()));
@@ -506,8 +521,12 @@ fn accept_cli(args: &[String], io: &mut Io) -> i32 {
                                 "anchor": anchor,
                             }),
                         );
-                        let (clean, findings, _) = crate::accept_verify::verify_accepted_file(&target_file);
-                        m.insert("verify".into(), json!({ "clean": clean, "findings": findings }));
+                        let (clean, findings, _) =
+                            crate::accept_verify::verify_accepted_file(&target_file);
+                        m.insert(
+                            "verify".into(),
+                            json!({ "clean": clean, "findings": findings }),
+                        );
                         original
                     }
                 };
@@ -552,9 +571,7 @@ fn original_block_has_exact_manual_text(block: &str, text: &str) -> bool {
     if needle.is_empty() {
         return false;
     }
-    manual_edit_text_segments(block)
-        .iter()
-        .any(|s| *s == needle)
+    manual_edit_text_segments(block).contains(&needle)
 }
 
 fn manual_edit_op_appears_in_block(op: &Value, block: &str) -> bool {
@@ -660,8 +677,12 @@ fn handle_discard_unlocked(id: &str, lines: &[String], target_file: &str) -> Res
     };
     let is_jsx = is_jsx_file(target_file);
     let (rs, re) = expand_replace_range(&block, lines, is_jsx, id);
-    let original = original_or_refuse(id, lines, &block, rs, re)
-        .ok_or_else(|| format!("{} Source not modified; replace the wrapper with the original element by hand.", ORIGINAL_MISSING))?;
+    let original = original_or_refuse(id, lines, &block, rs, re).ok_or_else(|| {
+        format!(
+            "{} Source not modified; replace the wrapper with the original element by hand.",
+            ORIGINAL_MISSING
+        )
+    })?;
     let indent = leading_ws(&lines[rs]);
     let restored = deindent_content(&original, &indent);
     let mut new_lines: Vec<String> = Vec::new();
@@ -837,7 +858,13 @@ fn handle_accept_unlocked(
             &source_after,
         );
         match planned {
-            Ok(plan) => match crate::bake::apply(&plan, &req.session_id, variant_num, target_file, &source_after) {
+            Ok(plan) => match crate::bake::apply(
+                &plan,
+                &req.session_id,
+                variant_num,
+                target_file,
+                &source_after,
+            ) {
                 Ok(_) => {
                     return Ok(AcceptOutcome::Baked {
                         original: original_content.join("\n"),
@@ -1147,7 +1174,11 @@ fn extract_original(lines: &[String], block: &MarkerBlock) -> Option<Vec<String>
 const ORIGINAL_MISSING: &str = "Original not found: the variants wrapper has no data-impeccable-variant=\"original\" slot, so the element it replaced cannot be restored from it.";
 
 static INSERT_MODE_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(&format!(r#"data-impeccable-mode{ws}*={ws}*(?:"insert"|'insert')"#, ws = WS)).unwrap()
+    Regex::new(&format!(
+        r#"data-impeccable-mode{ws}*={ws}*(?:"insert"|'insert')"#,
+        ws = WS
+    ))
+    .unwrap()
 });
 
 /// The original slot's content for discard, or `None` (refuse, write nothing)
@@ -1342,10 +1373,8 @@ mod discard_tests {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let dir = std::env::temp_dir().join(format!(
-            "impeccable-discard-{}-{nanos}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("impeccable-discard-{}-{nanos}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("Login.tsx");
@@ -1423,7 +1452,11 @@ mod original_slot_tests {
         let _ = std::fs::remove_dir_all(&dir);
         assert!(err.starts_with("Original not found"), "{err}");
         assert!(err.contains("Source not modified"), "{err}");
-        assert_eq!(out, NO_ORIGINAL.join("\n"), "the wrapper stays exactly as it was");
+        assert_eq!(
+            out,
+            NO_ORIGINAL.join("\n"),
+            "the wrapper stays exactly as it was"
+        );
     }
 
     #[test]
@@ -1564,17 +1597,27 @@ mod carbonize_tests {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let dir = std::env::temp_dir().join(format!("impeccable-carbonize-{}-{nanos}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "impeccable-carbonize-{}-{nanos}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join(file_name);
         let lines = wrapped(style_open);
         std::fs::write(&file, lines.join("\n")).unwrap();
-        let outcome = handle_accept_unlocked("ab12cd34", "2", &lines, &file.to_string_lossy(), None, None);
+        let outcome =
+            handle_accept_unlocked("ab12cd34", "2", &lines, &file.to_string_lossy(), None, None);
         let out = std::fs::read_to_string(&file).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
         assert!(
-            matches!(outcome, Ok(AcceptOutcome::Carbonized { carbonize: true, .. })),
+            matches!(
+                outcome,
+                Ok(AcceptOutcome::Carbonized {
+                    carbonize: true,
+                    ..
+                })
+            ),
             "accept did not carbonize: {out}"
         );
         out
@@ -1596,13 +1639,22 @@ mod carbonize_tests {
     /// the dev server fails the reload of the index that vanished.
     #[test]
     fn an_astro_carbonize_block_keeps_the_style_tag_inline() {
-        let out = carbonize("index.astro", "      <style is:inline data-impeccable-css=\"ab12cd34\">");
+        let out = carbonize(
+            "index.astro",
+            "      <style is:inline data-impeccable-css=\"ab12cd34\">",
+        );
         assert_eq!(
             style_tags(&out),
-            vec!["<style is:inline data-impeccable-css=\"ab12cd34\">", "<style>"],
+            vec![
+                "<style is:inline data-impeccable-css=\"ab12cd34\">",
+                "<style>"
+            ],
             "{out}"
         );
-        assert!(out.contains("<!-- impeccable-carbonize-start ab12cd34 -->"), "{out}");
+        assert!(
+            out.contains("<!-- impeccable-carbonize-start ab12cd34 -->"),
+            "{out}"
+        );
     }
 
     /// The tag comes from the file type, not from what the agent wrote: an
@@ -1610,17 +1662,26 @@ mod carbonize_tests {
     /// into the inline form.
     #[test]
     fn an_astro_carbonize_block_is_inline_whatever_the_variants_tag_was() {
-        let out = carbonize("index.astro", "      <style data-impeccable-css=\"ab12cd34\">");
+        let out = carbonize(
+            "index.astro",
+            "      <style data-impeccable-css=\"ab12cd34\">",
+        );
         assert_eq!(
             style_tags(&out),
-            vec!["<style is:inline data-impeccable-css=\"ab12cd34\">", "<style>"],
+            vec![
+                "<style is:inline data-impeccable-css=\"ab12cd34\">",
+                "<style>"
+            ],
             "{out}"
         );
     }
 
     #[test]
     fn an_html_carbonize_block_keeps_the_plain_style_tag() {
-        let out = carbonize("index.html", "      <style data-impeccable-css=\"ab12cd34\">");
+        let out = carbonize(
+            "index.html",
+            "      <style data-impeccable-css=\"ab12cd34\">",
+        );
         assert_eq!(
             style_tags(&out),
             vec!["<style data-impeccable-css=\"ab12cd34\">", "<style>"],
@@ -1640,7 +1701,11 @@ mod bake_tests {
     /// preflight wrote, three variants, one preview stylesheet.
     fn app_jsx() -> String {
         let variant = |n: &str, hidden: bool| {
-            let style = if hidden { " style={{ display: 'none' }}" } else { "" };
+            let style = if hidden {
+                " style={{ display: 'none' }}"
+            } else {
+                ""
+            };
             format!(
                 "          <div data-impeccable-variant=\"{n}\"{style}>\n            <div className=\"pricing-grid\">\n              <article className=\"pricing-card\">Starter</article>\n            </div>\n          </div>\n"
             )
@@ -1657,17 +1722,34 @@ mod bake_tests {
     /// A project whose session journal says the overlay saw the anchor
     /// `div.pricing-grid` match exactly one element.
     fn project(tag: &str) -> PathBuf {
-        project_with(tag, Some(json!({ "tagName": "div", "id": null, "classes": ["pricing-grid"], "anchor": "div.pricing-grid", "anchorMatches": 1 })))
+        project_with(
+            tag,
+            Some(
+                json!({ "tagName": "div", "id": null, "classes": ["pricing-grid"], "anchor": "div.pricing-grid", "anchorMatches": 1 }),
+            ),
+        )
     }
 
     fn project_with(tag: &str, element: Option<Value>) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("impeccable-accept-bake-{}-{}", tag, std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "impeccable-accept-bake-{}-{}",
+            tag,
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("src")).unwrap();
         std::fs::create_dir_all(dir.join(".impeccable/live")).unwrap();
         std::fs::write(dir.join("src/App.jsx"), app_jsx()).unwrap();
-        std::fs::write(dir.join("src/styles.css"), ".pricing-grid { display: grid; gap: 20px; }\n.pricing-card { padding: 20px; }\n").unwrap();
-        std::fs::write(dir.join("index.html"), "<html><body><div id=\"root\"></div></body></html>").unwrap();
+        std::fs::write(
+            dir.join("src/styles.css"),
+            ".pricing-grid { display: grid; gap: 20px; }\n.pricing-card { padding: 20px; }\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("index.html"),
+            "<html><body><div id=\"root\"></div></body></html>",
+        )
+        .unwrap();
         std::fs::write(dir.join("package.json"), "{\"name\":\"t\"}").unwrap();
         let env: Env = std::env::vars().collect();
         let mut generate = json!({ "type": "generate", "id": SESSION, "count": 3, "pageUrl": "/", "action": "bolder" });
@@ -1708,16 +1790,35 @@ mod bake_tests {
         assert!(!jsx.contains("data-impeccable"), "{jsx}");
         assert!(!jsx.contains("impeccable-variants"), "{jsx}");
         assert!(!jsx.contains("<style"), "{jsx}");
-        assert_eq!(jsx.matches("className=\"pricing-grid\"").count(), 1, "{jsx}");
+        assert_eq!(
+            jsx.matches("className=\"pricing-grid\"").count(),
+            1,
+            "{jsx}"
+        );
         // The element sits where the wrapper started, at its indentation.
         assert!(jsx.contains("        <h2 className=\"pricing-title\">Simple pricing</h2>\n        <div className=\"pricing-grid\">\n          <article className=\"pricing-card\">Starter</article>\n        </div>\n      </section>"), "{jsx}");
         let css = std::fs::read_to_string(dir.join("src/styles.css")).unwrap();
-        assert!(css.starts_with(".pricing-grid { display: grid; gap: 20px; }\n"), "existing rules untouched: {css}");
-        assert!(css.contains("/* impeccable generate ab12cd34: accepted variant 2 */"), "{css}");
+        assert!(
+            css.starts_with(".pricing-grid { display: grid; gap: 20px; }\n"),
+            "existing rules untouched: {css}"
+        );
+        assert!(
+            css.contains("/* impeccable generate ab12cd34: accepted variant 2 */"),
+            "{css}"
+        );
         assert!(css.contains("div.pricing-grid { gap: 32px; }"), "{css}");
-        assert!(css.contains("div.pricing-grid .pricing-card { border: 2px solid #111; }"), "{css}");
-        assert!(!css.contains("8px") && !css.contains("gap: 0"), "other variants dropped: {css}");
-        assert!(!css.contains(":scope") && !css.contains("data-impeccable"), "{css}");
+        assert!(
+            css.contains("div.pricing-grid .pricing-card { border: 2px solid #111; }"),
+            "{css}"
+        );
+        assert!(
+            !css.contains("8px") && !css.contains("gap: 0"),
+            "other variants dropped: {css}"
+        );
+        assert!(
+            !css.contains(":scope") && !css.contains("data-impeccable"),
+            "{css}"
+        );
         // Idempotent: the receipt answers a rerun.
         let again = accept(&dir, &["--id", SESSION, "--variant", "2", "--bake"]);
         assert_eq!(again["alreadyApplied"], json!(true), "{again}");
@@ -1734,7 +1835,9 @@ mod bake_tests {
         assert!(plain.get("baked").is_none(), "{plain}");
         let jsx = std::fs::read_to_string(dir.join("src/App.jsx")).unwrap();
         assert!(jsx.contains("impeccable-carbonize-start"), "{jsx}");
-        assert!(!std::fs::read_to_string(dir.join("src/styles.css")).unwrap().contains("32px"));
+        assert!(!std::fs::read_to_string(dir.join("src/styles.css"))
+            .unwrap()
+            .contains("32px"));
 
         // The generate verb's session (the journal says origin agent) carbonizes
         // the same way: the agent integrates the accepted variant per live.md.
@@ -1746,13 +1849,18 @@ mod bake_tests {
         let lane = accept(&dir2, &["--id", SESSION, "--variant", "2"]);
         assert_eq!(lane["carbonize"], json!(true), "{lane}");
         assert!(lane.get("baked").is_none(), "{lane}");
-        assert!(std::fs::read_to_string(dir2.join("src/App.jsx")).unwrap().contains("impeccable-carbonize-start"));
+        assert!(std::fs::read_to_string(dir2.join("src/App.jsx"))
+            .unwrap()
+            .contains("impeccable-carbonize-start"));
         // --bake is the only way in, and --no-bake still wins over it.
         let dir3 = project("origin3");
         let baked = accept(&dir3, &["--id", SESSION, "--variant", "2", "--bake"]);
         assert_eq!(baked["baked"], json!(true), "{baked}");
         let dir4 = project("origin4");
-        let kept = accept(&dir4, &["--id", SESSION, "--variant", "2", "--bake", "--no-bake"]);
+        let kept = accept(
+            &dir4,
+            &["--id", SESSION, "--variant", "2", "--bake", "--no-bake"],
+        );
         assert_eq!(kept["carbonize"], json!(true), "{kept}");
         for d in [dir, dir2, dir3, dir4] {
             let _ = std::fs::remove_dir_all(&d);
@@ -1763,17 +1871,36 @@ mod bake_tests {
     fn a_class_anchor_the_page_showed_more_than_once_refuses_the_bake() {
         // Three elements matched the anchor when Go fired (three cards from
         // one JSX element, say): lasting rules on it would restyle them all.
-        let dir = project_with("siblings", Some(json!({ "anchor": "div.pricing-grid", "anchorMatches": 3 })));
+        let dir = project_with(
+            "siblings",
+            Some(json!({ "anchor": "div.pricing-grid", "anchorMatches": 3 })),
+        );
         let result = accept(&dir, &["--id", SESSION, "--variant", "2", "--bake"]);
         assert_eq!(result["carbonize"], json!(true), "{result}");
-        assert!(result["bakeSkipped"].as_str().unwrap().contains("div.pricing-grid matches 3 elements"), "{result}");
-        assert!(std::fs::read_to_string(dir.join("src/App.jsx")).unwrap().contains("impeccable-carbonize-start"));
-        assert!(!std::fs::read_to_string(dir.join("src/styles.css")).unwrap().contains("32px"));
+        assert!(
+            result["bakeSkipped"]
+                .as_str()
+                .unwrap()
+                .contains("div.pricing-grid matches 3 elements"),
+            "{result}"
+        );
+        assert!(std::fs::read_to_string(dir.join("src/App.jsx"))
+            .unwrap()
+            .contains("impeccable-carbonize-start"));
+        assert!(!std::fs::read_to_string(dir.join("src/styles.css"))
+            .unwrap()
+            .contains("32px"));
         // Without the overlay's descriptor there is nothing to verify against.
         let dir2 = project_with("nodesc", None);
         let result = accept(&dir2, &["--id", SESSION, "--variant", "2", "--bake"]);
         assert_eq!(result["carbonize"], json!(true), "{result}");
-        assert!(result["bakeSkipped"].as_str().unwrap().contains("no element descriptor"), "{result}");
+        assert!(
+            result["bakeSkipped"]
+                .as_str()
+                .unwrap()
+                .contains("no element descriptor"),
+            "{result}"
+        );
         for d in [dir, dir2] {
             let _ = std::fs::remove_dir_all(&d);
         }
@@ -1782,11 +1909,16 @@ mod bake_tests {
     #[test]
     fn a_knob_session_falls_back_to_the_carbonize_block_with_the_reason() {
         let dir = project("knobs");
-        let src = std::fs::read_to_string(dir.join("src/App.jsx")).unwrap().replace("gap: 32px", "gap: var(--p-gap, 32px)");
+        let src = std::fs::read_to_string(dir.join("src/App.jsx"))
+            .unwrap()
+            .replace("gap: 32px", "gap: var(--p-gap, 32px)");
         std::fs::write(dir.join("src/App.jsx"), src).unwrap();
         let result = accept(&dir, &["--id", SESSION, "--variant", "2", "--bake"]);
         assert_eq!(result["carbonize"], json!(true), "{result}");
-        assert!(result["bakeSkipped"].as_str().unwrap().contains("knobs"), "{result}");
+        assert!(
+            result["bakeSkipped"].as_str().unwrap().contains("knobs"),
+            "{result}"
+        );
         let jsx = std::fs::read_to_string(dir.join("src/App.jsx")).unwrap();
         assert!(jsx.contains("impeccable-carbonize-start"), "{jsx}");
         let _ = std::fs::remove_dir_all(&dir);

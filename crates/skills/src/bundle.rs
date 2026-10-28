@@ -13,11 +13,11 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use sha2::{Digest, Sha256};
 
+use crate::bundle_signature::{self, TrustedKeys, MAX_SIGNATURE_BYTES};
 use crate::providers::{
     opencode_global_config_dir, provider_display_name, Scope, Sys, API_BASE, PROVIDER_DIRS,
 };
 use crate::util::{self, jsp};
-use crate::bundle_signature::{self, TrustedKeys, MAX_SIGNATURE_BYTES};
 
 /// Ceiling on any single download this crate performs (triage C4). The
 /// launcher-only universal bundle is under 25 MB (the Cloudflare Pages file
@@ -68,7 +68,10 @@ fn download_agent(connect: std::time::Duration, idle: std::time::Duration) -> ur
 fn describe_io_error(e: &std::io::Error, url: &str, idle: std::time::Duration) -> String {
     match e.kind() {
         std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut => {
-            format!("no data received for {} s downloading {url}; check the network and retry", idle.as_secs())
+            format!(
+                "no data received for {} s downloading {url}; check the network and retry",
+                idle.as_secs()
+            )
         }
         _ => e.to_string(),
     }
@@ -88,7 +91,9 @@ pub fn download(url: &str) -> Result<Vec<u8>, String> {
                 .read_to_end(&mut body)
                 .map_err(|e| describe_io_error(&e, url, IDLE_TIMEOUT))?;
             if body.len() as u64 > MAX_DOWNLOAD_BYTES {
-                return Err(format!("response too large downloading {url} (over {MAX_DOWNLOAD_BYTES} bytes)"));
+                return Err(format!(
+                    "response too large downloading {url} (over {MAX_DOWNLOAD_BYTES} bytes)"
+                ));
             }
             Ok(body)
         }
@@ -112,13 +117,21 @@ fn ureq_fetch(url: &str) -> Result<FetchResponse, String> {
 
 /// One transport hop with a connect timeout and an idle timeout, and no cap
 /// on the whole transfer (see [`IDLE_TIMEOUT`]).
-fn ureq_fetch_with(url: &str, connect: std::time::Duration, idle: std::time::Duration) -> Result<FetchResponse, String> {
+fn ureq_fetch_with(
+    url: &str,
+    connect: std::time::Duration,
+    idle: std::time::Duration,
+) -> Result<FetchResponse, String> {
     let agent = download_agent(connect, idle).redirects(0).build();
     match agent.get(url).call() {
         Ok(res) => Ok(FetchResponse {
             status: res.status(),
             location: res.header("location").map(str::to_string),
-            body: Box::new(IdleNamedReader { inner: res.into_reader(), url: url.to_string(), idle }),
+            body: Box::new(IdleNamedReader {
+                inner: res.into_reader(),
+                url: url.to_string(),
+                idle,
+            }),
         }),
         Err(ureq::Error::Status(code, res)) => Ok(FetchResponse {
             status: code,
@@ -140,9 +153,10 @@ struct IdleNamedReader<R> {
 impl<R: Read> Read for IdleNamedReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.inner.read(buf).map_err(|e| match e.kind() {
-            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut => {
-                std::io::Error::new(std::io::ErrorKind::TimedOut, describe_io_error(&e, &self.url, self.idle))
-            }
+            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut => std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                describe_io_error(&e, &self.url, self.idle),
+            ),
             _ => e,
         })
     }
@@ -241,7 +255,9 @@ fn download_file_capped(
         };
         let result = result.and_then(|()| {
             if copied > max_bytes {
-                Err(Download(format!("response too large downloading {current} (over {max_bytes} bytes)")))
+                Err(Download(format!(
+                    "response too large downloading {current} (over {max_bytes} bytes)"
+                )))
             } else {
                 Ok(())
             }
@@ -264,8 +280,7 @@ pub fn extract_zip(bytes: &[u8], target_dir: &str, cwd: &str) -> Result<(), Stri
 /// buffered whole in memory (JS af2e8b3a streamed the download for the same
 /// reason).
 pub fn extract_zip_file(zip_path: &str, target_dir: &str, cwd: &str) -> Result<(), String> {
-    let file = std::fs::File::open(zip_path)
-        .map_err(|e| util::node_error("open", zip_path, &e))?;
+    let file = std::fs::File::open(zip_path).map_err(|e| util::node_error("open", zip_path, &e))?;
     extract_zip_from(std::io::BufReader::new(file), target_dir, cwd)
 }
 
@@ -278,7 +293,11 @@ fn dest_within_root(root: &str, dest: &str, sep: &str) -> bool {
     dest == root || dest.starts_with(&format!("{root}{sep}"))
 }
 
-fn extract_zip_from<R: Read + std::io::Seek>(reader: R, target_dir: &str, cwd: &str) -> Result<(), String> {
+fn extract_zip_from<R: Read + std::io::Seek>(
+    reader: R,
+    target_dir: &str,
+    cwd: &str,
+) -> Result<(), String> {
     let mut archive = zip::ZipArchive::new(reader).map_err(|e| e.to_string())?;
     if archive.len() > MAX_ARCHIVE_ENTRIES {
         return Err(format!(
@@ -310,7 +329,9 @@ fn extract_zip_from<R: Read + std::io::Seek>(reader: R, target_dir: &str, cwd: &
         }
         let dest = jsp::resolve(&root, &[&entry_path]);
         if !dest_within_root(&root, &dest, jsp::SEP) {
-            return Err(format!("Refusing to extract entry outside target dir: {entry_path}"));
+            return Err(format!(
+                "Refusing to extract entry outside target dir: {entry_path}"
+            ));
         }
         util::mkdir_p(&jsp::dirname(&dest))?;
         let mut data = Vec::new();
@@ -341,7 +362,9 @@ fn extract_zip_from<R: Read + std::io::Seek>(reader: R, target_dir: &str, cwd: &
             let mode = entry.unix_mode().unwrap_or(0) & 0o7777;
             if mode != 0 {
                 let _ = std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(mode));
-            } else if entry_path.ends_with("scripts/impeccable") || entry_path.contains("scripts/bin/") {
+            } else if entry_path.ends_with("scripts/impeccable")
+                || entry_path.contains("scripts/bin/")
+            {
                 let _ = std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o755));
             }
         }
@@ -357,7 +380,11 @@ pub fn download_and_extract_bundle(sys: &Sys) -> Result<String, BundleError> {
     if let Some(forced) = test_seam::take() {
         return forced;
     }
-    if let Some(local) = sys.env.get("IMPECCABLE_BUNDLE_PATH").filter(|v| !v.is_empty()) {
+    if let Some(local) = sys
+        .env
+        .get("IMPECCABLE_BUNDLE_PATH")
+        .filter(|v| !v.is_empty())
+    {
         return copy_or_extract_local_bundle(sys, local).map_err(BundleError::Local);
     }
     download_remote_bundle(sys, &mut ureq_fetch, bundle_signature::trusted_keys())
@@ -421,7 +448,10 @@ impl BundleError {
 
     fn into_detail(self) -> String {
         match self {
-            BundleError::Download(e) | BundleError::Verify(e) | BundleError::Unpack(e) | BundleError::Local(e) => e,
+            BundleError::Download(e)
+            | BundleError::Verify(e)
+            | BundleError::Unpack(e)
+            | BundleError::Local(e) => e,
         }
     }
 }
@@ -465,16 +495,31 @@ fn download_and_extract_signed_bundle(
     let result = (|| -> Result<(), BundleError> {
         // Resolve once, then request both assets from that exact release. Never
         // pair a latest-version lookup with a independently changing ZIP URL.
-        let response = fetch(&format!("{API_BASE}/api/download/bundle/universal")).map_err(Download)?;
+        let response =
+            fetch(&format!("{API_BASE}/api/download/bundle/universal")).map_err(Download)?;
         if !matches!(response.status, 301 | 302 | 303 | 307 | 308) {
             // An error status is the server failing; any other answer is not
             // the pinned release redirect.
-            let error = format!("Expected a signed bundle release redirect (HTTP {})", response.status);
-            return Err(if response.status >= 400 { Download(error) } else { Verify(error) });
+            let error = format!(
+                "Expected a signed bundle release redirect (HTTP {})",
+                response.status
+            );
+            return Err(if response.status >= 400 {
+                Download(error)
+            } else {
+                Verify(error)
+            });
         }
-        let location = response.location.ok_or_else(|| Verify("Missing bundle release redirect".into()))?;
+        let location = response
+            .location
+            .ok_or_else(|| Verify("Missing bundle release redirect".into()))?;
         let version = bundle_signature::release_version(&location).map_err(Verify)?;
-        download_file_capped(&format!("{location}.sig.json"), &tmp_signature, fetch, MAX_SIGNATURE_BYTES)?;
+        download_file_capped(
+            &format!("{location}.sig.json"),
+            &tmp_signature,
+            fetch,
+            MAX_SIGNATURE_BYTES,
+        )?;
         download_file_capped(&location, &tmp_zip, fetch, MAX_DOWNLOAD_BYTES)?;
         let signature = std::fs::read(&tmp_signature).map_err(|e| Unpack(e.to_string()))?;
         let file = std::fs::File::open(&tmp_zip).map_err(|e| Unpack(e.to_string()))?;
@@ -506,13 +551,11 @@ fn copy_or_extract_local_bundle(sys: &Sys, source_value: &str) -> Result<String,
     }
     let tmp = util::tmpdir(&sys.env);
     let staging = util::mkdtemp(&jsp::join(&[&tmp, "impeccable-local-bundle-"]))?;
-    let result = (|| -> Result<(), String> {
-        if util::is_dir(&source) {
-            util::copy_dir(&source, &staging)
-        } else {
-            extract_zip_file(&source, &staging, &sys.cwd)
-        }
-    })();
+    let result = if util::is_dir(&source) {
+        util::copy_dir(&source, &staging)
+    } else {
+        extract_zip_file(&source, &staging, &sys.cwd)
+    };
     match result {
         Ok(()) => Ok(staging),
         Err(e) => {
@@ -528,7 +571,9 @@ fn copy_or_extract_local_bundle(sys: &Sys, source_value: &str) -> Result<String,
 /// they must not read as a difference from the bundle.
 pub fn list_skill_tree_files(root: &str) -> Vec<String> {
     fn walk(root: &str, dir: &str, out: &mut Vec<String>) {
-        let Some(names) = util::read_dir_names(dir) else { return };
+        let Some(names) = util::read_dir_names(dir) else {
+            return;
+        };
         for name in names {
             let full = jsp::join(&[dir, &name]);
             let meta = match std::fs::metadata(&full) {
@@ -559,7 +604,9 @@ static PROVIDER_PATH_RE: Lazy<Regex> = Lazy::new(|| {
 
 /// JS: normalizeForHash(content)
 pub fn normalize_for_hash(content: &str) -> String {
-    PROVIDER_PATH_RE.replace_all(content, ".PROVIDER/skills/").into_owned()
+    PROVIDER_PATH_RE
+        .replace_all(content, ".PROVIDER/skills/")
+        .into_owned()
 }
 
 /// JS: hashSkillFile(filePath)
@@ -577,7 +624,14 @@ pub fn hex(bytes: &[u8]) -> String {
 /// JS: isUpToDate(root, providers, bundleDir, scope, agentScope = scope).
 /// `agent_scope` lets a home-rooted implicit update keep checking the user
 /// agent dirs while the skill scope stays inferred (upstream d2a9efb9).
-pub fn is_up_to_date(sys: &Sys, root: &str, providers: &[&str], bundle_dir: &str, scope: Option<Scope>, agent_scope: Option<Scope>) -> Result<bool, String> {
+pub fn is_up_to_date(
+    sys: &Sys,
+    root: &str,
+    providers: &[&str],
+    bundle_dir: &str,
+    scope: Option<Scope>,
+    agent_scope: Option<Scope>,
+) -> Result<bool, String> {
     let unique = sys.deduplicate_providers(root, providers, scope);
     if unique.is_empty() {
         return Ok(false);
@@ -648,7 +702,9 @@ fn is_in_project_provider_link(local_skills_dir: &str, root: &str, provider: &st
     if !util::is_symlink(local_skills_dir) {
         return false;
     }
-    let Some(target) = util::readlink(local_skills_dir) else { return false };
+    let Some(target) = util::readlink(local_skills_dir) else {
+        return false;
+    };
     let resolved_target = jsp::resolve(&jsp::dirname(local_skills_dir), &[&target]);
     PROVIDER_DIRS
         .iter()
@@ -668,7 +724,13 @@ fn bundle_skill_dirs(src_dir: &str) -> Vec<String> {
 
 /// JS: copyProviderSkills(bundleDir, root, targets, {scope}). Returns the
 /// skill directories written (the JS returned only the count).
-pub fn copy_provider_skills(sys: &Sys, bundle_dir: &str, root: &str, targets: &[&str], scope: Option<Scope>) -> Result<Vec<String>, String> {
+pub fn copy_provider_skills(
+    sys: &Sys,
+    bundle_dir: &str,
+    root: &str,
+    targets: &[&str],
+    scope: Option<Scope>,
+) -> Result<Vec<String>, String> {
     let mut written = Vec::new();
     for provider in targets {
         let src_dir = jsp::join(&[bundle_dir, provider, "skills"]);
@@ -713,7 +775,12 @@ pub fn copy_provider_skills(sys: &Sys, bundle_dir: &str, root: &str, targets: &[
 /// JS: skills.mjs#providerCommandsDir. Project installs land at
 /// `<root>/<configDir>/commands`; a user-scope OpenCode install must target
 /// the config dir OpenCode actually scans.
-fn provider_commands_dir(sys: &Sys, root: &str, provider_entry: &str, scope: Option<Scope>) -> String {
+fn provider_commands_dir(
+    sys: &Sys,
+    root: &str,
+    provider_entry: &str,
+    scope: Option<Scope>,
+) -> String {
     if scope == Some(Scope::User) {
         jsp::join(&[&opencode_global_config_dir(&sys.env, root), "commands"])
     } else {
@@ -734,7 +801,13 @@ fn provider_commands_dir(sys: &Sys, root: &str, provider_entry: &str, scope: Opt
 /// copy, sibling commands stay put, symlinked legacy dirs are skipped
 /// (deleting through a symlink would empty the real target), and a
 /// home-rooted git repo is left alone.
-pub fn copy_provider_commands(sys: &Sys, bundle_dir: &str, root: &str, targets: &[&str], scope: Option<Scope>) -> usize {
+pub fn copy_provider_commands(
+    sys: &Sys,
+    bundle_dir: &str,
+    root: &str,
+    targets: &[&str],
+    scope: Option<Scope>,
+) -> usize {
     let mut written = 0usize;
     for target in targets {
         let dotted = format!(".{target}");
@@ -783,7 +856,13 @@ pub fn copy_provider_commands(sys: &Sys, bundle_dir: &str, root: &str, targets: 
 
 /// JS: refreshProviderSkills(bundleDir, root, providers, scope). Returns the
 /// skill directories refreshed.
-pub fn refresh_provider_skills(sys: &Sys, bundle_dir: &str, root: &str, providers: &[&str], scope: Option<Scope>) -> Result<Vec<String>, String> {
+pub fn refresh_provider_skills(
+    sys: &Sys,
+    bundle_dir: &str,
+    root: &str,
+    providers: &[&str],
+    scope: Option<Scope>,
+) -> Result<Vec<String>, String> {
     let mut updated = Vec::new();
     for (provider, local_skills_dir) in sys.deduplicate_providers(root, providers, scope) {
         let src_dir = jsp::join(&[bundle_dir, provider, "skills"]);
@@ -842,7 +921,12 @@ fn agent_artifact(provider: &str) -> Option<AgentArtifact> {
 
 /// JS: providerAgentsUpToDate(bundleDir, root, provider, scope): every
 /// bundled agent file exists at its destination with a matching hash.
-fn provider_agents_up_to_date(bundle_dir: &str, root: &str, provider: &str, scope: Option<Scope>) -> Result<bool, String> {
+fn provider_agents_up_to_date(
+    bundle_dir: &str,
+    root: &str,
+    provider: &str,
+    scope: Option<Scope>,
+) -> Result<bool, String> {
     let Some(artifact) = agent_artifact(provider) else {
         return Ok(true);
     };
@@ -871,10 +955,18 @@ fn provider_agents_up_to_date(bundle_dir: &str, root: &str, provider: &str, scop
 }
 
 /// JS: copyProviderAgents(bundleDir, root, providers, {scope, home})
-pub fn copy_provider_agents(sys: &Sys, bundle_dir: &str, root: &str, providers: &[&'static str], scope: Option<Scope>) -> Result<Vec<AgentResult>, String> {
+pub fn copy_provider_agents(
+    sys: &Sys,
+    bundle_dir: &str,
+    root: &str,
+    providers: &[&'static str],
+    scope: Option<Scope>,
+) -> Result<Vec<AgentResult>, String> {
     let mut results = Vec::new();
     for provider in providers {
-        let Some(artifact) = agent_artifact(provider) else { continue };
+        let Some(artifact) = agent_artifact(provider) else {
+            continue;
+        };
         let src_dir = jsp::join(&[bundle_dir, provider, "agents"]);
         if !util::exists(&src_dir) {
             continue;
@@ -894,15 +986,28 @@ pub fn copy_provider_agents(sys: &Sys, bundle_dir: &str, root: &str, providers: 
         };
         util::mkdir_p(&dest_dir)?;
         for name in &agent_files {
-            util::write_bytes(&jsp::join(&[&dest_dir, name]), &util::read_bytes(&jsp::join(&[&src_dir, name]))?)?;
+            util::write_bytes(
+                &jsp::join(&[&dest_dir, name]),
+                &util::read_bytes(&jsp::join(&[&src_dir, name]))?,
+            )?;
         }
         let user_dir = (artifact.user_dir)(&sys.home);
         let shadowed: Vec<String> = if artifact.user_shadows_project && scope != Some(Scope::User) {
-            agent_files.iter().filter(|n| util::exists(&jsp::join(&[&user_dir, n]))).cloned().collect()
+            agent_files
+                .iter()
+                .filter(|n| util::exists(&jsp::join(&[&user_dir, n])))
+                .cloned()
+                .collect()
         } else {
             Vec::new()
         };
-        results.push(AgentResult { provider, written: agent_files.len(), dest_dir, user_dir, shadowed });
+        results.push(AgentResult {
+            provider,
+            written: agent_files.len(),
+            dest_dir,
+            user_dir,
+            shadowed,
+        });
     }
     Ok(results)
 }
@@ -944,10 +1049,19 @@ pub fn resolve_link_source(source_value: Option<&str>, root: &str) -> Result<Lin
     };
     let universal_root = jsp::join(&[&checkout_root, "dist", "universal"]);
     if util::exists(&universal_root) {
-        return Ok(LinkSource { checkout_root, bundle_root: universal_root });
+        return Ok(LinkSource {
+            checkout_root,
+            bundle_root: universal_root,
+        });
     }
-    if PROVIDER_DIRS.iter().any(|p| util::exists(&jsp::join(&[&checkout_root, p, "skills"]))) {
-        return Ok(LinkSource { bundle_root: checkout_root.clone(), checkout_root });
+    if PROVIDER_DIRS
+        .iter()
+        .any(|p| util::exists(&jsp::join(&[&checkout_root, p, "skills"])))
+    {
+        return Ok(LinkSource {
+            bundle_root: checkout_root.clone(),
+            checkout_root,
+        });
     }
     Err(format!("Could not find compiled skills in {source_path}. Expected dist/universal/ or provider skill folders."))
 }
@@ -957,9 +1071,14 @@ fn is_symlink_to(dest: &str, expected_source: &str) -> bool {
     if !util::is_symlink(dest) {
         return false;
     }
-    let Some(target) = util::readlink(dest) else { return false };
+    let Some(target) = util::readlink(dest) else {
+        return false;
+    };
     let resolved_target = jsp::resolve(&jsp::dirname(dest), &[&target]);
-    match (util::realpath(&resolved_target), util::realpath(expected_source)) {
+    match (
+        util::realpath(&resolved_target),
+        util::realpath(expected_source),
+    ) {
         (Some(a), Some(b)) => a == b,
         _ => false,
     }
@@ -972,8 +1091,18 @@ pub struct LinkResult {
 }
 
 /// JS: linkProviderSkills(bundleRoot, root, targets, {force})
-pub fn link_provider_skills(io: &mut Io, bundle_root: &str, root: &str, targets: &[&str], force: bool) -> Result<LinkResult, String> {
-    let mut result = LinkResult { linked: 0, already: 0, skipped: 0 };
+pub fn link_provider_skills(
+    io: &mut Io,
+    bundle_root: &str,
+    root: &str,
+    targets: &[&str],
+    force: bool,
+) -> Result<LinkResult, String> {
+    let mut result = LinkResult {
+        linked: 0,
+        already: 0,
+        skipped: 0,
+    };
     // JS: resolveUniqueLinkTargets
     let mut seen: Vec<String> = Vec::new();
     let mut unique: Vec<(&str, String)> = Vec::new();
@@ -1035,11 +1164,18 @@ mod tests {
             while !seen.ends_with(b"\r\n\r\n") && stream.read(&mut byte).unwrap_or(0) == 1 {
                 seen.push(byte[0]);
             }
-            let head = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", chunks * 1024);
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                chunks * 1024
+            );
             let _ = stream.write_all(head.as_bytes());
             for _ in 0..chunks {
                 std::thread::sleep(gap);
-                if stream.write_all(&[b'x'; 1024]).and_then(|_| stream.flush()).is_err() {
+                if stream
+                    .write_all(&[b'x'; 1024])
+                    .and_then(|_| stream.flush())
+                    .is_err()
+                {
                     return;
                 }
             }
@@ -1052,20 +1188,33 @@ mod tests {
         // #1115: the whole transfer takes ~3 s, three times the idle limit,
         // and still completes because bytes keep arriving.
         let url = slow_server(15, std::time::Duration::from_millis(200));
-        let res = ureq_fetch_with(&url, CONNECT_TIMEOUT, std::time::Duration::from_secs(1)).unwrap();
+        let res =
+            ureq_fetch_with(&url, CONNECT_TIMEOUT, std::time::Duration::from_secs(1)).unwrap();
         assert_eq!(res.status, 200);
         let mut body = Vec::new();
-        res.body.take(MAX_DOWNLOAD_BYTES).read_to_end(&mut body).unwrap();
+        res.body
+            .take(MAX_DOWNLOAD_BYTES)
+            .read_to_end(&mut body)
+            .unwrap();
         assert_eq!(body.len(), 15 * 1024);
     }
 
     #[test]
     fn stalled_download_fails_with_an_idle_message() {
         let url = slow_server(1, std::time::Duration::from_secs(3));
-        let res = ureq_fetch_with(&url, CONNECT_TIMEOUT, std::time::Duration::from_millis(500)).unwrap();
+        let res =
+            ureq_fetch_with(&url, CONNECT_TIMEOUT, std::time::Duration::from_millis(500)).unwrap();
         let mut body = Vec::new();
-        let err = res.body.take(MAX_DOWNLOAD_BYTES).read_to_end(&mut body).unwrap_err();
-        assert!(err.to_string().starts_with("no data received for 0 s downloading http://127.0.0.1:"), "{err}");
+        let err = res
+            .body
+            .take(MAX_DOWNLOAD_BYTES)
+            .read_to_end(&mut body)
+            .unwrap_err();
+        assert!(
+            err.to_string()
+                .starts_with("no data received for 0 s downloading http://127.0.0.1:"),
+            "{err}"
+        );
     }
 
     fn tmp_dir(tag: &str) -> String {
@@ -1098,8 +1247,14 @@ mod tests {
         let dir = tmp_dir("ok");
         let bytes = zip_bytes(&[("a/x.txt", b"hello"), ("a/b/y.txt", b"world")]);
         extract_zip(&bytes, &dir, "/").unwrap();
-        assert_eq!(std::fs::read_to_string(format!("{dir}/a/x.txt")).unwrap(), "hello");
-        assert_eq!(std::fs::read_to_string(format!("{dir}/a/b/y.txt")).unwrap(), "world");
+        assert_eq!(
+            std::fs::read_to_string(format!("{dir}/a/x.txt")).unwrap(),
+            "hello"
+        );
+        assert_eq!(
+            std::fs::read_to_string(format!("{dir}/a/b/y.txt")).unwrap(),
+            "world"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1129,7 +1284,9 @@ mod tests {
                 body: Box::new(std::io::repeat(b'a')),
             })
         };
-        let err = download_file_capped("https://x/bundle", &dest, &mut fetch, 4096).unwrap_err().into_detail();
+        let err = download_file_capped("https://x/bundle", &dest, &mut fetch, 4096)
+            .unwrap_err()
+            .into_detail();
         assert!(err.contains("response too large"), "{err}");
         assert!(!std::path::Path::new(&dest).exists());
         let _ = std::fs::remove_dir_all(&dir);
@@ -1154,13 +1311,20 @@ mod tests {
         // Sibling-prefix trickery must not pass on either separator.
         assert!(!dest_within_root("/tmp/stage", "/tmp/stage-evil/file", "/"));
         assert!(!dest_within_root(r"C:\stage", r"C:\evil", r"\"));
-        assert!(!dest_within_root(r"C:\stage", r"C:\Windows\System32\x", r"\"));
+        assert!(!dest_within_root(
+            r"C:\stage",
+            r"C:\Windows\System32\x",
+            r"\"
+        ));
         assert!(!dest_within_root(r"C:\stage", r"C:\stage-evil\file", r"\"));
     }
 
     #[test]
     fn hash_normalizes_provider_paths() {
-        assert_eq!(normalize_for_hash("x .claude/skills/y .trae-cn/skills/z .agent/skills/"), "x .PROVIDER/skills/y .PROVIDER/skills/z .PROVIDER/skills/");
+        assert_eq!(
+            normalize_for_hash("x .claude/skills/y .trae-cn/skills/z .agent/skills/"),
+            "x .PROVIDER/skills/y .PROVIDER/skills/z .PROVIDER/skills/"
+        );
         assert_eq!(normalize_for_hash(".other/skills/"), ".other/skills/");
     }
 
@@ -1170,48 +1334,118 @@ mod tests {
         let mut fetch = |_: &str| -> Result<FetchResponse, String> {
             panic!("A failed keyring must never reach the network");
         };
-        let error = download_remote_bundle(&sys, &mut fetch, Err("Invalid compiled bundle signing keyring".into())).unwrap_err();
+        let error = download_remote_bundle(
+            &sys,
+            &mut fetch,
+            Err("Invalid compiled bundle signing keyring".into()),
+        )
+        .unwrap_err();
         assert!(matches!(error, BundleError::Verify(_)), "{error}");
-        assert!(error.to_string().starts_with(bundle_signature::ERROR_PREFIX), "{error}");
-        assert!(error.to_string().contains("Invalid compiled bundle signing keyring"), "{error}");
+        assert!(
+            error
+                .to_string()
+                .starts_with(bundle_signature::ERROR_PREFIX),
+            "{error}"
+        );
+        assert!(
+            error
+                .to_string()
+                .contains("Invalid compiled bundle signing keyring"),
+            "{error}"
+        );
     }
 
     #[test]
     fn transport_and_staging_failures_name_their_step() {
-        let release = "https://github.com/pbakaus/impeccable/releases/download/skill-v4.2.0/universal.zip";
+        let release =
+            "https://github.com/pbakaus/impeccable/releases/download/skill-v4.2.0/universal.zip";
         struct Stalled;
         impl Read for Stalled {
             fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
-                Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "no data received"))
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "no data received",
+                ))
             }
         }
         for case in ["connect", "zip-stall"] {
             let root = tmp_dir(case);
-            let sys = Sys::new([("TMPDIR".into(), root.clone()), ("TEMP".into(), root.clone())].into(), root.clone());
+            let sys = Sys::new(
+                [
+                    ("TMPDIR".into(), root.clone()),
+                    ("TEMP".into(), root.clone()),
+                ]
+                .into(),
+                root.clone(),
+            );
             let mut fetch = |url: &str| -> Result<FetchResponse, String> {
                 match (case, url) {
                     ("connect", _) => Err("connection refused".into()),
-                    (_, u) if u.ends_with("/api/download/bundle/universal") => Ok(FetchResponse { status: 302, location: Some(release.into()), body: Box::new(std::io::empty()) }),
-                    (_, u) if u.ends_with(".sig.json") => Ok(FetchResponse { status: 200, location: None, body: Box::new(std::io::Cursor::new(b"{}".to_vec())) }),
-                    _ => Ok(FetchResponse { status: 200, location: None, body: Box::new(Stalled) }),
+                    (_, u) if u.ends_with("/api/download/bundle/universal") => Ok(FetchResponse {
+                        status: 302,
+                        location: Some(release.into()),
+                        body: Box::new(std::io::empty()),
+                    }),
+                    (_, u) if u.ends_with(".sig.json") => Ok(FetchResponse {
+                        status: 200,
+                        location: None,
+                        body: Box::new(std::io::Cursor::new(b"{}".to_vec())),
+                    }),
+                    _ => Ok(FetchResponse {
+                        status: 200,
+                        location: None,
+                        body: Box::new(Stalled),
+                    }),
                 }
             };
-            let error = download_remote_bundle(&sys, &mut fetch, Ok(Default::default())).unwrap_err();
+            let error =
+                download_remote_bundle(&sys, &mut fetch, Ok(Default::default())).unwrap_err();
             assert!(matches!(error, BundleError::Download(_)), "{case}: {error}");
-            assert!(error.to_string().starts_with("Could not download skill bundle: "), "{case}: {error}");
+            assert!(
+                error
+                    .to_string()
+                    .starts_with("Could not download skill bundle: "),
+                "{case}: {error}"
+            );
             util::rm_rf(&root);
         }
-        let unwritable = Sys::new([("TMPDIR".into(), "/nonexistent/impeccable".into()), ("TEMP".into(), "/nonexistent/impeccable".into())].into(), "/".into());
-        let mut fetch = |_: &str| -> Result<FetchResponse, String> { panic!("staging fails before any request") };
-        let error = download_remote_bundle(&unwritable, &mut fetch, Ok(Default::default())).unwrap_err();
+        let unwritable = Sys::new(
+            [
+                ("TMPDIR".into(), "/nonexistent/impeccable".into()),
+                ("TEMP".into(), "/nonexistent/impeccable".into()),
+            ]
+            .into(),
+            "/".into(),
+        );
+        let mut fetch = |_: &str| -> Result<FetchResponse, String> {
+            panic!("staging fails before any request")
+        };
+        let error =
+            download_remote_bundle(&unwritable, &mut fetch, Ok(Default::default())).unwrap_err();
         assert!(matches!(error, BundleError::Unpack(_)), "{error}");
         let mut fetch = |_: &str| -> Result<FetchResponse, String> {
-            Ok(FetchResponse { status: 200, location: None, body: Box::new(std::io::Cursor::new(b"zip".to_vec())) })
+            Ok(FetchResponse {
+                status: 200,
+                location: None,
+                body: Box::new(std::io::Cursor::new(b"zip".to_vec())),
+            })
         };
-        let error = download_file_capped("https://example.com/b.zip", "/nonexistent/impeccable/b.zip", &mut fetch, MAX_DOWNLOAD_BYTES).unwrap_err();
-        assert!(matches!(error, BundleError::Unpack(_)), "a failed save is not a download failure: {error}");
-        assert!(!BundleError::Local("Local bundle not found: x".into()).is_fatal_over_existing_install());
-        assert!(!BundleError::Download("connection refused".into()).is_fatal_over_existing_install());
+        let error = download_file_capped(
+            "https://example.com/b.zip",
+            "/nonexistent/impeccable/b.zip",
+            &mut fetch,
+            MAX_DOWNLOAD_BYTES,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(error, BundleError::Unpack(_)),
+            "a failed save is not a download failure: {error}"
+        );
+        assert!(!BundleError::Local("Local bundle not found: x".into())
+            .is_fatal_over_existing_install());
+        assert!(
+            !BundleError::Download("connection refused".into()).is_fatal_over_existing_install()
+        );
         assert!(!BundleError::Unpack("disk full".into()).is_fatal_over_existing_install());
         assert!(BundleError::Verify("digest mismatch".into()).is_fatal_over_existing_install());
     }
@@ -1220,27 +1454,51 @@ mod tests {
     fn release_resolution_accepts_standard_redirects_only() {
         for status in [200, 300, 301, 302, 303, 304, 305, 306, 307, 308, 404] {
             let root = tmp_dir(&format!("redirect-{status}"));
-            let sys = Sys::new([("TMPDIR".into(), root.clone()), ("TEMP".into(), root.clone())].into(), root.clone());
+            let sys = Sys::new(
+                [
+                    ("TMPDIR".into(), root.clone()),
+                    ("TEMP".into(), root.clone()),
+                ]
+                .into(),
+                root.clone(),
+            );
             let mut requests = 0;
             let mut fetch = |_: &str| -> Result<FetchResponse, String> {
                 requests += 1;
-                if requests > 1 { return Err("reached signature download".into()); }
+                if requests > 1 {
+                    return Err("reached signature download".into());
+                }
                 Ok(FetchResponse {
                     status,
                     location: Some("https://github.com/pbakaus/impeccable/releases/download/skill-v4.2.0/universal.zip".into()),
                     body: Box::new(std::io::empty()),
                 })
             };
-            let error = download_and_extract_signed_bundle(&sys, &mut fetch, &Default::default()).unwrap_err();
+            let error = download_and_extract_signed_bundle(&sys, &mut fetch, &Default::default())
+                .unwrap_err();
             if matches!(status, 301 | 302 | 303 | 307 | 308) {
-                assert!(matches!(&error, BundleError::Download(m) if m == "reached signature download"), "HTTP {status}: {error}");
+                assert!(
+                    matches!(&error, BundleError::Download(m) if m == "reached signature download"),
+                    "HTTP {status}: {error}"
+                );
                 assert_eq!(requests, 2);
             } else {
-                assert!(error.to_string().contains("Expected a signed bundle release redirect"), "{error}");
+                assert!(
+                    error
+                        .to_string()
+                        .contains("Expected a signed bundle release redirect"),
+                    "{error}"
+                );
                 if status >= 400 {
-                    assert!(matches!(error, BundleError::Download(_)), "HTTP {status}: {error}");
+                    assert!(
+                        matches!(error, BundleError::Download(_)),
+                        "HTTP {status}: {error}"
+                    );
                 } else {
-                    assert!(matches!(error, BundleError::Verify(_)), "HTTP {status}: {error}");
+                    assert!(
+                        matches!(error, BundleError::Verify(_)),
+                        "HTTP {status}: {error}"
+                    );
                 }
                 assert_eq!(requests, 1);
             }
@@ -1257,23 +1515,46 @@ mod tests {
         let keys = [("test-only".into(), hex(key.public_key().as_ref()))].into();
         let zip = zip_bytes(&[(".claude/skills/impeccable/SKILL.md", b"verified skill")]);
         let digest = format!("{:x}", Sha256::digest(&zip));
-        let payload = format!("impeccable-skill-bundle-v1\ntest-only\nskill-v4.2.0\nuniversal.zip\n{}\n{digest}\n", zip.len());
+        let payload = format!(
+            "impeccable-skill-bundle-v1\ntest-only\nskill-v4.2.0\nuniversal.zip\n{}\n{digest}\n",
+            zip.len()
+        );
         let signature = serde_json::to_vec(&serde_json::json!({
             "schema": 1, "keyId": "test-only", "version": "4.2.0", "artifact": "universal.zip",
             "size": zip.len(), "sha256": digest, "signature": hex(key.sign(payload.as_bytes()).as_ref()),
         })).unwrap();
-        let release = "https://github.com/pbakaus/impeccable/releases/download/skill-v4.2.0/universal.zip";
-        for case in ["valid", "tampered", "missing", "oversized", "downgrade", "malformed-zip", "invalid-signature"] {
+        let release =
+            "https://github.com/pbakaus/impeccable/releases/download/skill-v4.2.0/universal.zip";
+        for case in [
+            "valid",
+            "tampered",
+            "missing",
+            "oversized",
+            "downgrade",
+            "malformed-zip",
+            "invalid-signature",
+        ] {
             let root = tmp_dir(case);
             let temp = format!("{root}/temp");
             std::fs::create_dir(&temp).unwrap();
             let installed = format!("{root}/existing-skill.md");
             std::fs::write(&installed, "user's existing skill").unwrap();
-            let sys = Sys::new([("TMPDIR".into(), temp.clone()), ("TEMP".into(), temp.clone())].into(), root.clone());
+            let sys = Sys::new(
+                [
+                    ("TMPDIR".into(), temp.clone()),
+                    ("TEMP".into(), temp.clone()),
+                ]
+                .into(),
+                root.clone(),
+            );
             let mut requested = Vec::new();
             let mut fetch = |url: &str| -> Result<FetchResponse, String> {
                 requested.push(url.to_string());
-                let mut res = FetchResponse { status: 200, location: None, body: Box::new(std::io::Cursor::new(Vec::new())) };
+                let mut res = FetchResponse {
+                    status: 200,
+                    location: None,
+                    body: Box::new(std::io::Cursor::new(Vec::new())),
+                };
                 if url.ends_with("/api/download/bundle/universal") {
                     res.status = 302;
                     res.location = Some(release.into());
@@ -1282,22 +1563,39 @@ mod tests {
                     match case {
                         "missing" => res.status = 404,
                         "oversized" => res.body = Box::new(std::io::repeat(b' ')),
-                        "downgrade" => { res.status = 302; res.location = Some("http://unsafe.test/sig".into()); }
-                        "invalid-signature" => res.body = Box::new(std::io::Cursor::new(b"{}".to_vec())),
+                        "downgrade" => {
+                            res.status = 302;
+                            res.location = Some("http://unsafe.test/sig".into());
+                        }
+                        "invalid-signature" => {
+                            res.body = Box::new(std::io::Cursor::new(b"{}".to_vec()))
+                        }
                         _ => {}
                     }
                 } else if url == release {
                     let mut bytes = zip.clone();
-                    if case == "tampered" { bytes[0] ^= 1; }
-                    if case == "malformed-zip" { bytes = b"not even a ZIP".to_vec(); }
+                    if case == "tampered" {
+                        bytes[0] ^= 1;
+                    }
+                    if case == "malformed-zip" {
+                        bytes = b"not even a ZIP".to_vec();
+                    }
                     res.body = Box::new(std::io::Cursor::new(bytes));
-                } else { panic!("Unexpected URL: {url}"); }
+                } else {
+                    panic!("Unexpected URL: {url}");
+                }
                 Ok(res)
             };
             let result = download_and_extract_signed_bundle(&sys, &mut fetch, &keys);
             if case == "valid" {
                 let staging = result.unwrap();
-                assert_eq!(std::fs::read_to_string(format!("{staging}/.claude/skills/impeccable/SKILL.md")).unwrap(), "verified skill");
+                assert_eq!(
+                    std::fs::read_to_string(format!(
+                        "{staging}/.claude/skills/impeccable/SKILL.md"
+                    ))
+                    .unwrap(),
+                    "verified skill"
+                );
                 assert!(!util::exists(&format!("{staging}/bundle.zip")));
                 assert!(!util::exists(&format!("{staging}/bundle.sig.json")));
                 util::rm_rf(&staging);
@@ -1310,12 +1608,25 @@ mod tests {
                 }
                 let error = error.to_string();
                 if case == "malformed-zip" {
-                    assert!(error.contains("size"), "must reject before ZIP parsing: {error}");
+                    assert!(
+                        error.contains("size"),
+                        "must reject before ZIP parsing: {error}"
+                    );
                 }
             }
-            assert_eq!(std::fs::read_to_string(&installed).unwrap(), "user's existing skill");
-            assert_eq!(std::fs::read_dir(&temp).unwrap().count(), 0, "staging leak in {case}");
-            assert_eq!(requested[0], format!("{API_BASE}/api/download/bundle/universal"));
+            assert_eq!(
+                std::fs::read_to_string(&installed).unwrap(),
+                "user's existing skill"
+            );
+            assert_eq!(
+                std::fs::read_dir(&temp).unwrap().count(),
+                0,
+                "staging leak in {case}"
+            );
+            assert_eq!(
+                requested[0],
+                format!("{API_BASE}/api/download/bundle/universal")
+            );
             assert_eq!(requested[1], format!("{release}.sig.json"));
             util::rm_rf(&root);
         }

@@ -74,7 +74,9 @@ fn rules_behind_the_painted_gate_skip_what_nobody_sees() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/{FIXTURE}");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     let flagged: Vec<(String, String, String)> = findings
         .iter()
         .map(|f| {
@@ -89,7 +91,8 @@ fn rules_behind_the_painted_gate_skip_what_nobody_sees() {
             )
         })
         .collect();
-    let on = |rule: &str, selector: &str| flagged.iter().any(|(r, s, _)| r == rule && s == selector);
+    let on =
+        |rule: &str, selector: &str| flagged.iter().any(|(r, s, _)| r == rule && s == selector);
     let snippet_of = |rule: &str, selector: &str| {
         flagged
             .iter()
@@ -97,7 +100,11 @@ fn rules_behind_the_painted_gate_skip_what_nobody_sees() {
             .map(|(_, _, snippet)| snippet.clone())
             .unwrap_or_default()
     };
-    let page_form = |rule: &str, needle: &str| flagged.iter().any(|(r, _, snippet)| r == rule && snippet.contains(needle));
+    let page_form = |rule: &str, needle: &str| {
+        flagged
+            .iter()
+            .any(|(r, _, snippet)| r == rule && snippet.contains(needle))
+    };
 
     for want in [
         ("blinking-cursor", "#flag-cursor"),
@@ -119,17 +126,23 @@ fn rules_behind_the_painted_gate_skip_what_nobody_sees() {
     ] {
         assert!(on(want.0, want.1), "missing {want:?} in {flagged:#?}");
     }
-    assert!(page_form("kicker-above-heading", "Invitation protocol"), "{flagged:#?}");
+    assert!(
+        page_form("kicker-above-heading", "Invitation protocol"),
+        "{flagged:#?}"
+    );
     assert!(page_form("pulsing-dot", ".live-dot"), "{flagged:#?}");
 
     // What covers the text is named for what it draws.
-    assert!(snippet_of("text-occlusion", "#flag-cover-copy").contains("covered by an opaque element (div.cover-box)"));
+    assert!(snippet_of("text-occlusion", "#flag-cover-copy")
+        .contains("covered by an opaque element (div.cover-box)"));
     assert!(
-        snippet_of("text-occlusion", "#flag-svg-covered").contains("covered by an SVG graphic (rect)"),
+        snippet_of("text-occlusion", "#flag-svg-covered")
+            .contains("covered by an SVG graphic (rect)"),
         "{flagged:#?}"
     );
     assert!(
-        snippet_of("text-occlusion", "#flag-input-covered").contains("covered by a bordered element (input.input-cover)"),
+        snippet_of("text-occlusion", "#flag-input-covered")
+            .contains("covered by a bordered element (input.input-cover)"),
         "{flagged:#?}"
     );
 
@@ -143,7 +156,10 @@ fn rules_behind_the_painted_gate_skip_what_nobody_sees() {
         ("ai-color-palette", "#pass-palette-parked"),
         ("italic-serif-display", "#pass-italic-hidden"),
     ] {
-        assert!(!on(unwanted.0, unwanted.1), "unexpected {unwanted:?} in {flagged:#?}");
+        assert!(
+            !on(unwanted.0, unwanted.1),
+            "unexpected {unwanted:?} in {flagged:#?}"
+        );
     }
     let occluded_pass: Vec<&(String, String, String)> = flagged
         .iter()
@@ -158,6 +174,9 @@ fn rules_behind_the_painted_gate_skip_what_nobody_sees() {
         ("pulsing-dot", ".pass-rail"),
         ("dark-glow", "#1a3ad6"),
     ] {
-        assert!(!page_form(rule, needle), "unexpected {rule} {needle} in {flagged:#?}");
+        assert!(
+            !page_form(rule, needle),
+            "unexpected {rule} {needle} in {flagged:#?}"
+        );
     }
 }

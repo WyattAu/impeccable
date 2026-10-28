@@ -36,7 +36,10 @@ where
     origin
 }
 
-fn respond(mut stream: TcpStream, handler: &dyn Fn(&str) -> Option<Response>) -> std::io::Result<()> {
+fn respond(
+    mut stream: TcpStream,
+    handler: &dyn Fn(&str) -> Option<Response>,
+) -> std::io::Result<()> {
     stream.set_read_timeout(Some(Duration::from_secs(60)))?;
     let mut request = Vec::new();
     let mut buf = [0u8; 4096];

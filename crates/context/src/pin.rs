@@ -9,14 +9,52 @@ use impeccable_common::Io;
 pub const COMMAND_METADATA_JSON: &str = include_str!("command-metadata.json");
 
 const HARNESS_DIRS: [&str; 19] = [
-    ".claude", ".cursor", ".dsh", ".gemini", ".codex", ".agents", ".agent", ".github", ".grok", ".hermes", ".trae", ".trae-cn",
-    ".pi", ".omp", ".opencode", ".kiro", ".rovodev", ".vibe", ".qoder",
+    ".claude",
+    ".cursor",
+    ".dsh",
+    ".gemini",
+    ".codex",
+    ".agents",
+    ".agent",
+    ".github",
+    ".grok",
+    ".hermes",
+    ".trae",
+    ".trae-cn",
+    ".pi",
+    ".omp",
+    ".opencode",
+    ".kiro",
+    ".rovodev",
+    ".vibe",
+    ".qoder",
 ];
 const CODEX_HARNESSES: [&str; 2] = [".codex", ".agents"];
 pub const VALID_COMMANDS: [&str; 24] = [
-    "craft", "init", "extract", "document", "shape", "critique", "audit", "polish", "bolder", "quieter", "distill",
-    "harden", "onboard", "live", "animate", "colorize", "typeset", "layout", "delight", "overdrive", "clarify",
-    "adapt", "optimize", "generate",
+    "craft",
+    "init",
+    "extract",
+    "document",
+    "shape",
+    "critique",
+    "audit",
+    "polish",
+    "bolder",
+    "quieter",
+    "distill",
+    "harden",
+    "onboard",
+    "live",
+    "animate",
+    "colorize",
+    "typeset",
+    "layout",
+    "delight",
+    "overdrive",
+    "clarify",
+    "adapt",
+    "optimize",
+    "generate",
 ];
 const PIN_MARKER: &str = "<!-- impeccable-pinned-skill -->";
 const OPENCODE_PIN_MARKER: &str = "<!-- impeccable-pinned-command -->";
@@ -43,7 +81,9 @@ fn find_harness_dirs(project_root: &str) -> Vec<String> {
     let mut dirs = Vec::new();
     for h in HARNESS_DIRS {
         let skills = jsp::join(&[project_root, h, "skills"]);
-        if exists(&jsp::join(&[&skills, "impeccable"])) || exists(&jsp::join(&[&skills, "i-impeccable"])) {
+        if exists(&jsp::join(&[&skills, "impeccable"]))
+            || exists(&jsp::join(&[&skills, "i-impeccable"]))
+        {
             dirs.push(skills);
         }
     }
@@ -59,7 +99,12 @@ fn command_prefix_for(skills_dir: &str) -> &'static str {
     }
 }
 
-fn generate_pinned_skill(command: &str, metadata: &serde_json::Value, prefix: &str, is_codex: bool) -> String {
+fn generate_pinned_skill(
+    command: &str,
+    metadata: &serde_json::Value,
+    prefix: &str,
+    is_codex: bool,
+) -> String {
     let entry = metadata.get(command);
     let desc = entry
         .and_then(|e| e.get("description"))
@@ -141,7 +186,14 @@ fn find_opencode_commands_dirs(project_root: &str, io: &Io, for_cleanup: bool) -
             dirs.push(dir);
         }
     };
-    if for_cleanup || exists(&jsp::join(&[project_root, ".opencode", "skills", "impeccable"])) {
+    if for_cleanup
+        || exists(&jsp::join(&[
+            project_root,
+            ".opencode",
+            "skills",
+            "impeccable",
+        ]))
+    {
         push(jsp::join(&[project_root, ".opencode", "commands"]));
     }
     let user_config = opencode_user_config_dir(io);
@@ -171,7 +223,10 @@ fn write_pinned_opencode_command(
     } else {
         let _ = std::fs::create_dir_all(commands_dir);
     }
-    let _ = std::fs::write(&command_file, generate_pinned_opencode_command(command, metadata));
+    let _ = std::fs::write(
+        &command_file,
+        generate_pinned_opencode_command(command, metadata),
+    );
     io.out(&format!("  + {}\n", command_file));
     true
 }
@@ -184,7 +239,10 @@ fn remove_pinned_opencode_command(commands_dir: &str, command: &str, io: &mut Io
     }
     let content = safe_read(&command_file).unwrap_or_default();
     if !content.contains(OPENCODE_PIN_MARKER) {
-        io.out(&format!("  SKIP: {} (not a pinned command)\n", command_file));
+        io.out(&format!(
+            "  SKIP: {} (not a pinned command)\n",
+            command_file
+        ));
         return false;
     }
     let _ = std::fs::remove_file(&command_file);
@@ -208,24 +266,37 @@ fn load_metadata(io: &Io) -> serde_json::Value {
             return v;
         }
     }
-    serde_json::from_str(COMMAND_METADATA_JSON).unwrap_or(serde_json::Value::Object(Default::default()))
+    serde_json::from_str(COMMAND_METADATA_JSON)
+        .unwrap_or(serde_json::Value::Object(Default::default()))
 }
 
 pub fn run(args: &[String], io: &mut Io) -> i32 {
     let action = args.first().cloned();
     let command = args.get(1).cloned();
-    let (Some(action), Some(command)) = (action.filter(|a| !a.is_empty()), command.filter(|c| !c.is_empty())) else {
+    let (Some(action), Some(command)) = (
+        action.filter(|a| !a.is_empty()),
+        command.filter(|c| !c.is_empty()),
+    ) else {
         io.out("Usage: impeccable pin <pin|unpin> <command>\n");
-        io.out(&format!("\nAvailable commands: {}\n", VALID_COMMANDS.join(", ")));
+        io.out(&format!(
+            "\nAvailable commands: {}\n",
+            VALID_COMMANDS.join(", ")
+        ));
         return 1;
     };
     if action != "pin" && action != "unpin" {
-        io.err(&format!("Unknown action: {}. Use 'pin' or 'unpin'.\n", action));
+        io.err(&format!(
+            "Unknown action: {}. Use 'pin' or 'unpin'.\n",
+            action
+        ));
         return 1;
     }
     if !VALID_COMMANDS.contains(&command.as_str()) {
         io.err(&format!("Unknown command: {}\n", command));
-        io.err(&format!("Available commands: {}\n", VALID_COMMANDS.join(", ")));
+        io.err(&format!(
+            "Available commands: {}\n",
+            VALID_COMMANDS.join(", ")
+        ));
         return 1;
     }
     let cwd = io.cwd.to_string_lossy().into_owned();
@@ -255,7 +326,10 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
                 if exists(&md) {
                     let existing = safe_read(&md).unwrap_or_default();
                     if !existing.contains(PIN_MARKER) {
-                        io.out(&format!("  SKIP: {} (non-pinned skill already exists)\n", skill_dir));
+                        io.out(&format!(
+                            "  SKIP: {} (non-pinned skill already exists)\n",
+                            skill_dir
+                        ));
                         continue;
                     }
                 }
@@ -273,7 +347,10 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             }
         }
         if created > 0 {
-            io.out(&format!("\nPinned '{}' as a standalone shortcut in {} location(s).\n", command, created));
+            io.out(&format!(
+                "\nPinned '{}' as a standalone shortcut in {} location(s).\n",
+                command, created
+            ));
             io.out("Use the pinned command directly in each harness.\n");
         }
     } else {
@@ -312,8 +389,14 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             }
         }
         if removed > 0 {
-            io.out(&format!("\nUnpinned '{}' from {} location(s).\n", command, removed));
-            io.out(&format!("Use Impeccable's '{}' workflow directly to access it.\n", command));
+            io.out(&format!(
+                "\nUnpinned '{}' from {} location(s).\n",
+                command, removed
+            ));
+            io.out(&format!(
+                "Use Impeccable's '{}' workflow directly to access it.\n",
+                command
+            ));
         } else {
             io.out(&format!("No pinned '{}' shortcut found.\n", command));
         }

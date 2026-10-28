@@ -63,19 +63,30 @@ fn text_a_visitor_cannot_see_at_capture_is_not_scored() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/{FIXTURE}");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     let flagged: Vec<(String, String, String)> = findings
         .iter()
         .map(|f| {
             (
                 f.antipattern.clone(),
-                f.extras.get("selector").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                f.extras
+                    .get("selector")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
                 f.snippet.clone(),
             )
         })
         .collect();
-    let on = |rule: &str, selector: &str| flagged.iter().any(|(r, s, _)| r == rule && s == selector);
-    let reports = |rule: &str, needle: &str| flagged.iter().any(|(r, _, snippet)| r == rule && snippet.contains(needle));
+    let on =
+        |rule: &str, selector: &str| flagged.iter().any(|(r, s, _)| r == rule && s == selector);
+    let reports = |rule: &str, needle: &str| {
+        flagged
+            .iter()
+            .any(|(r, _, snippet)| r == rule && snippet.contains(needle))
+    };
 
     for want in [
         ("text-occlusion", "#flag-curtain-link"),
@@ -90,13 +101,25 @@ fn text_a_visitor_cannot_see_at_capture_is_not_scored() {
         assert!(on(want.0, want.1), "missing {want:?} in {flagged:#?}");
     }
     // The shown labels report, and only they are counted.
-    assert!(reports("numbered-section-labels", "Flag step one"), "{flagged:#?}");
-    assert!(reports("numbered-section-labels", "(3 on page)"), "{flagged:#?}");
-    assert!(!reports("numbered-section-labels", "Pass step"), "{flagged:#?}");
+    assert!(
+        reports("numbered-section-labels", "Flag step one"),
+        "{flagged:#?}"
+    );
+    assert!(
+        reports("numbered-section-labels", "(3 on page)"),
+        "{flagged:#?}"
+    );
+    assert!(
+        !reports("numbered-section-labels", "Pass step"),
+        "{flagged:#?}"
+    );
 
     let passed: Vec<&(String, String, String)> = flagged
         .iter()
         .filter(|(_, s, _)| s.starts_with("#pass-"))
         .collect();
-    assert!(passed.is_empty(), "unexpected should-pass findings: {passed:#?}");
+    assert!(
+        passed.is_empty(),
+        "unexpected should-pass findings: {passed:#?}"
+    );
 }

@@ -33,7 +33,11 @@ fn slug_from_target_using(
         let (host, pathname) = parse_url_host_path(trimmed)?;
         return slugger(&format!("{}{}", host, pathname));
     }
-    let abs = if jsp::is_absolute(trimmed) { trimmed.to_string() } else { jsp::resolve(cwd, &[trimmed]) };
+    let abs = if jsp::is_absolute(trimmed) {
+        trimmed.to_string()
+    } else {
+        jsp::resolve(cwd, &[trimmed])
+    };
     let mut rel = jsp::relative(cwd, cwd, &abs);
     if rel.starts_with("..") || jsp::is_absolute(&rel) {
         rel = jsp::basename(&abs);

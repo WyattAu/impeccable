@@ -7,8 +7,13 @@
 
 #![allow(unused_imports)]
 use super::dom::{
-    closest_or_none, direct_text, has_direct_text_longer_than, matches_or_false, pf0, safe_id,
-    renders_no_text, style_px, tag_lower, Dom, DomChild, ElId, Rect,
+    closest_or_none, direct_text, has_direct_text_longer_than, matches_or_false, pf0,
+    renders_no_text, safe_id, style_px, tag_lower, Dom, DomChild, ElId, Rect,
+};
+use super::text_geometry::{
+    clamp_to_own_clip, holds_only_phrasing, line_pitch_px, phrasing_holds_break,
+    phrasing_text_extent, phrasing_text_font, rides_a_running_track, scrolling_ancestor_cuts,
+    text_line_count,
 };
 use super::{BrowserConfig, BrowserFinding};
 use crate::checks::measures::{
@@ -17,18 +22,14 @@ use crate::checks::measures::{
 };
 use crate::checks::rules::RuleHit;
 use crate::checks::text_context::FinePrint;
-use super::text_geometry::{
-    holds_only_phrasing, line_pitch_px, phrasing_holds_break, phrasing_text_extent, phrasing_text_font,
-    clamp_to_own_clip, rides_a_running_track, scrolling_ancestor_cuts, text_line_count,
-};
 use crate::checks::text_rules::{
     average_glyph_advance_em_at, font_weight_number, is_bold_title_leading, is_cjk_text,
-    is_line_clamp, is_under_ui_text_floor, justifies_without_word_spaces_text,
-    tracking_is_crushed, ALL_CAPS_LONG_RUN, LEADING_BOLD_TITLE_WEIGHT, SMALLPRINT_TEXT_FLOOR_PX,
-    UI_TEXT_FLOOR_PX,
-    JUSTIFY_NARROW_CHARS_PER_LINE, LEADING_DISPLAY_TYPE_PX, LEADING_HEADING_CONTEXT, LEADING_CAPS_LABEL_MIN_RATIO, LEADING_LEAD_TEXT_MAX_LINES, LEADING_LEAD_TEXT_MIN_RATIO, LEADING_LEAD_TEXT_PX,
-    LEADING_MIN_LINE_BOXES, NON_RENDERED_TAGS, QUALITY_TEXT_TAGS,
-    SR_ONLY_SELECTOR, TEXT_EDGE_TAGS,
+    is_line_clamp, is_under_ui_text_floor, justifies_without_word_spaces_text, tracking_is_crushed,
+    ALL_CAPS_LONG_RUN, JUSTIFY_NARROW_CHARS_PER_LINE, LEADING_BOLD_TITLE_WEIGHT,
+    LEADING_CAPS_LABEL_MIN_RATIO, LEADING_DISPLAY_TYPE_PX, LEADING_HEADING_CONTEXT,
+    LEADING_LEAD_TEXT_MAX_LINES, LEADING_LEAD_TEXT_MIN_RATIO, LEADING_LEAD_TEXT_PX,
+    LEADING_MIN_LINE_BOXES, NON_RENDERED_TAGS, QUALITY_TEXT_TAGS, SMALLPRINT_TEXT_FLOOR_PX,
+    SR_ONLY_SELECTOR, TEXT_EDGE_TAGS, UI_TEXT_FLOOR_PX,
 };
 use crate::js::{self, math_round, number_to_string, parse_float, to_fixed};
 use crate::js_ext_b::{slice_utf16_prefix, utf16_len};
@@ -45,10 +46,7 @@ re!(WS_RE, format!("{}+", js::WS));
 // JS `/url\(/i` in checkQuality's buried-raster branch.
 re!(QUALITY_RASTER_URL_RE, format!(r"{}\(", js::ci("url")));
 re!(CLIP_RECT_RE, format!(r"rect\({}*0", js::WS));
-re!(
-    CLIP_INSET_RE,
-    format!(r"inset\({}*(?:50%|99|100%)", js::WS)
-);
+re!(CLIP_INSET_RE, format!(r"inset\({}*(?:50%|99|100%)", js::WS));
 re!(OUTLINE_W_RE, r"([0-9]+(?:\.[0-9]+)?)\s*px");
 re!(
     OUTLINE_STYLE_RE,
@@ -56,7 +54,10 @@ re!(
 );
 re!(
     OUTLINE_COLOR_RE,
-    format!(r"(rgba?\([^)]+\)|#[0-9a-fA-F]{{3,8}}|[a-zA-Z]+){}*$", js::WS)
+    format!(
+        r"(rgba?\([^)]+\)|#[0-9a-fA-F]{{3,8}}|[a-zA-Z]+){}*$",
+        js::WS
+    )
 );
 
 /// JS `s.replace(/\s+/g, ' ')`.
@@ -99,7 +100,8 @@ fn is_in_control(dom: &dyn Dom, el: ElId) -> bool {
             let index = parse_float(js::trim(&value));
             let focusable = !(index.is_finite() && index < 0.0);
             if focusable
-                && utf16_len(js::trim(&collapse_ws(&dom.text_content(c)))) <= FOCUSABLE_CONTROL_MAX_CHARS
+                && utf16_len(js::trim(&collapse_ws(&dom.text_content(c))))
+                    <= FOCUSABLE_CONTROL_MAX_CHARS
             {
                 return true;
             }
@@ -130,10 +132,15 @@ fn is_button_box(dom: &dyn Dom, el: ElId) -> bool {
     let mut cur = Some(el);
     for _ in 0..BUTTON_BOX_LEVELS {
         let Some(c) = cur else { return false };
-        if c != el && utf16_len(js::trim(&collapse_ws(&dom.text_content(c)))) > FOCUSABLE_CONTROL_MAX_CHARS {
+        if c != el
+            && utf16_len(js::trim(&collapse_ws(&dom.text_content(c)))) > FOCUSABLE_CONTROL_MAX_CHARS
+        {
             return false;
         }
-        if dom.attr(c, "class").is_some_and(|cls| class_names_button(&cls)) {
+        if dom
+            .attr(c, "class")
+            .is_some_and(|cls| class_names_button(&cls))
+        {
             return true;
         }
         cur = dom.parent(c);
@@ -160,7 +167,10 @@ fn is_furniture(dom: &dyn Dom, el: ElId) -> bool {
         if tag_lower(dom, c) == "html" {
             return false;
         }
-        if dom.attr(c, "class").is_some_and(|cls| class_names_furniture(&cls)) {
+        if dom
+            .attr(c, "class")
+            .is_some_and(|cls| class_names_furniture(&cls))
+        {
             return true;
         }
         cur = dom.parent(c);
@@ -233,7 +243,8 @@ pub fn has_visible_background_boundary(dom: &dyn Dom, el: ElId) -> bool {
 /// and the fill after it, and only when `el` lies wholly in the filled part.
 fn gradient_paints_only(dom: &dyn Dom, node: ElId, el: ElId, fill: &str) -> bool {
     let image = dom.style(node, "backgroundImage");
-    if image.is_empty() || image == "none" || !image.contains("gradient(") || image.contains("url(") {
+    if image.is_empty() || image == "none" || !image.contains("gradient(") || image.contains("url(")
+    {
         return false;
     }
     // A gradient drawn at a size of its own (a 2px rule along one edge:
@@ -243,7 +254,14 @@ fn gradient_paints_only(dom: &dyn Dom, node: ElId, el: ElId, fill: &str) -> bool
     let fills_the_box = size.split(',').all(|layer| {
         matches!(
             js::trim(layer),
-            "" | "auto" | "auto auto" | "cover" | "contain" | "100%" | "100% auto" | "auto 100%" | "100% 100%"
+            "" | "auto"
+                | "auto auto"
+                | "cover"
+                | "contain"
+                | "100%"
+                | "100% auto"
+                | "auto 100%"
+                | "100% 100%"
         )
     });
     if !fills_the_box {
@@ -255,7 +273,13 @@ fn gradient_paints_only(dom: &dyn Dom, node: ElId, el: ElId, fill: &str) -> bool
         && shown.iter().all(|c| {
             colors_nearly_match(
                 Some(fill),
-                Some(&format!("rgba({}, {}, {}, {})", c.r, c.g, c.b, c.alpha_or_one())),
+                Some(&format!(
+                    "rgba({}, {}, {}, {})",
+                    c.r,
+                    c.g,
+                    c.b,
+                    c.alpha_or_one()
+                )),
             )
         });
     if !matches {
@@ -272,7 +296,13 @@ fn gradient_paints_only(dom: &dyn Dom, node: ElId, el: ElId, fill: &str) -> bool
             // host's scale, which need not be the same on both axes
             // (`scaleX(0.5)` moves no vertical stop): a stop along x takes
             // the width's scale, one along y the height's.
-            let start = |l: f64, scale: f64| if len.1 { l * len.0 / 100.0 } else { len.0 * scale };
+            let start = |l: f64, scale: f64| {
+                if len.1 {
+                    l * len.0 / 100.0
+                } else {
+                    len.0 * scale
+                }
+            };
             let across = || start(host.width, drawn_scale(dom, node, &host));
             let down = || start(host.height, drawn_scale_y(dom, node, &host));
             match side {
@@ -318,7 +348,10 @@ fn transparent_lead(image: &str) -> Option<(&'static str, (f64, bool))> {
 fn raster_covers(dom: &dyn Dom, layer: ElId, r: &Rect) -> bool {
     let covers = |n: ElId| {
         let nr = dom.rect(n);
-        nr.left <= r.left + 1.0 && nr.right >= r.right - 1.0 && nr.top <= r.top + 1.0 && nr.bottom >= r.bottom - 1.0
+        nr.left <= r.left + 1.0
+            && nr.right >= r.right - 1.0
+            && nr.top <= r.top + 1.0
+            && nr.bottom >= r.bottom - 1.0
     };
     let is_raster = |n: ElId| matches!(tag_lower(dom, n).as_str(), "img" | "video");
     // The photo has to paint: shown, and not faded out by itself or a box
@@ -440,11 +473,7 @@ fn is_transparent_shell_for_flush(dom: &dyn Dom, child: ElId) -> bool {
     let ow = style_px(dom, child, "outlineWidth");
     let os = dom.style(child, "outlineStyle");
     let oc = dom.style(child, "outlineColor");
-    if ow > 0.0
-        && !css_color_is_transparent(Some(&oc))
-        && !os.is_empty()
-        && os != "none"
-    {
+    if ow > 0.0 && !css_color_is_transparent(Some(&oc)) && !os.is_empty() && os != "none" {
         return false;
     }
     if has_visible_background_boundary(dom, child) {
@@ -494,7 +523,9 @@ fn backdrop_layer_matches(dom: &dyn Dom, el: ElId) -> bool {
                 return true;
             }
         }
-        let Some(parent) = dom.parent(node) else { return false };
+        let Some(parent) = dom.parent(node) else {
+            return false;
+        };
         if !css_color_is_transparent(Some(&dom.style(parent, "backgroundColor"))) {
             return false;
         }
@@ -512,7 +543,9 @@ fn side_meets_same_fill(dom: &dyn Dom, el: ElId, rect: &Rect, side: usize) -> bo
     if css_color_is_transparent(Some(&bg)) {
         return false;
     }
-    let Some(parent) = dom.parent(el) else { return false };
+    let Some(parent) = dom.parent(el) else {
+        return false;
+    };
     dom.children(parent).into_iter().any(|s| {
         if s == el || dom.style(s, "display") == "none" {
             return false;
@@ -525,10 +558,22 @@ fn side_meets_same_fill(dom: &dyn Dom, el: ElId, rect: &Rect, side: usize) -> bo
             js::math_min(a1, b1) - js::math_max(a0, b0) >= (a1 - a0) * 0.9
         };
         let abuts = match side {
-            0 => (sr.bottom - rect.top).abs() <= 1.5 && across(rect.left, rect.right, sr.left, sr.right),
-            2 => (sr.top - rect.bottom).abs() <= 1.5 && across(rect.left, rect.right, sr.left, sr.right),
-            1 => (sr.left - rect.right).abs() <= 1.5 && across(rect.top, rect.bottom, sr.top, sr.bottom),
-            _ => (sr.right - rect.left).abs() <= 1.5 && across(rect.top, rect.bottom, sr.top, sr.bottom),
+            0 => {
+                (sr.bottom - rect.top).abs() <= 1.5
+                    && across(rect.left, rect.right, sr.left, sr.right)
+            }
+            2 => {
+                (sr.top - rect.bottom).abs() <= 1.5
+                    && across(rect.left, rect.right, sr.left, sr.right)
+            }
+            1 => {
+                (sr.left - rect.right).abs() <= 1.5
+                    && across(rect.top, rect.bottom, sr.top, sr.bottom)
+            }
+            _ => {
+                (sr.right - rect.left).abs() <= 1.5
+                    && across(rect.top, rect.bottom, sr.top, sr.bottom)
+            }
         };
         abuts && colors_nearly_match(Some(&bg), Some(&dom.style(s, "backgroundColor")))
     })
@@ -820,7 +865,11 @@ fn visible_x_extent(
             let pr = dom.rect(p);
             let inner_left = pr.left + dom.client_left(p).max(0.0);
             let cw = dom.client_width(p);
-            let inner_right = if cw.is_finite() && cw > 0.0 { inner_left + cw } else { pr.right };
+            let inner_right = if cw.is_finite() && cw > 0.0 {
+                inner_left + cw
+            } else {
+                pr.right
+            };
             if left < inner_left {
                 cut_left |= inner_left - left > tolerance;
                 left = inner_left;
@@ -867,22 +916,41 @@ fn visible_y_extent(
     let mut cur = dom.parent(node);
     while let Some(p) = cur {
         let oy = crate::browser::text_geometry::overflow_y(dom, p);
-        if dom.style(p, "display") != "inline" && matches!(oy.as_str(), "hidden" | "clip" | "auto" | "scroll") {
+        if dom.style(p, "display") != "inline"
+            && matches!(oy.as_str(), "hidden" | "clip" | "auto" | "scroll")
+        {
             let pr = dom.rect(p);
             // `clientHeight` and border widths are layout px; the rects are
             // drawn px. A box scaled by a transform draws them at its scale.
             let layout_h = dom.offset_height(p);
             // `offsetHeight` is rounded, so only a real scale counts.
-            let scale = if layout_h.is_finite() && layout_h > 0.0 && pr.height.is_finite() && pr.height > 0.0 {
+            let scale = if layout_h.is_finite()
+                && layout_h > 0.0
+                && pr.height.is_finite()
+                && pr.height > 0.0
+            {
                 let s = pr.height / layout_h;
-                if (s - 1.0).abs() > 0.01 { s } else { 1.0 }
+                if (s - 1.0).abs() > 0.01 {
+                    s
+                } else {
+                    1.0
+                }
             } else {
                 1.0
             };
             let border_top = style_px(dom, p, "borderTopWidth");
-            let inner_top = pr.top + if border_top.is_finite() { border_top.max(0.0) * scale } else { 0.0 };
+            let inner_top = pr.top
+                + if border_top.is_finite() {
+                    border_top.max(0.0) * scale
+                } else {
+                    0.0
+                };
             let ch = dom.client_height(p);
-            let inner_bottom = if ch.is_finite() && ch > 0.0 { inner_top + ch * scale } else { pr.bottom };
+            let inner_bottom = if ch.is_finite() && ch > 0.0 {
+                inner_top + ch * scale
+            } else {
+                pr.bottom
+            };
             if top < inner_top {
                 cut_top |= inner_top - top > tolerance;
                 top = inner_top;
@@ -891,7 +959,8 @@ fn visible_y_extent(
                 cut_bottom |= bottom - inner_bottom > tolerance;
                 bottom = inner_bottom;
             }
-            let scrolls_on = matches!(oy.as_str(), "auto" | "scroll") && dom.scroll_height(p) > ch + 1.0;
+            let scrolls_on =
+                matches!(oy.as_str(), "auto" | "scroll") && dom.scroll_height(p) > ch + 1.0;
             if scrolls_on && bottom >= inner_bottom - scroll_edge {
                 cut_bottom = true;
             }
@@ -939,7 +1008,10 @@ fn own_line_widths(dom: &dyn Dom, el: ElId) -> Option<(Vec<f64>, f64)> {
         .filter(|&b| matches!(tag_lower(dom, b).as_str(), "ul" | "ol" | "dl" | "menu"))
         .collect();
     if blocks.is_empty() {
-        return Some((rendered_line_widths(dom, el)?, rendered_text_len(dom, el) as f64));
+        return Some((
+            rendered_line_widths(dom, el)?,
+            rendered_text_len(dom, el) as f64,
+        ));
     }
     let boxes: Vec<Rect> = blocks.iter().map(|&b| dom.rect(b)).collect();
     let inside = |r: &Rect| {
@@ -955,7 +1027,10 @@ fn own_line_widths(dom: &dyn Dom, el: ElId) -> Option<(Vec<f64>, f64)> {
         .map(|r| r.width)
         .collect();
     let theirs: usize = blocks.iter().map(|&b| rendered_text_len(dom, b)).sum();
-    Some((widths, rendered_text_len(dom, el).saturating_sub(theirs) as f64))
+    Some((
+        widths,
+        rendered_text_len(dom, el).saturating_sub(theirs) as f64,
+    ))
 }
 
 pub(crate) static COMBINING_OR_FORMAT_RE: Lazy<Regex> =
@@ -1021,7 +1096,11 @@ impl RenderedTextCount {
                     // Collapsible white space before the first preserved
                     // space starts the line and is removed; after it, it
                     // renders, so it joins the indentation.
-                    self.lead = if line_break(c) { 0 } else { self.lead + self.lead.min(1) * self.pending + 1 };
+                    self.lead = if line_break(c) {
+                        0
+                    } else {
+                        self.lead + self.lead.min(1) * self.pending + 1
+                    };
                     self.pending = 0;
                     self.in_collapsible_run = false;
                     continue;
@@ -1102,13 +1181,17 @@ impl RenderedTextCount {
 }
 
 /// Replaced elements, which lay out as atomic inlines in a line of text.
-const REPLACED_TAGS: [&str; 11] =
-    ["img", "svg", "video", "canvas", "iframe", "object", "embed", "input", "select", "textarea", "button"];
+const REPLACED_TAGS: [&str; 11] = [
+    "img", "svg", "video", "canvas", "iframe", "object", "embed", "input", "select", "textarea",
+    "button",
+];
 
 /// An atomic inline box: a replaced element or an `inline-*` display.
 pub(crate) fn is_atomic_inline(dom: &dyn Dom, el: ElId) -> bool {
     REPLACED_TAGS.contains(&tag_lower(dom, el).as_str())
-        || js::to_lower_case(&dom.style(el, "display")).trim().starts_with("inline-")
+        || js::to_lower_case(&dom.style(el, "display"))
+            .trim()
+            .starts_with("inline-")
 }
 
 /// Feeds the text nodes under `el` in document order, each under its own
@@ -1125,7 +1208,9 @@ fn feed_rendered_text(dom: &dyn Dom, el: ElId, out: &mut RenderedTextCount) {
                 let (preserved, hangs) = *preserved.get_or_insert_with(|| {
                     let white_space = dom.style(el, "whiteSpace");
                     (
-                        white_space == "pre" || white_space == "pre-wrap" || white_space == "break-spaces",
+                        white_space == "pre"
+                            || white_space == "pre-wrap"
+                            || white_space == "break-spaces",
                         white_space == "pre-wrap",
                     )
                 });
@@ -1140,7 +1225,10 @@ fn feed_rendered_text(dom: &dyn Dom, el: ElId, out: &mut RenderedTextCount) {
                     continue;
                 }
                 if is_atomic_inline(dom, child) {
-                    let mut inner = RenderedTextCount { keep_fixed_spaces: true, ..Default::default() };
+                    let mut inner = RenderedTextCount {
+                        keep_fixed_spaces: true,
+                        ..Default::default()
+                    };
                     feed_rendered_text(dom, child, &mut inner);
                     out.add_atomic_inline(inner.count);
                 } else {
@@ -1228,7 +1316,10 @@ fn drawn_inner_edge(dom: &dyn Dom, el: ElId) -> [f64; 4] {
             else {
                 continue;
             };
-            for (side, d) in [spread + y, spread - x, spread - y, spread + x].into_iter().enumerate() {
+            for (side, d) in [spread + y, spread - x, spread - y, spread + x]
+                .into_iter()
+                .enumerate()
+            {
                 if d.is_finite() && d > 0.0 {
                     depth[side] = js::math_max(depth[side], d);
                 }
@@ -1326,7 +1417,10 @@ pub fn text_descendants_flush_sides(dom: &dyn Dom, el: ElId, rect: &Rect) -> [bo
         bg.is_some_and(|c| c.alpha_or_one() == 0.0) && matches!(image.as_str(), "none" | "")
     };
     let divider = |side: usize, opposite: usize| {
-        unfilled && border_drawn[side] > 0.0 && border_drawn[side] <= 1.0 && border_drawn[opposite] == 0.0
+        unfilled
+            && border_drawn[side] > 0.0
+            && border_drawn[side] <= 1.0
+            && border_drawn[opposite] == 0.0
     };
     let divider_sides = [divider(0, 2), divider(2, 0)];
     let candidates = dom.query_all(Some(el), TEXT_EDGE_QUERY).unwrap_or_default();
@@ -1354,7 +1448,11 @@ pub fn text_descendants_flush_sides(dom: &dyn Dom, el: ElId, rect: &Rect) -> [bo
         if br.width <= 0.0 || br.height <= 0.0 {
             continue;
         }
-        if br.bottom < rect.top || br.top > rect.bottom || br.right < rect.left || br.left > rect.right {
+        if br.bottom < rect.top
+            || br.top > rect.bottom
+            || br.right < rect.left
+            || br.left > rect.right
+        {
             continue;
         }
         // Glyphs a reader sees are inside the node's own box, so a box that
@@ -1406,7 +1504,9 @@ pub fn text_descendants_flush_sides(dom: &dyn Dom, el: ElId, rect: &Rect) -> [bo
         // pixel: stripe.com's code tab clips a link 3px past its right
         // edge, and the glyphs there are cut off, not crowding it.
         let cut_tolerance = CLIP_CUT_TOLERANCE_PX * scale;
-        let Some((left, right, cut_left, cut_right)) = visible_x_extent(dom, el, node, &nr, cut_tolerance) else {
+        let Some((left, right, cut_left, cut_right)) =
+            visible_x_extent(dom, el, node, &nr, cut_tolerance)
+        else {
             continue;
         };
         let Some((top, bottom, cut_top, cut_bottom)) =
@@ -1582,9 +1682,14 @@ fn shown_line_count(dom: &dyn Dom, el: ElId, t: &Rect, lh: f64, font_size: f64) 
     // real scale counts).
     let r = dom.rect(el);
     let layout_h = dom.offset_height(el);
-    let scale = if layout_h.is_finite() && layout_h > 0.0 && r.height.is_finite() && r.height > 0.0 {
+    let scale = if layout_h.is_finite() && layout_h > 0.0 && r.height.is_finite() && r.height > 0.0
+    {
         let s = r.height / layout_h;
-        if (s - 1.0).abs() > 0.01 { s } else { 1.0 }
+        if (s - 1.0).abs() > 0.01 {
+            s
+        } else {
+            1.0
+        }
     } else {
         1.0
     };
@@ -1597,7 +1702,11 @@ fn shown_line_count(dom: &dyn Dom, el: ElId, t: &Rect, lh: f64, font_size: f64) 
         let Some(c) = cur else { break };
         if is_line_clamp(&dom.style(c, "display"), &dom.style(c, "webkitLineClamp")) {
             let n = js::parse_float(&dom.style(c, "webkitLineClamp"));
-            return if n.is_finite() && n > 0.0 { lines.min(n) } else { lines };
+            return if n.is_finite() && n > 0.0 {
+                lines.min(n)
+            } else {
+                lines
+            };
         }
         cur = dom.parent(c);
     }
@@ -1617,8 +1726,9 @@ fn rendered_lines(dom: &dyn Dom, el: ElId, t: &Rect) -> (bool, f64) {
         let clips = |k: &str| matches!(dom.style(c, k).as_str(), "hidden" | "clip");
         if clips("overflowY") || clips("overflow") {
             let r = dom.rect(c);
-            let content_bottom =
-                r.bottom - style_px(dom, c, "borderBottomWidth") - style_px(dom, c, "paddingBottom");
+            let content_bottom = r.bottom
+                - style_px(dom, c, "borderBottomWidth")
+                - style_px(dom, c, "paddingBottom");
             if !(content_bottom.is_finite() && t.all_finite()) || content_bottom >= t.bottom {
                 return (false, t.bottom);
             }
@@ -1673,7 +1783,8 @@ const NORMAL_LINE_HEIGHT_EM: f64 = 1.2;
 const TEXT_FILLS_MEASURE: f64 = 0.9;
 
 /// The controls whose labels wide tracking may set: links and buttons.
-const TRACKED_CONTROL_LABEL: &str = "a[href], button, [role=\"button\"], [role=\"link\"], [role=\"tab\"]";
+const TRACKED_CONTROL_LABEL: &str =
+    "a[href], button, [role=\"button\"], [role=\"link\"], [role=\"tab\"]";
 
 /// The letters in `text`: what a reader takes in as a label's length. The
 /// spaces, digits and dots between words of a caps label
@@ -1698,11 +1809,20 @@ fn short_one_line_label(dom: &dyn Dom, el: ElId, line_height_px: Option<f64>) ->
 /// does. With `every_letter`, each letter has to be a capital: a line of
 /// Hangul or kana with one Latin brand name in capitals ("인벤(INVEN)") is
 /// running text, and letters with no case do not make it a label.
-fn typed_caps_label(dom: &dyn Dom, el: ElId, line_height_px: Option<f64>, every_letter: bool) -> bool {
+fn typed_caps_label(
+    dom: &dyn Dom,
+    el: ElId,
+    line_height_px: Option<f64>,
+    every_letter: bool,
+) -> bool {
     let text = dom.text_content(el);
     let text = js::trim(&text);
     is_capitalized_run(text)
-        && (!every_letter || text.chars().filter(|c| c.is_alphabetic()).all(|c| c.is_uppercase()))
+        && (!every_letter
+            || text
+                .chars()
+                .filter(|c| c.is_alphabetic())
+                .all(|c| c.is_uppercase()))
         && short_one_line_label(dom, el, line_height_px)
 }
 
@@ -1714,7 +1834,10 @@ fn typed_caps_text(dom: &dyn Dom, el: ElId) -> bool {
     let text = collapse_ws(js::trim(&dom.text_content(el)));
     utf16_len(&text) < ALL_CAPS_LONG_RUN
         && is_capitalized_run(&text)
-        && text.chars().filter(|c| c.is_alphabetic()).all(|c| c.is_uppercase())
+        && text
+            .chars()
+            .filter(|c| c.is_alphabetic())
+            .all(|c| c.is_uppercase())
 }
 
 /// JS: checks.mjs#isNonRenderedText(el, tag, style)
@@ -1763,7 +1886,11 @@ const RASTER_PLACEHOLDER_MIN_BLUR_PX: f64 = 4.0;
 /// crossfade whose visible frame is a sibling, a placeholder under a parent
 /// that paints the loaded picture).
 fn raster_is_state_layer(dom: &dyn Dom, el: ElId, tag: &str, bg: &str, rect: &Rect) -> bool {
-    if crate::checks::measures::raster_source_is_svg(tag == "img", dom.attr(el, "src").as_deref(), bg) {
+    if crate::checks::measures::raster_source_is_svg(
+        tag == "img",
+        dom.attr(el, "src").as_deref(),
+        bg,
+    ) {
         return true;
     }
     if rect.width > 0.0
@@ -1895,7 +2022,11 @@ fn body_text_edge_span(dom: &dyn Dom, q: &QualityInput) -> Option<(f64, f64)> {
     let is_edge_tag = matches!(js::to_upper_case(tag).as_str(), "P" | "LI");
     let edge_prose = !has_direct_text && is_edge_tag && holds_only_phrasing(dom, el);
     let prose_block = !is_edge_tag && is_prose_block(dom, el, tag, has_direct_text);
-    if !((has_direct_text || edge_prose) && q.text_len > 40 && (is_edge_tag || prose_block) && viewport_width > 0.0) {
+    if !((has_direct_text || edge_prose)
+        && q.text_len > 40
+        && (is_edge_tag || prose_block)
+        && viewport_width > 0.0)
+    {
         return None;
     }
     let in_nav_header = closest_or_none(dom, el, "nav").is_some()
@@ -2066,7 +2197,8 @@ pub fn check_quality(dom: &dyn Dom, q: &QualityInput) -> Vec<RuleHit> {
     // `fine_print_hit` drops the finding there, and tight-leading, which
     // stays advisory, asks `fine_print_advisory`.
     let fine_print = std::cell::OnceCell::new();
-    let fine_print_tier = || *fine_print.get_or_init(|| super::text_context::fine_print_dom(dom, el));
+    let fine_print_tier =
+        || *fine_print.get_or_init(|| super::text_context::fine_print_dom(dom, el));
     let is_fine_print = || fine_print_tier() != FinePrint::No;
     let fine_print_hit = |hit: RuleHit| match fine_print_tier() {
         FinePrint::Exempt => None,
@@ -2082,7 +2214,7 @@ pub fn check_quality(dom: &dyn Dom, q: &QualityInput) -> Vec<RuleHit> {
     // catches computed opacity on the element itself (both engines).
     {
         let op = parse_float(&st("opacity"));
-        if op.is_finite() && op < 0.15 && op >= 0.0 {
+        if op.is_finite() && (0.0..0.15).contains(&op) {
             let bg = st("backgroundImage");
             if (tag == "img" || QUALITY_RASTER_URL_RE.is_match(&bg))
                 && !raster_is_state_layer(dom, el, tag, &bg, rect)
@@ -2096,7 +2228,11 @@ pub fn check_quality(dom: &dyn Dom, q: &QualityInput) -> Vec<RuleHit> {
                     "buried-raster",
                     format!(
                         "{} at opacity {}{}",
-                        if tag == "img" { "<img>" } else { "raster background" },
+                        if tag == "img" {
+                            "<img>"
+                        } else {
+                            "raster background"
+                        },
                         number_to_string(op),
                         if label.is_empty() {
                             String::new()
@@ -2246,7 +2382,10 @@ pub fn check_quality(dom: &dyn Dom, q: &QualityInput) -> Vec<RuleHit> {
             }
             let pad_names = ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft"];
             let min_over = |sides: &[usize], f: &dyn Fn(usize) -> f64| {
-                sides.iter().map(|&s| f(s)).fold(f64::INFINITY, js::math_min)
+                sides
+                    .iter()
+                    .map(|&s| f(s))
+                    .fold(f64::INFINITY, js::math_min)
             };
             let pad_of = |s: usize| spx(pad_names[s]);
             let v_min = min_over(&v_sides, &pad_of);
@@ -2342,7 +2481,8 @@ pub fn check_quality(dom: &dyn Dom, q: &QualityInput) -> Vec<RuleHit> {
                 && !css_color_is_transparent(Some(&outline_color_val))
                 && !outline_style_val.is_empty()
                 && outline_style_val != "none";
-            let bg_visible = has_visible_background_boundary(dom, el) && !backdrop_layer_matches(dom, el);
+            let bg_visible =
+                has_visible_background_boundary(dom, el) && !backdrop_layer_matches(dom, el);
             let any_visible = border_visible.iter().any(|b| *b) || outline_visible || bg_visible;
             if any_visible {
                 let len = |e: ElId, k: &str| {
@@ -2487,8 +2627,7 @@ pub fn check_quality(dom: &dyn Dom, q: &QualityInput) -> Vec<RuleHit> {
                     if matches!(child_pos.as_str(), "" | "static") {
                         for s in 0..4 {
                             if child_pad[s] >= CHILD_INSULATE_THRESHOLD
-                                || (margin_counts(s)
-                                    && child_margin[s] >= CHILD_INSULATE_THRESHOLD)
+                                || (margin_counts(s) && child_margin[s] >= CHILD_INSULATE_THRESHOLD)
                             {
                                 ins[s] = true;
                             }
@@ -2559,7 +2698,8 @@ pub fn check_quality(dom: &dyn Dom, q: &QualityInput) -> Vec<RuleHit> {
                         if border_sides_visible.len() == 4 {
                             boundary_parts.push("border".to_string());
                         } else if !border_sides_visible.is_empty() {
-                            boundary_parts.push(format!("border-{}", border_sides_visible.join("/")));
+                            boundary_parts
+                                .push(format!("border-{}", border_sides_visible.join("/")));
                         }
                         if outline_visible {
                             boundary_parts.push("outline".to_string());
@@ -2683,7 +2823,9 @@ pub fn check_quality(dom: &dyn Dom, q: &QualityInput) -> Vec<RuleHit> {
                     crate::checks::text_rules::is_monospace_family(&st("fontFamily"))
                         && ((ws.starts_with("pre") && ws != "pre-line") || ws == "break-spaces")
                         && (closest_or_none(dom, el, "pre, code, samp").is_some()
-                            || direct_text(dom, el).chars().any(|c| ('\u{2500}'..='\u{257F}').contains(&c)))
+                            || direct_text(dom, el)
+                                .chars()
+                                .any(|c| ('\u{2500}'..='\u{257F}').contains(&c)))
                 };
                 // Lead text (taste call r13-t3): 20px and up over three
                 // rendered lines or fewer, at 1.15 or more, sets its own
@@ -2693,7 +2835,8 @@ pub fn check_quality(dom: &dyn Dom, q: &QualityInput) -> Vec<RuleHit> {
                     if font_size < LEADING_LEAD_TEXT_PX || shown < LEADING_LEAD_TEXT_MIN_RATIO {
                         return false;
                     }
-                    shown_line_count(dom, el, &text_rect, lh, font_size) <= LEADING_LEAD_TEXT_MAX_LINES
+                    shown_line_count(dom, el, &text_rect, lh, font_size)
+                        <= LEADING_LEAD_TEXT_MAX_LINES
                 };
                 // Capitals have no descenders to crowd the line below, so a
                 // label set in them keeps the leading it is given, as
@@ -2705,7 +2848,8 @@ pub fn check_quality(dom: &dyn Dom, q: &QualityInput) -> Vec<RuleHit> {
                 let caps = || {
                     shown >= LEADING_CAPS_LABEL_MIN_RATIO
                         && ((st("textTransform") == "uppercase" && {
-                            shown_line_count(dom, el, &text_rect, lh, font_size) <= LEADING_LEAD_TEXT_MAX_LINES
+                            shown_line_count(dom, el, &text_rect, lh, font_size)
+                                <= LEADING_LEAD_TEXT_MAX_LINES
                         }) || typed_caps_text(dom, el))
                 };
                 if wraps
@@ -2747,7 +2891,11 @@ pub fn check_quality(dom: &dyn Dom, q: &QualityInput) -> Vec<RuleHit> {
         while let Some(p) = cur {
             let display = dom.style(p, "display");
             if display != "inline" && display != "contents" {
-                return if has_direct_text_longer_than(dom, p, 10) { None } else { Some(p) };
+                return if has_direct_text_longer_than(dom, p, 10) {
+                    None
+                } else {
+                    Some(p)
+                };
             }
             cur = dom.parent(p);
         }
@@ -2791,8 +2939,9 @@ pub fn check_quality(dom: &dyn Dom, q: &QualityInput) -> Vec<RuleHit> {
             }
         };
         if hyphens != "auto"
-            && justify_measure()
-                .is_some_and(|w| w > 0.0 && chars_per_line(w, font_size) <= JUSTIFY_NARROW_CHARS_PER_LINE)
+            && justify_measure().is_some_and(|w| {
+                w > 0.0 && chars_per_line(w, font_size) <= JUSTIFY_NARROW_CHARS_PER_LINE
+            })
             && renders_two_lines()
             && !justifies_without_word_spaces_text(&direct_text(dom, el))
         {
@@ -2810,13 +2959,23 @@ pub fn check_quality(dom: &dyn Dom, q: &QualityInput) -> Vec<RuleHit> {
     // command set in a monospace face with its whitespace kept (stroq.dev's
     // terminal mock), which is code whatever its class names.
     if has_direct_text && text_len > 20 && font_size < 12.0 {
-        let skip_tags = ["sub", "sup", "code", "kbd", "samp", "var", "caption", "figcaption"];
+        let skip_tags = [
+            "sub",
+            "sup",
+            "code",
+            "kbd",
+            "samp",
+            "var",
+            "caption",
+            "figcaption",
+        ];
         // A label drawn as a button is UI, unless it is fine print, which
         // stays tiny-text's (r5-p27; exempt in a legal block).
         let button_label = || is_button_box(dom, el) && !is_fine_print();
-        let in_ui_context = closest_or_none(dom, el, TINY_TEXT_UI_CONTEXT).is_some() || button_label();
-        let is_uppercase = st("textTransform") == "uppercase"
-            || typed_caps_label(dom, el, q.line_height_px, true);
+        let in_ui_context =
+            closest_or_none(dom, el, TINY_TEXT_UI_CONTEXT).is_some() || button_label();
+        let is_uppercase =
+            st("textTransform") == "uppercase" || typed_caps_label(dom, el, q.line_height_px, true);
         let is_code_run = crate::checks::text_rules::is_monospace_family(&st("fontFamily"))
             && st("whiteSpace").starts_with("pre");
         if !skip_tags.contains(&tag)
@@ -2831,7 +2990,13 @@ pub fn check_quality(dom: &dyn Dom, q: &QualityInput) -> Vec<RuleHit> {
                 "tiny-text",
                 format!("{}px body text", number_to_string(font_size)),
             ));
-            findings.extend(hit.map(|hit| if hit.is_advisory() { hit } else { advisory_if(hit, in_mock()) }));
+            findings.extend(hit.map(|hit| {
+                if hit.is_advisory() {
+                    hit
+                } else {
+                    advisory_if(hit, in_mock())
+                }
+            }));
         }
     }
 
@@ -2916,7 +3081,10 @@ pub fn check_quality(dom: &dyn Dom, q: &QualityInput) -> Vec<RuleHit> {
         if own_len >= ALL_CAPS_LONG_RUN {
             findings.push(RuleHit::new(
                 "all-caps-body",
-                format!("text-transform: uppercase on {} chars of body text", own_len),
+                format!(
+                    "text-transform: uppercase on {} chars of body text",
+                    own_len
+                ),
             ));
         }
     }
@@ -2945,7 +3113,8 @@ pub fn check_quality(dom: &dyn Dom, q: &QualityInput) -> Vec<RuleHit> {
                     let lowered = st("textTransform") == "lowercase";
                     let caps_label = st("textTransform") == "uppercase"
                         || (!lowered
-                            && (typed_caps_text(dom, el) || typed_caps_label(dom, el, q.line_height_px, false)));
+                            && (typed_caps_text(dom, el)
+                                || typed_caps_label(dom, el, q.line_height_px, false)));
                     // Han, kana and Hangul sit in square cells and are set
                     // with open tracking by convention, as the crushed
                     // tracking check below already reads them
@@ -2965,7 +3134,10 @@ pub fn check_quality(dom: &dyn Dom, q: &QualityInput) -> Vec<RuleHit> {
                     if !caps_label && !control_label && !cjk {
                         findings.push(RuleHit::new(
                             "wide-tracking",
-                            format!("letter-spacing: {}em on body text", to_fixed(tracking_em, 2)),
+                            format!(
+                                "letter-spacing: {}em on body text",
+                                to_fixed(tracking_em, 2)
+                            ),
                         ));
                     }
                 }
@@ -3051,7 +3223,11 @@ const CODE_TEXT_SELECTOR: &str = "script, style, template, noscript";
 /// an h5 with an inline `<script>`, so the heading's text content starts
 /// with `document.write(...)`, which no reader sees.
 fn text_without_code(dom: &dyn Dom, el: ElId) -> String {
-    if dom.query_all(Some(el), CODE_TEXT_SELECTOR).unwrap_or_default().is_empty() {
+    if dom
+        .query_all(Some(el), CODE_TEXT_SELECTOR)
+        .unwrap_or_default()
+        .is_empty()
+    {
         return dom.text_content(el);
     }
     // Node by node, so a script's text is dropped where the script sits and
@@ -3104,13 +3280,22 @@ pub fn check_page_quality_from_doc_in(
     let mut prev_text = String::new();
     let mut prev_footer: Option<ElId> = None;
     let mut prev_opens_footer = false;
-    for h in dom.query_all(None, "h1, h2, h3, h4, h5, h6").unwrap_or_default() {
+    for h in dom
+        .query_all(None, "h1, h2, h3, h4, h5, h6")
+        .unwrap_or_default()
+    {
         if mockups.is_some_and(|m| m.declared(h)) {
             continue;
         }
         let tag = dom.tag_name(h);
         // JS `parseInt(h.tagName[1])`
-        let level = js::parse_int(&tag.chars().nth(1).map(|c| c.to_string()).unwrap_or_default(), 10);
+        let level = js::parse_int(
+            &tag.chars()
+                .nth(1)
+                .map(|c| c.to_string())
+                .unwrap_or_default(),
+            10,
+        );
         let level = if level.is_nan() { 0 } else { level as i64 };
         let text = slice_utf16_prefix(&collapse_ws(js::trim(&text_without_code(dom, h))), 60);
         let footer = dom.closest(h, FOOTER_SELECTOR).ok().flatten();
@@ -3195,7 +3380,9 @@ fn viewport_clips_x(dom: &dyn Dom) -> bool {
         .map(|r| super::text_geometry::overflow_x(dom, r))
         .unwrap_or_default();
     let ox = if root.is_empty() || root == "visible" {
-        dom.body().map(|b| super::text_geometry::overflow_x(dom, b)).unwrap_or_default()
+        dom.body()
+            .map(|b| super::text_geometry::overflow_x(dom, b))
+            .unwrap_or_default()
     } else {
         root
     };
@@ -3241,7 +3428,7 @@ fn widest_past_edge(dom: &dyn Dom, side: Side, vw: f64, limit: f64) -> Option<(E
         let r = dom.rect(el);
         if display != "contents" && r.all_finite() && (r.width > 0.0 || r.height > 0.0) {
             let d = side.past(r.left, r.right, vw);
-            if d >= 1.0 && d <= limit && best.map_or(true, |(_, b)| d > b + 0.5) {
+            if d >= 1.0 && d <= limit && best.is_none_or(|(_, b)| d > b + 0.5) {
                 best = Some((el, d));
             }
         }
@@ -3262,7 +3449,12 @@ fn widest_past_edge(dom: &dyn Dom, side: Side, vw: f64, limit: f64) -> Option<(E
 /// reaches past the edge there is held by a clip the walk above may not see
 /// (a clip path, paint containment, a shadow root), so only the boxes around
 /// the text count. Ties go to the outer box.
-fn widest_holding_text(dom: &dyn Dom, past: &[(ElId, Side, f64)], side: Side, vw: f64) -> Option<(ElId, f64)> {
+fn widest_holding_text(
+    dom: &dyn Dom,
+    past: &[(ElId, Side, f64)],
+    side: Side,
+    vw: f64,
+) -> Option<(ElId, f64)> {
     let root = dom.document_element();
     let mut best: Option<(ElId, f64)> = None;
     for &(el, s, _) in past {
@@ -3278,14 +3470,14 @@ fn widest_holding_text(dom: &dyn Dom, past: &[(ElId, Side, f64)], side: Side, vw
             let r = dom.rect(c);
             if r.all_finite() && (r.width > 0.0 || r.height > 0.0) {
                 let d = side.past(r.left, r.right, vw);
-                if d >= 1.0 && chain.map_or(true, |(_, b)| d + 0.5 >= b) {
+                if d >= 1.0 && chain.is_none_or(|(_, b)| d + 0.5 >= b) {
                     chain = Some((c, d));
                 }
             }
             cur = dom.parent(c);
         }
         if let Some((c, d)) = chain {
-            if best.map_or(true, |(_, b)| d > b + 0.5) {
+            if best.is_none_or(|(_, b)| d > b + 0.5) {
                 best = Some((c, d));
             }
         }
@@ -3308,7 +3500,10 @@ fn clip_cuts_text(dom: &dyn Dom, el: ElId, side: Side, reach: f64, vw: f64) -> b
         if Some(c) == root || Some(c) == body {
             break;
         }
-        if matches!(super::text_geometry::overflow_x(dom, c).as_str(), "hidden" | "clip") {
+        if matches!(
+            super::text_geometry::overflow_x(dom, c).as_str(),
+            "hidden" | "clip"
+        ) {
             let r = dom.rect(c);
             if r.all_finite() && (r.width > 0.0 || r.height > 0.0) {
                 let edge = side.past(r.left, r.right, vw);
@@ -3338,7 +3533,11 @@ fn overflow_element_name(dom: &dyn Dom, el: ElId) -> String {
     if name != "div" {
         return name;
     }
-    let id_of = |e: ElId| dom.attr(e, "id").map(|v| js::trim(&v).to_string()).filter(|v| !v.is_empty());
+    let id_of = |e: ElId| {
+        dom.attr(e, "id")
+            .map(|v| js::trim(&v).to_string())
+            .filter(|v| !v.is_empty())
+    };
     if let Some(id) = id_of(el) {
         return format!("div#{id}");
     }
@@ -3370,7 +3569,11 @@ fn overflow_element_name(dom: &dyn Dom, el: ElId) -> String {
     let mut excerpt = String::new();
     let mut cut = false;
     for w in &words {
-        let next = if excerpt.is_empty() { w.chars().count() } else { excerpt.chars().count() + 1 + w.chars().count() };
+        let next = if excerpt.is_empty() {
+            w.chars().count()
+        } else {
+            excerpt.chars().count() + 1 + w.chars().count()
+        };
         if next > OVERFLOW_EXCERPT_CHARS {
             cut = true;
             break;
@@ -3444,12 +3647,12 @@ pub fn check_page_overflow_dom(dom: &dyn Dom) -> Vec<BrowserFinding> {
             past.push((el, s, s.past(left, right, vw)));
         }
     }
-    let Some(&(first, side, text_reach)) = past
-        .iter()
-        .fold(None, |acc: Option<&(ElId, Side, f64)>, p| match acc {
-            Some(a) if a.2 >= p.2 => Some(a),
-            _ => Some(p),
-        })
+    let Some(&(first, side, text_reach)) =
+        past.iter()
+            .fold(None, |acc: Option<&(ElId, Side, f64)>, p| match acc {
+                Some(a) if a.2 >= p.2 => Some(a),
+                _ => Some(p),
+            })
     else {
         return Vec::new();
     };
@@ -3459,13 +3662,19 @@ pub fn check_page_overflow_dom(dom: &dyn Dom) -> Vec<BrowserFinding> {
     // scroll width.
     let root_scroll = dom.document_element().and_then(|root| {
         let (scroll, client) = (dom.scroll_width(root), dom.client_width(root));
-        let client = if client.is_finite() && client > 0.0 { client } else { vw };
-        scroll.is_finite().then(|| scroll - client)
+        let client = if client.is_finite() && client > 0.0 {
+            client
+        } else {
+            vw
+        };
+        scroll.is_finite().then_some(scroll - client)
     });
     let cut_off = viewport_clips_x(dom)
         || side != scroll_side(dom)
         || root_scroll.is_some_and(|d| d <= 1.0)
-        || on_side.iter().all(|&&(el, s, reach)| clip_cuts_text(dom, el, s, reach, vw));
+        || on_side
+            .iter()
+            .all(|&&(el, s, reach)| clip_cuts_text(dom, el, s, reach, vw));
     let scroll_reach = root_scroll.filter(|d| !cut_off && *d > 1.0);
     let widest_box = match scroll_reach {
         Some(limit) => widest_past_edge(dom, side, vw, limit + 1.0),
@@ -3477,7 +3686,11 @@ pub fn check_page_overflow_dom(dom: &dyn Dom) -> Vec<BrowserFinding> {
     };
     let name = overflow_element_name(dom, widest);
     let reach = number_to_string(math_round(reach));
-    let blocks = format!("{} {}", blocks, if blocks == 1 { "block" } else { "blocks" });
+    let blocks = format!(
+        "{} {}",
+        blocks,
+        if blocks == 1 { "block" } else { "blocks" }
+    );
     let vw = number_to_string(math_round(vw));
     let detail = if cut_off {
         format!(
@@ -3500,7 +3713,14 @@ mod tests {
 
     fn raster(d: &mut FakeDom, parent: ElId, tag: &str, rect: (f64, f64, f64, f64)) -> ElId {
         let el = d.add(Some(parent), tag);
-        d.set_styles(el, &[("opacity", "0"), ("backgroundImage", "none"), ("filter", "none")]);
+        d.set_styles(
+            el,
+            &[
+                ("opacity", "0"),
+                ("backgroundImage", "none"),
+                ("filter", "none"),
+            ],
+        );
         d.set_rect(el, rect.0, rect.1, rect.2, rect.3);
         el
     }
@@ -3538,7 +3758,11 @@ mod tests {
         assert!(!buried(&d, photo), "vector art");
 
         let copy = raster(&mut d, body, "button", (0.0, 400.0, 480.0, 300.0));
-        d.set_style(copy, "backgroundImage", "url(\"data:image/svg+xml,%3Csvg%3E\")");
+        d.set_style(
+            copy,
+            "backgroundImage",
+            "url(\"data:image/svg+xml,%3Csvg%3E\")",
+        );
         assert!(!buried(&d, copy), "an SVG data URI");
 
         let icon = raster(&mut d, body, "img", (0.0, 800.0, 16.0, 16.0));
@@ -3546,7 +3770,11 @@ mod tests {
         assert!(!buried(&d, icon), "an icon-sized raster");
 
         let placeholder = raster(&mut d, body, "canvas", (0.0, 1000.0, 353.0, 199.0));
-        d.set_style(placeholder, "backgroundImage", "url(\"/keytopic.jpg?w=40\")");
+        d.set_style(
+            placeholder,
+            "backgroundImage",
+            "url(\"/keytopic.jpg?w=40\")",
+        );
         assert!(buried(&d, placeholder));
         d.set_style(placeholder, "filter", "blur(10px)");
         assert!(!buried(&d, placeholder), "a blurred placeholder");
@@ -3556,14 +3784,20 @@ mod tests {
         d.set_rect(card, 16.0, 1600.0, 321.0, 181.0);
         let under = raster(&mut d, card, "canvas", (0.0, 1590.0, 353.0, 199.0));
         d.set_style(under, "backgroundImage", "url(\"/keytopic.jpg?w=40\")");
-        assert!(!buried(&d, under), "under a parent painting the loaded picture");
+        assert!(
+            !buried(&d, under),
+            "under a parent painting the loaded picture"
+        );
 
         let stack = d.add(Some(body), "div");
         let shown = raster(&mut d, stack, "img", (160.0, 3012.0, 960.0, 600.0));
         d.set_style(shown, "opacity", "1");
         let frame = raster(&mut d, stack, "img", (160.0, 3012.0, 960.0, 600.0));
         d.set_attr(frame, "src", "/screenshot-inbox.png");
-        assert!(!buried(&d, frame), "a crossfade frame under a painted sibling");
+        assert!(
+            !buried(&d, frame),
+            "a crossfade frame under a painted sibling"
+        );
         d.set_style(shown, "opacity", "0");
         assert!(buried(&d, frame), "no painted frame over it");
     }
@@ -3617,13 +3851,25 @@ mod tests {
         let mut d = FakeDom::new();
         let (html, body) = d.with_page();
         d.set_attr(html, "class", "js js-nav-ready");
-        let note = text_el(&mut d, body, "p", "For mails we never asked for and will never read", "10px");
+        let note = text_el(
+            &mut d,
+            body,
+            "p",
+            "For mails we never asked for and will never read",
+            "10px",
+        );
         d.set_rect(note, 40.0, 400.0, 600.0, 14.0);
         assert!(!undersized(&d, note), "a sentence under html.js-nav-ready");
         // A box inside the page whose class names navigation still counts.
         let nav = d.add(Some(body), "div");
         d.set_attr(nav, "class", "site-nav");
-        let item = text_el(&mut d, nav, "span", "Linux support and consulting since 1997", "10px");
+        let item = text_el(
+            &mut d,
+            nav,
+            "span",
+            "Linux support and consulting since 1997",
+            "10px",
+        );
         d.set_rect(item, 40.0, 500.0, 300.0, 14.0);
         assert!(undersized(&d, item));
     }
@@ -3654,17 +3900,40 @@ mod tests {
         let p = text_el(&mut d, body, "p", &long, "16px");
         d.set_rect(p, 0.0, 100.0, 1200.0, 72.0);
         // Three rendered lines: two full ones and a tail.
-        d.set_text_lines(p, &[(0.0, 100.0, 1180.0, 19.0), (0.0, 124.0, 1180.0, 19.0), (0.0, 148.0, 400.0, 19.0)]);
+        d.set_text_lines(
+            p,
+            &[
+                (0.0, 100.0, 1180.0, 19.0),
+                (0.0, 124.0, 1180.0, 19.0),
+                (0.0, 148.0, 400.0, 19.0),
+            ],
+        );
         let hits = check_element_quality_dom(&d, p, &BrowserConfig::default());
         let ids: Vec<&str> = hits.iter().map(|h| h.id.as_str()).collect();
         assert!(ids.contains(&"line-length"), "{ids:?}");
-        assert_eq!(hits[0].snippet, "~103 chars on 2 of 3 rendered lines (aim for <80)");
+        assert_eq!(
+            hits[0].snippet,
+            "~103 chars on 2 of 3 rendered lines (aim for <80)"
+        );
         assert!(ids.contains(&"body-text-viewport-edge"));
-        let edge = hits.iter().find(|h| h.id == "body-text-viewport-edge").unwrap();
-        assert_eq!(edge.snippet, "<p> with 240-char body bleeds to viewport edge (left 0px)");
+        let edge = hits
+            .iter()
+            .find(|h| h.id == "body-text-viewport-edge")
+            .unwrap();
+        assert_eq!(
+            edge.snippet,
+            "<p> with 240-char body bleeds to viewport edge (left 0px)"
+        );
         // narrower, inset paragraph: neither fires
         d.set_rect(p, 40.0, 100.0, 600.0, 72.0);
-        d.set_text_lines(p, &[(40.0, 100.0, 580.0, 19.0), (40.0, 124.0, 580.0, 19.0), (40.0, 148.0, 580.0, 19.0)]);
+        d.set_text_lines(
+            p,
+            &[
+                (40.0, 100.0, 580.0, 19.0),
+                (40.0, 124.0, 580.0, 19.0),
+                (40.0, 148.0, 580.0, 19.0),
+            ],
+        );
         let hits = check_element_quality_dom(&d, p, &BrowserConfig::default());
         assert!(hits.is_empty(), "{hits:?}");
     }
@@ -3684,15 +3953,24 @@ mod tests {
         d.set_style(p, "lineHeight", "24px");
         d.set_rect(p, 200.0, 971.0, 1022.0, 48.0);
         // One long line and a 13-character tail: the eye tracks back once.
-        d.set_text_lines(p, &[(200.0, 974.0, 995.4, 18.0), (200.0, 998.0, 85.5, 18.0)]);
-        assert_eq!(check_element_quality_dom(&d, p, &BrowserConfig::default()), vec![]);
+        d.set_text_lines(
+            p,
+            &[(200.0, 974.0, 995.4, 18.0), (200.0, 998.0, 85.5, 18.0)],
+        );
+        assert_eq!(
+            check_element_quality_dom(&d, p, &BrowserConfig::default()),
+            vec![]
+        );
 
         // The same box, text that stops at 571px: 89 characters on one line.
         let meta = text_el(&mut d, body, "p", &"y".repeat(89), "14px");
         d.set_style(meta, "lineHeight", "21.7px");
         d.set_rect(meta, 200.0, 122.0, 992.0, 21.7);
         d.set_text_lines(meta, &[(200.0, 124.2, 571.4, 17.0)]);
-        assert_eq!(check_element_quality_dom(&d, meta, &BrowserConfig::default()), vec![]);
+        assert_eq!(
+            check_element_quality_dom(&d, meta, &BrowserConfig::default()),
+            vec![]
+        );
 
         // A column of long lines is the defect the rule is named for.
         let wall = text_el(&mut d, body, "p", &"z".repeat(500), "15px");
@@ -3709,7 +3987,10 @@ mod tests {
         );
         let hits = check_element_quality_dom(&d, wall, &BrowserConfig::default());
         assert_eq!(hits.len(), 1, "{hits:?}");
-        assert_eq!(hits[0].snippet, "~139 chars on 3 of 4 rendered lines (aim for <80)");
+        assert_eq!(
+            hits[0].snippet,
+            "~139 chars on 3 of 4 rendered lines (aim for <80)"
+        );
     }
 
     /// github.com's release notes: a list item whose own words ("Fast
@@ -3734,7 +4015,12 @@ mod tests {
                 d.add_text(item, &"n".repeat(95));
                 d.set_style(item, "display", "list-item");
                 d.set_rect(item, 366.0, top + 24.0 * i as f64, 814.0, 24.0);
-                lines.push((366.0, top + 1.0 + 24.0 * i as f64, if i % 2 == 0 { 770.0 } else { 550.0 }, 22.0));
+                lines.push((
+                    366.0,
+                    top + 1.0 + 24.0 * i as f64,
+                    if i % 2 == 0 { 770.0 } else { 550.0 },
+                    22.0,
+                ));
             }
             d.set_text_lines(li, &lines);
             check_element_quality_dom(&d, li, &BrowserConfig::default())
@@ -3745,7 +4031,14 @@ mod tests {
         assert_eq!(build("Fast Refresh Fixes", &[(334.0, 1.0, 133.7, 22.0)]), 0);
         let long = "w".repeat(300);
         assert_eq!(
-            build(&long, &[(334.0, 1.0, 840.0, 22.0), (334.0, 25.0, 840.0, 22.0), (334.0, 49.0, 840.0, 22.0)]),
+            build(
+                &long,
+                &[
+                    (334.0, 1.0, 840.0, 22.0),
+                    (334.0, 25.0, 840.0, 22.0),
+                    (334.0, 49.0, 840.0, 22.0)
+                ]
+            ),
             1
         );
     }
@@ -3775,10 +4068,16 @@ mod tests {
             ],
         );
         let hits = check_element_quality_dom(&d, p, &BrowserConfig::default());
-        let line = hits.iter().find(|h| h.id == "line-length").expect("charged");
+        let line = hits
+            .iter()
+            .find(|h| h.id == "line-length")
+            .expect("charged");
         // Three lines of 1000px, not six of ~500: six would have put 50
         // characters on each and charged nothing at all.
-        assert_eq!(line.snippet, "~100 chars on 3 of 3 rendered lines (aim for <80)");
+        assert_eq!(
+            line.snippet,
+            "~100 chars on 3 of 3 rendered lines (aim for <80)"
+        );
 
         // The same merge the other way: one long line in two fragments plus a
         // short tail is two lines, and one long line is a sentence that
@@ -3890,7 +4189,6 @@ mod tests {
         );
     }
 
-
     /// REN-403, the wrapper half of the same rule. Crewline's framed table:
     /// the `<table>` fills the frame edge to edge, and every cell insets its
     /// own text by the padding the stylesheet gives it. Reading the cell's
@@ -3937,7 +4235,10 @@ mod tests {
             d.set_text_lines(cell, &[(x + 16.0, y + 10.0, w - 32.0, 17.0)]);
             let _ = i;
         }
-        assert_eq!(check_element_quality_dom(&d, frame, &BrowserConfig::default()), vec![]);
+        assert_eq!(
+            check_element_quality_dom(&d, frame, &BrowserConfig::default()),
+            vec![]
+        );
 
         // A cell that really does put its text on the frame line is charged.
         let tight = d.add(Some(table), "td");
@@ -3994,7 +4295,10 @@ mod tests {
             ],
         );
         d.set_text_lines(btn, &[(68.0, 791.2, 160.0, 18.0)]);
-        assert_eq!(check_element_quality_dom(&d, btn, &BrowserConfig::default()), vec![]);
+        assert_eq!(
+            check_element_quality_dom(&d, btn, &BrowserConfig::default()),
+            vec![]
+        );
 
         // The same control with the label actually against the edge: charged.
         d.set_text_lines(btn, &[(68.0, 780.2, 160.0, 18.0)]);
@@ -4041,7 +4345,10 @@ mod tests {
         d.set_text_rect(btn, 32.0, 1.0, 160.0, 33.6);
         let hits = check_element_quality_dom(&d, btn, &BrowserConfig::default());
         assert_eq!(hits.len(), 1, "{hits:?}");
-        assert_eq!(hits[0].snippet, "2.4px of space above and below the text (need ≥4.2px for 14px text)");
+        assert_eq!(
+            hits[0].snippet,
+            "2.4px of space above and below the text (need ≥4.2px for 14px text)"
+        );
     }
 
     /// observations-1006 row 12, ktk.de's cookie title: 4px of padding holds
@@ -4083,7 +4390,10 @@ mod tests {
         // are 4px off, and that is cramped.
         d.set_text_rect(bar, 484.4, 47.0, 311.3, 19.2);
         d.set_rect(bar, 333.0, 43.0, 614.0, 31.2);
-        assert_eq!(cramped(&d), vec!["4px of space above and below the text (need ≥5.8px for 19.2px text)"]);
+        assert_eq!(
+            cramped(&d),
+            vec!["4px of space above and below the text (need ≥5.8px for 19.2px text)"]
+        );
     }
 
     /// `border: 1px solid transparent` (a focus-ring placeholder) draws no
@@ -4092,7 +4402,13 @@ mod tests {
     fn cramped_padding_ignores_a_transparent_border() {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
-        let row = text_el(&mut d, body, "div", "What does the free plan include?", "18px");
+        let row = text_el(
+            &mut d,
+            body,
+            "div",
+            "What does the free plan include?",
+            "18px",
+        );
         d.set_rect(row, 0.0, 0.0, 640.0, 60.0);
         d.set_styles(
             row,
@@ -4147,7 +4463,19 @@ mod tests {
         // rule read before.
         let p = text_el(&mut d, card, "p", "Hello there friend", "16px");
         d.set_rect(p, 0.0, 28.0, 400.0, 20.0);
-        d.set_styles(p, &[("paddingTop", "0px"), ("paddingRight", "0px"), ("paddingBottom", "0px"), ("paddingLeft", "0px"), ("marginTop", "0px"), ("marginRight", "0px"), ("marginBottom", "0px"), ("marginLeft", "0px")]);
+        d.set_styles(
+            p,
+            &[
+                ("paddingTop", "0px"),
+                ("paddingRight", "0px"),
+                ("paddingBottom", "0px"),
+                ("paddingLeft", "0px"),
+                ("marginTop", "0px"),
+                ("marginRight", "0px"),
+                ("marginBottom", "0px"),
+                ("marginLeft", "0px"),
+            ],
+        );
         let hits = check_element_quality_dom(&d, card, &BrowserConfig::default());
         assert_eq!(hits.len(), 1, "{hits:?}");
         assert_eq!(
@@ -4214,11 +4542,23 @@ mod tests {
                 ("marginBottom", "0px"),
                 ("marginLeft", "0px"),
             ];
-            let a = text_el(&mut d, shell, "header", "Header copy inset by its padding", "16px");
+            let a = text_el(
+                &mut d,
+                shell,
+                "header",
+                "Header copy inset by its padding",
+                "16px",
+            );
             d.set_rect(a, 0.0, 0.0, 600.0, 100.0);
             d.set_styles(a, &padded);
             d.set_text_rect(a, 24.0, 24.0, 300.0, 18.0);
-            let b = text_el(&mut d, shell, "footer", "Footer copy inset by its padding", "16px");
+            let b = text_el(
+                &mut d,
+                shell,
+                "footer",
+                "Footer copy inset by its padding",
+                "16px",
+            );
             d.set_rect(b, 0.0, 100.0, 600.0, 100.0);
             d.set_styles(b, &padded);
             d.set_text_rect(b, 24.0, 158.0, 300.0, 18.0);
@@ -4291,11 +4631,23 @@ mod tests {
             ("marginBottom", "0px"),
             ("marginLeft", "0px"),
         ];
-        let p1 = text_el(&mut d, wrap, "p", "First paragraph touches the top edge", "16px");
+        let p1 = text_el(
+            &mut d,
+            wrap,
+            "p",
+            "First paragraph touches the top edge",
+            "16px",
+        );
         d.set_rect(p1, 0.0, 0.0, 600.0, 50.0);
         d.set_styles(p1, &zero);
         d.set_text_rect(p1, 24.0, 1.0, 300.0, 18.0);
-        let p2 = text_el(&mut d, wrap, "p", "Second paragraph touches the bottom edge", "16px");
+        let p2 = text_el(
+            &mut d,
+            wrap,
+            "p",
+            "Second paragraph touches the bottom edge",
+            "16px",
+        );
         d.set_rect(p2, 0.0, 50.0, 600.0, 50.0);
         d.set_styles(p2, &zero);
         d.set_text_rect(p2, 24.0, 81.0, 300.0, 18.0);
@@ -4359,7 +4711,13 @@ mod tests {
                 ("fontSize", "16px"),
             ],
         );
-        let p = text_el(&mut d, shell, "p", "Copy the offset pulled onto the rule", "16px");
+        let p = text_el(
+            &mut d,
+            shell,
+            "p",
+            "Copy the offset pulled onto the rule",
+            "16px",
+        );
         // The padding would hold the glyphs 24px in; the relative offset
         // moves the whole box 24px left, putting them on the card's edge.
         d.set_styles(
@@ -4456,7 +4814,13 @@ mod tests {
                 ("fontSize", "16px"),
             ],
         );
-        let p = text_el(&mut d, pad, "p", "Shown copy a transform carried to the rule", "16px");
+        let p = text_el(
+            &mut d,
+            pad,
+            "p",
+            "Shown copy a transform carried to the rule",
+            "16px",
+        );
         d.set_rect(p, 0.0, 24.0, 400.0, 24.0);
         d.set_styles(
             p,
@@ -4525,7 +4889,13 @@ mod tests {
                     ("fontSize", "16px"),
                 ],
             );
-            let p = text_el(&mut d, shell, "p", "Copy held by a margin that collapses away", "16px");
+            let p = text_el(
+                &mut d,
+                shell,
+                "p",
+                "Copy held by a margin that collapses away",
+                "16px",
+            );
             d.set_rect(p, 0.0, 0.0, 600.0, 100.0);
             d.set_styles(
                 p,
@@ -4542,7 +4912,13 @@ mod tests {
             );
             // Collapsing flow puts the glyphs on the page's edge; a
             // `flow-root` holds the margin, so they sit 24px down.
-            d.set_text_rect(p, 24.0, if display == "flow-root" { 25.0 } else { 1.0 }, 300.0, 18.0);
+            d.set_text_rect(
+                p,
+                24.0,
+                if display == "flow-root" { 25.0 } else { 1.0 },
+                300.0,
+                18.0,
+            );
             check_element_quality_dom(&d, page, &BrowserConfig::default())
         };
         let hits = build("block");
@@ -4645,9 +5021,30 @@ mod tests {
             cramped(&d, row)
         };
         assert!(run(&|_, _| {}).is_empty(), "{:?}", run(&|_, _| {}));
-        assert_eq!(run(&|d, row| { d.set_style(row, "borderBottomWidth", "1px"); }).len(), 1, "a frame");
-        assert_eq!(run(&|d, row| { d.set_style(row, "backgroundColor", "rgb(240, 240, 240)"); }).len(), 1, "a fill");
-        assert_eq!(run(&|d, row| { d.set_style(row, "borderTopWidth", "2px"); }).len(), 1, "a 2px rule");
+        assert_eq!(
+            run(&|d, row| {
+                d.set_style(row, "borderBottomWidth", "1px");
+            })
+            .len(),
+            1,
+            "a frame"
+        );
+        assert_eq!(
+            run(&|d, row| {
+                d.set_style(row, "backgroundColor", "rgb(240, 240, 240)");
+            })
+            .len(),
+            1,
+            "a fill"
+        );
+        assert_eq!(
+            run(&|d, row| {
+                d.set_style(row, "borderTopWidth", "2px");
+            })
+            .len(),
+            1,
+            "a 2px rule"
+        );
     }
 
     /// stripe.com's code tab clips a link 3px past its right edge: the
@@ -4660,7 +5057,14 @@ mod tests {
         let run = |text: (f64, f64, f64, f64), scroll_height: f64| {
             let mut d = FakeDom::new();
             let (row, button) = accordion_row(&mut d);
-            d.set_styles(row, &[("overflowX", "auto"), ("overflowY", "auto"), ("paddingRight", "0px")]);
+            d.set_styles(
+                row,
+                &[
+                    ("overflowX", "auto"),
+                    ("overflowY", "auto"),
+                    ("paddingRight", "0px"),
+                ],
+            );
             d.el_mut(row).client_width = 600.0;
             d.el_mut(row).client_height = 56.0;
             d.el_mut(row).scroll_height = Some(scroll_height);
@@ -4745,13 +5149,23 @@ mod tests {
         d.set_text_rect(button, 24.0, 4.0, 300.0, 50.0);
         assert_eq!(
             flush(&d),
-            vec!["<div> \"border\": children flush against border on top/bottom (no inset)".to_string()]
+            vec![
+                "<div> \"border\": children flush against border on top/bottom (no inset)"
+                    .to_string()
+            ]
         );
         // A fill, with no border drawn: 4px is air.
         for side in ["Top", "Right", "Bottom", "Left"] {
             d.set_style(row, &format!("border{side}Width"), "0px");
         }
-        d.set_styles(row, &[("backgroundColor", "rgb(240, 240, 240)"), ("boxShadow", "none"), ("outlineOffset", "0px")]);
+        d.set_styles(
+            row,
+            &[
+                ("backgroundColor", "rgb(240, 240, 240)"),
+                ("boxShadow", "none"),
+                ("outlineOffset", "0px"),
+            ],
+        );
         assert!(flush(&d).is_empty(), "{:?}", flush(&d));
         // An inset ring (Tailwind's `ring-1 ring-inset`) draws the edge a
         // border would: 4px off the box is 3px off the line.
@@ -4769,19 +5183,40 @@ mod tests {
             "only the top is drawn"
         );
         d.set_style(row, "boxShadow", "rgb(229, 231, 235) 1px 0px 0px 1px inset");
-        assert_eq!(flush(&d).len(), 1, "a sideways offset keeps the top and bottom edges");
+        assert_eq!(
+            flush(&d).len(),
+            1,
+            "a sideways offset keeps the top and bottom edges"
+        );
         d.set_style(row, "boxShadow", "rgb(0, 0, 0) 0px 4px 12px 0px");
         assert!(flush(&d).is_empty(), "an outer shadow draws no inner edge");
         d.set_style(row, "boxShadow", "none");
         // So does an outline pulled inside the box.
-        d.set_styles(row, &[("outlineWidth", "1px"), ("outlineStyle", "solid"), ("outlineColor", "rgb(0, 0, 0)"), ("outlineOffset", "-1px")]);
+        d.set_styles(
+            row,
+            &[
+                ("outlineWidth", "1px"),
+                ("outlineStyle", "solid"),
+                ("outlineColor", "rgb(0, 0, 0)"),
+                ("outlineOffset", "-1px"),
+            ],
+        );
         assert_eq!(flush(&d).len(), 1, "an inset outline");
-        d.set_styles(row, &[("outlineWidth", "0px"), ("outlineStyle", "none"), ("outlineOffset", "0px")]);
+        d.set_styles(
+            row,
+            &[
+                ("outlineWidth", "0px"),
+                ("outlineStyle", "none"),
+                ("outlineOffset", "0px"),
+            ],
+        );
         assert!(flush(&d).is_empty());
         d.set_text_rect(button, 24.0, 3.5, 300.0, 51.0);
         assert_eq!(
             flush(&d),
-            vec!["<div> \"border\": children flush against bg on top/bottom (no inset)".to_string()]
+            vec![
+                "<div> \"border\": children flush against bg on top/bottom (no inset)".to_string()
+            ]
         );
         // A border the capture did not record keeps the edge flush.
         d.set_text_rect(button, 24.0, 4.0, 300.0, 50.0);
@@ -4795,7 +5230,9 @@ mod tests {
     /// reveal has not brought in yet.
     #[test]
     fn flush_ignores_text_that_is_not_the_wrappers() {
-        let flush = vec!["<div> \"border\": children flush against border on top/bottom (no inset)".to_string()];
+        let flush = vec![
+            "<div> \"border\": children flush against border on top/bottom (no inset)".to_string(),
+        ];
         let hits = |d: &FakeDom, row: ElId| -> Vec<String> {
             check_element_quality_dom(d, row, &BrowserConfig::default())
                 .into_iter()
@@ -4806,8 +5243,22 @@ mod tests {
         let (row, button) = accordion_row(&mut d);
         let h3 = d.parent(button).unwrap();
         d.set_text_rect(button, 24.0, 1.0, 300.0, 56.0);
-        d.set_styles(button, &[("display", "block"), ("opacity", "1"), ("position", "static")]);
-        d.set_styles(h3, &[("display", "block"), ("opacity", "1"), ("position", "static")]);
+        d.set_styles(
+            button,
+            &[
+                ("display", "block"),
+                ("opacity", "1"),
+                ("position", "static"),
+            ],
+        );
+        d.set_styles(
+            h3,
+            &[
+                ("display", "block"),
+                ("opacity", "1"),
+                ("position", "static"),
+            ],
+        );
         assert_eq!(hits(&d, row), flush);
 
         // A box on the way to the wrapper waits at opacity 0 for its reveal.
@@ -4834,7 +5285,13 @@ mod tests {
         assert!(hits(&d, row).is_empty());
         d.set_style(h3, "display", "inline");
         assert_eq!(hits(&d, row), flush);
-        d.set_styles(h3, &[("display", "block"), ("backgroundColor", "rgba(0, 0, 0, 0)")]);
+        d.set_styles(
+            h3,
+            &[
+                ("display", "block"),
+                ("backgroundColor", "rgba(0, 0, 0, 0)"),
+            ],
+        );
         assert_eq!(hits(&d, row), flush);
 
         // Text further past an edge than the threshold has left the box (a
@@ -4845,7 +5302,10 @@ mod tests {
             d.set_text_rect(button, 24.0, y, 300.0, h);
         };
         place(&mut d, -30.0, 50.0);
-        assert!(hits(&d, row).is_empty(), "30px above the top rule, 38px off the bottom one");
+        assert!(
+            hits(&d, row).is_empty(),
+            "30px above the top rule, 38px off the bottom one"
+        );
         place(&mut d, -3.0, 64.0);
         assert_eq!(hits(&d, row), flush, "3px over each rule");
         place(&mut d, 1.0, 80.0);
@@ -4938,7 +5398,13 @@ mod tests {
 
     /// A chip `height` tall on a tinted fill, 2px of vertical padding, and one
     /// label whose box and text rect are given. Returns `(chip, label)`.
-    fn chip(d: &mut FakeDom, height: f64, font: &str, line_height: &str, label: (f64, f64)) -> (ElId, ElId) {
+    fn chip(
+        d: &mut FakeDom,
+        height: f64,
+        font: &str,
+        line_height: &str,
+        label: (f64, f64),
+    ) -> (ElId, ElId) {
         let (_h, body) = d.with_page();
         d.set_style(body, "backgroundColor", "rgb(255, 255, 255)");
         let chip = d.add(Some(body), "div");
@@ -5061,7 +5527,13 @@ mod tests {
             d.set_rect(host, 0.0, 100.0, 390.0, 200.0);
             if layer {
                 let l = d.add(Some(host), "div");
-                d.set_styles(l, &[("position", "absolute"), ("backgroundColor", "rgb(245, 245, 245)")]);
+                d.set_styles(
+                    l,
+                    &[
+                        ("position", "absolute"),
+                        ("backgroundColor", "rgb(245, 245, 245)"),
+                    ],
+                );
                 d.set_rect(l, 0.0, 100.0, 390.0, 200.0);
             }
             let wrap = d.add(Some(host), "div");
@@ -5069,9 +5541,29 @@ mod tests {
             let band = d.add(Some(wrap), "div");
             d.set_attr(band, "class", "band");
             d.set_rect(band, 16.0, 100.0, 358.0, 48.0);
-            d.set_styles(band, &[("display", "block"), ("position", "static"), ("backgroundColor", "rgb(245, 245, 245)")]);
-            let copy = text_el(&mut d, band, "p", "Copy that runs to the bottom edge", "14px");
-            d.set_styles(copy, &[("paddingTop", "12px"), ("paddingLeft", "16px"), ("paddingRight", "16px")]);
+            d.set_styles(
+                band,
+                &[
+                    ("display", "block"),
+                    ("position", "static"),
+                    ("backgroundColor", "rgb(245, 245, 245)"),
+                ],
+            );
+            let copy = text_el(
+                &mut d,
+                band,
+                "p",
+                "Copy that runs to the bottom edge",
+                "14px",
+            );
+            d.set_styles(
+                copy,
+                &[
+                    ("paddingTop", "12px"),
+                    ("paddingLeft", "16px"),
+                    ("paddingRight", "16px"),
+                ],
+            );
             d.set_rect(copy, 16.0, 100.0, 358.0, 48.0);
             d.set_text_rect(copy, 32.0, 127.0, 300.0, 20.0);
             (d, wrap, band, copy)
@@ -5097,7 +5589,14 @@ mod tests {
         d.set_text_rect(copy, 32.0, 112.0, 300.0, 20.0);
         let name = d.add(Some(copy), "span");
         d.add_text(name, "A post title an ellipsis ends inside the inset");
-        d.set_styles(name, &[("display", "block"), ("overflowX", "hidden"), ("position", "static")]);
+        d.set_styles(
+            name,
+            &[
+                ("display", "block"),
+                ("overflowX", "hidden"),
+                ("position", "static"),
+            ],
+        );
         d.set_rect(name, 32.0, 112.0, 326.0, 20.0);
         d.el_mut(name).client_width = 326.0;
         let run = d.add(Some(name), "span");
@@ -5105,15 +5604,26 @@ mod tests {
         d.set_styles(run, &[("display", "inline"), ("position", "static")]);
         d.set_rect(run, 32.0, 112.0, 380.0, 20.0);
         d.set_text_rect(run, 32.0, 112.0, 380.0, 20.0);
-        assert!(cramped(&d, band).is_empty(), "cut by the ellipsis box: {:?}", cramped(&d, band));
+        assert!(
+            cramped(&d, band).is_empty(),
+            "cut by the ellipsis box: {:?}",
+            cramped(&d, band)
+        );
         // Unclipped, the run ends 38px past the band's right side: it runs
         // out of the band, which is not text held against its edge.
         d.set_style(name, "overflowX", "visible");
-        assert!(cramped(&d, band).is_empty(), "past the edge: {:?}", cramped(&d, band));
+        assert!(
+            cramped(&d, band).is_empty(),
+            "past the edge: {:?}",
+            cramped(&d, band)
+        );
         // Ending on the edge, it is.
         d.set_rect(run, 32.0, 112.0, 342.0, 20.0);
         d.set_text_rect(run, 32.0, 112.0, 342.0, 20.0);
-        assert_eq!(cramped(&d, band), vec!["<div> \"band\": children flush against bg on right (no inset)"]);
+        assert_eq!(
+            cramped(&d, band),
+            vec!["<div> \"band\": children flush against bg on right (no inset)"]
+        );
     }
 
     /// observations-42 row 5, nexttv.com.tw: a 66px line box whose second
@@ -5127,7 +5637,13 @@ mod tests {
             d.inner_width = 390.0;
             let (_h, body) = d.with_page();
             d.set_style(body, "backgroundColor", "rgb(255, 255, 255)");
-            let p = text_el(&mut d, body, "p", "Copyright NEXT TV Broadcasting Ltd. All rights reserved.", "14px");
+            let p = text_el(
+                &mut d,
+                body,
+                "p",
+                "Copyright NEXT TV Broadcasting Ltd. All rights reserved.",
+                "14px",
+            );
             d.set_attr(p, "class", "copyright");
             d.set_rect(p, 0.0, 1370.0, width, 66.0);
             d.set_styles(
@@ -5143,7 +5659,10 @@ mod tests {
                 ],
             );
             if lines {
-                d.set_text_lines(p, &[(1.0, 1393.0, 387.0, 20.0), (92.0, 1459.0, 205.0, 20.0)]);
+                d.set_text_lines(
+                    p,
+                    &[(1.0, 1393.0, 387.0, 20.0), (92.0, 1459.0, 205.0, 20.0)],
+                );
             } else {
                 d.set_text_rect(p, 1.0, 1393.0, 387.0, 86.0);
             }
@@ -5153,11 +5672,17 @@ mod tests {
         assert!(cramped(&d, p).is_empty(), "{:?}", cramped(&d, p));
         // A capture with no lines measures the union, as before.
         let (d, p) = page(false, 390.0);
-        assert_eq!(cramped(&d, p), vec!["0px of space above and below the text (need ≥4.2px for 14px text)"]);
+        assert_eq!(
+            cramped(&d, p),
+            vec!["0px of space above and below the text (need ≥4.2px for 14px text)"]
+        );
         // A band narrower than the window has sides a reader sees, even a
         // wide one inset from both edges.
         let (d, p) = page(true, 360.0);
-        assert_eq!(cramped(&d, p), vec!["0px of space beside the text (need ≥8.0px for 14px text)"]);
+        assert_eq!(
+            cramped(&d, p),
+            vec!["0px of space beside the text (need ≥8.0px for 14px text)"]
+        );
         // A 100% band stops at a classic scrollbar, short of the window.
         let (mut d, p) = page(true, 375.0);
         let html = d.document_element.unwrap();
@@ -5165,7 +5690,10 @@ mod tests {
         assert!(cramped(&d, p).is_empty(), "{:?}", cramped(&d, p));
         let (mut d, p) = page(true, 380.0);
         d.set_rect(p, 5.0, 1370.0, 380.0, 66.0);
-        assert_eq!(cramped(&d, p), vec!["0px of space beside the text (need ≥8.0px for 14px text)"]);
+        assert_eq!(
+            cramped(&d, p),
+            vec!["0px of space beside the text (need ≥8.0px for 14px text)"]
+        );
     }
 
     /// observations-42 row 5, s-1.vercel.app: a `<mark>` highlight is a run
@@ -5175,7 +5703,13 @@ mod tests {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         d.set_style(body, "backgroundColor", "rgb(255, 255, 255)");
-        let mark = text_el(&mut d, body, "mark", "trust compounds where nothing else does", "22px");
+        let mark = text_el(
+            &mut d,
+            body,
+            "mark",
+            "trust compounds where nothing else does",
+            "22px",
+        );
         d.set_styles(
             mark,
             &[
@@ -5192,7 +5726,10 @@ mod tests {
         d.set_text_rect(mark, 40.0, 100.0, 600.0, 194.0);
         assert!(cramped(&d, mark).is_empty(), "{:?}", cramped(&d, mark));
         d.set_style(mark, "display", "inline-block");
-        assert_eq!(cramped(&d, mark), vec!["5.3px of space above and below the text (need ≥6.6px for 22px text)"]);
+        assert_eq!(
+            cramped(&d, mark),
+            vec!["5.3px of space above and below the text (need ≥6.6px for 22px text)"]
+        );
     }
 
     /// A wrapper with a grey fill and the text at its right edge, inside a
@@ -5203,16 +5740,36 @@ mod tests {
         d.set_style(body, "backgroundColor", "rgb(255, 255, 255)");
         let row = d.add(Some(body), "div");
         d.set_rect(row, 50.0, 100.0, 580.0, 132.0);
-        d.set_styles(row, &[("backgroundColor", row_bg), ("backgroundImage", row_image)]);
+        d.set_styles(
+            row,
+            &[("backgroundColor", row_bg), ("backgroundImage", row_image)],
+        );
         let wrap = d.add(Some(row), "div");
         d.set_attr(wrap, "class", "main-section");
         d.set_rect(wrap, 180.0, 123.0, 374.0, 86.0);
         d.set_styles(
             wrap,
-            &[("display", "flex"), ("position", "static"), ("backgroundColor", "rgb(243, 243, 243)")],
+            &[
+                ("display", "flex"),
+                ("position", "static"),
+                ("backgroundColor", "rgb(243, 243, 243)"),
+            ],
         );
-        let copy = text_el(&mut d, wrap, "p", "Single-family credit risk transfer", "16px");
-        d.set_styles(copy, &[("paddingTop", "16px"), ("paddingLeft", "16px"), ("paddingRight", "0px")]);
+        let copy = text_el(
+            &mut d,
+            wrap,
+            "p",
+            "Single-family credit risk transfer",
+            "16px",
+        );
+        d.set_styles(
+            copy,
+            &[
+                ("paddingTop", "16px"),
+                ("paddingLeft", "16px"),
+                ("paddingRight", "0px"),
+            ],
+        );
         d.set_rect(copy, 180.0, 123.0, 374.0, 86.0);
         d.set_text_rect(copy, 196.0, 139.0, 357.0, 22.0);
         (d, row, wrap)
@@ -5279,7 +5836,11 @@ mod tests {
         };
         let down = "linear-gradient(to bottom, rgba(0, 0, 0, 0) 100px, rgb(243, 243, 243) 100px)";
         let (d, wrap) = build(down, (0.5, 1.0));
-        assert_eq!(cramped(&d, wrap), right, "squeezed across, the fill still starts 100px down");
+        assert_eq!(
+            cramped(&d, wrap),
+            right,
+            "squeezed across, the fill still starts 100px down"
+        );
         // Squeezed down instead, the same stop is drawn 50px down and the
         // panel lies wholly on the fill.
         let (d, wrap) = build(down, (1.0, 0.5));
@@ -5291,7 +5852,11 @@ mod tests {
         let (d, wrap) = build(across, (0.5, 1.0));
         assert!(cramped(&d, wrap).is_empty(), "{:?}", cramped(&d, wrap));
         let (d, wrap) = build(across, (1.0, 0.5));
-        assert_eq!(cramped(&d, wrap), right, "squeezed down, the fill still starts 200px in");
+        assert_eq!(
+            cramped(&d, wrap),
+            right,
+            "squeezed down, the fill still starts 200px in"
+        );
     }
 
     /// observations-42 row 5, telekom.de: the magenta card sits on a photo
@@ -5306,7 +5871,13 @@ mod tests {
             let frame = d.add(Some(body), "div");
             d.set_rect(frame, 2.0, 100.0, 386.0, 500.0);
             let layer = d.add(Some(frame), "div");
-            d.set_styles(layer, &[("position", "absolute"), ("backgroundColor", "rgba(0, 0, 0, 0)")]);
+            d.set_styles(
+                layer,
+                &[
+                    ("position", "absolute"),
+                    ("backgroundColor", "rgba(0, 0, 0, 0)"),
+                ],
+            );
             d.set_rect(layer, 12.0, 110.0, 366.0, 480.0);
             let picture = d.add(Some(layer), "picture");
             d.set_style(picture, "display", "inline");
@@ -5323,7 +5894,14 @@ mod tests {
             let card = d.add(Some(content), "div");
             d.set_attr(card, "class", "teaser");
             d.set_rect(card, 71.0, 374.0, 248.0, 196.0);
-            d.set_styles(card, &[("display", "block"), ("position", "static"), ("backgroundColor", "rgb(226, 0, 116)")]);
+            d.set_styles(
+                card,
+                &[
+                    ("display", "block"),
+                    ("position", "static"),
+                    ("backgroundColor", "rgb(226, 0, 116)"),
+                ],
+            );
             let h = text_el(&mut d, card, "h2", "Das ultimative Upgrade.", "32px");
             d.set_styles(h, &[("paddingLeft", "0px")]);
             d.set_rect(h, 71.0, 374.0, 224.0, 64.0);
@@ -5333,18 +5911,27 @@ mod tests {
         let (d, card) = page(true);
         assert!(cramped(&d, card).is_empty(), "{:?}", cramped(&d, card));
         let (d, card) = page(false);
-        assert_eq!(cramped(&d, card), vec!["<div> \"teaser\": children flush against bg on top/left (no inset)"]);
+        assert_eq!(
+            cramped(&d, card),
+            vec!["<div> \"teaser\": children flush against bg on top/left (no inset)"]
+        );
         // A photo that paints nothing is no backdrop.
         let (mut d, card) = page(true);
         let img = d.query_all(None, "img").unwrap()[0];
         d.set_style(img, "opacity", "0");
-        assert_eq!(cramped(&d, card), vec!["<div> \"teaser\": children flush against bg on top/left (no inset)"]);
+        assert_eq!(
+            cramped(&d, card),
+            vec!["<div> \"teaser\": children flush against bg on top/left (no inset)"]
+        );
         // Drawn content is not a photo: a panel on a map canvas keeps its
         // edge.
         let (mut d, card) = page(true);
         let img = d.query_all(None, "img").unwrap()[0];
         d.els[img as usize].tag = "CANVAS".to_string();
-        assert_eq!(cramped(&d, card), vec!["<div> \"teaser\": children flush against bg on top/left (no inset)"]);
+        assert_eq!(
+            cramped(&d, card),
+            vec!["<div> \"teaser\": children flush against bg on top/left (no inset)"]
+        );
     }
 
     /// observations-42 row 5, maritime.sh: a 16px mock URL bar holds 10px
@@ -5360,7 +5947,10 @@ mod tests {
         assert!(cramped(&d, bar).is_empty(), "{:?}", cramped(&d, bar));
         // 1px off is under a quarter of 10px.
         d.set_text_rect(label, 628.0, 100.5, 41.0, 11.0);
-        assert_eq!(cramped(&d, bar), vec!["<div> \"faq-content__step\": children flush against bg on top (no inset)"]);
+        assert_eq!(
+            cramped(&d, bar),
+            vec!["<div> \"faq-content__step\": children flush against bg on top (no inset)"]
+        );
     }
 
     /// observations-42 row 6, fanniemae.com: a section title set at 28px in
@@ -5371,10 +5961,19 @@ mod tests {
             let mut d = FakeDom::new();
             d.inner_width = 390.0;
             let (_h, body) = d.with_page();
-            let title = text_el(&mut d, body, "div", "Our mission is to make housing work for everyone.", font);
+            let title = text_el(
+                &mut d,
+                body,
+                "div",
+                "Our mission is to make housing work for everyone.",
+                font,
+            );
             d.set_styles(title, &[("display", "block"), ("lineHeight", "36px")]);
             d.set_rect(title, 10.0, 100.0, 370.0, 72.0);
-            d.set_text_lines(title, &[(10.0, 102.0, 300.0, 32.0), (10.0, 138.0, 120.0, 32.0)]);
+            d.set_text_lines(
+                title,
+                &[(10.0, 102.0, 300.0, 32.0), (10.0, 138.0, 120.0, 32.0)],
+            );
             snippets(&d, title, "body-text-viewport-edge")
         };
         assert_eq!(edge("18px").len(), 1, "body copy in a div");
@@ -5396,7 +5995,10 @@ mod tests {
         d.set_style(two, "lineHeight", "18px");
         let t = Rect::from_xywh(0.0, 0.0, 200.0, 39.6);
         let g = glyph_band(&d, two, &t);
-        assert!((g.top - 1.8).abs() < 1e-9 && (g.bottom - 37.8).abs() < 1e-9, "{g:?}");
+        assert!(
+            (g.top - 1.8).abs() < 1e-9 && (g.bottom - 37.8).abs() < 1e-9,
+            "{g:?}"
+        );
 
         // A content area no taller than the font size has nothing to take off.
         let tight = text_el(&mut d, body, "span", "Tight face", "16px");
@@ -5477,18 +6079,45 @@ mod tests {
         let text = "a".repeat(90);
         let p = text_el(&mut d, body, "p", &text, "16px");
         d.set_rect(p, 40.0, 100.0, 300.0, 40.0);
-        d.set_styles(p, &[("lineHeight", "16px"), ("textAlign", "justify"), ("hyphens", "manual"), ("letterSpacing", "2px")]);
+        d.set_styles(
+            p,
+            &[
+                ("lineHeight", "16px"),
+                ("textAlign", "justify"),
+                ("hyphens", "manual"),
+                ("letterSpacing", "2px"),
+            ],
+        );
         let hits = check_element_quality_dom(&d, p, &BrowserConfig::default());
         let ids: Vec<&str> = hits.iter().map(|h| h.id.as_str()).collect();
-        assert_eq!(ids, vec!["tight-leading", "justified-text", "wide-tracking"], "{hits:?}");
+        assert_eq!(
+            ids,
+            vec!["tight-leading", "justified-text", "wide-tracking"],
+            "{hits:?}"
+        );
         assert_eq!(hits[0].snippet, "line-height 1.00x (need >=1.3)");
         assert_eq!(hits[2].snippet, "letter-spacing: 0.13em on body text");
-        d.set_styles(p, &[("lineHeight", "24px"), ("textAlign", "left"), ("letterSpacing", "-1.6px"), ("textTransform", "uppercase")]);
+        d.set_styles(
+            p,
+            &[
+                ("lineHeight", "24px"),
+                ("textAlign", "left"),
+                ("letterSpacing", "-1.6px"),
+                ("textTransform", "uppercase"),
+            ],
+        );
         // 90 characters of uppercase: past the length where a run is read.
         let hits = check_element_quality_dom(&d, p, &BrowserConfig::default());
         let ids: Vec<&str> = hits.iter().map(|h| h.id.as_str()).collect();
-        assert_eq!(ids, vec!["all-caps-body", "extreme-negative-tracking"], "{hits:?}");
-        assert_eq!(hits[1].snippet, format!("letter-spacing: -0.10em at 16px — \"{}\"", "a".repeat(40)));
+        assert_eq!(
+            ids,
+            vec!["all-caps-body", "extreme-negative-tracking"],
+            "{hits:?}"
+        );
+        assert_eq!(
+            hits[1].snippet,
+            format!("letter-spacing: -0.10em at 16px — \"{}\"", "a".repeat(40))
+        );
     }
 
     #[test]
@@ -5522,7 +6151,13 @@ mod tests {
         assert!(flags(&d, h), "-0.1em at 48px should flag");
 
         // CJK glyphs are out of scope whatever the lang attribute says.
-        let cjk = text_el(&mut d, body, "p", "赓续长征精神奋进复兴征程福建守护红色家底新时代新征程", "18px");
+        let cjk = text_el(
+            &mut d,
+            body,
+            "p",
+            "赓续长征精神奋进复兴征程福建守护红色家底新时代新征程",
+            "18px",
+        );
         d.set_rect(cjk, 40.0, 300.0, 300.0, 40.0);
         d.set_styles(cjk, &[("letterSpacing", "-0.1em")]);
         assert!(!flags(&d, cjk), "CJK text should pass");
@@ -5547,7 +6182,14 @@ mod tests {
         fn wrapped(d: &mut FakeDom, parent: ElId, tag: &str, font: &str, lh: f64) -> ElId {
             wrapped_text(d, parent, tag, COPY, font, lh)
         }
-        fn wrapped_text(d: &mut FakeDom, parent: ElId, tag: &str, text: &str, font: &str, lh: f64) -> ElId {
+        fn wrapped_text(
+            d: &mut FakeDom,
+            parent: ElId,
+            tag: &str,
+            text: &str,
+            font: &str,
+            lh: f64,
+        ) -> ElId {
             let el = text_el(d, parent, tag, text, font);
             d.set_style(el, "lineHeight", &format!("{lh}px"));
             d.set_rect(el, 40.0, 100.0, 240.0, lh * 2.0);
@@ -5570,7 +6212,11 @@ mod tests {
         let lead = wrapped(&mut d, body, "p", "22px", 26.0);
         assert!(leading(&d, lead).is_empty(), "two lines of 22px lead text");
         let crowded = wrapped(&mut d, body, "p", "20px", 20.0);
-        assert_eq!(leading(&d, crowded), vec!["line-height 1.00x (need >=1.3)"], "lead text set solid crowds");
+        assert_eq!(
+            leading(&d, crowded),
+            vec!["line-height 1.00x (need >=1.3)"],
+            "lead text set solid crowds"
+        );
         let boundary = wrapped(&mut d, body, "p", "22px", 26.0);
         d.set_rect(boundary, 40.0, 100.0, 240.0, 104.0);
         d.el_mut(boundary).direct_text_rect = Some(Rect::from_xywh(40.0, 100.0, 240.0, 104.0));
@@ -5584,8 +6230,14 @@ mod tests {
         let clamped_lead = wrapped(&mut d, body, "p", "22px", 26.0);
         d.set_rect(clamped_lead, 40.0, 100.0, 240.0, 130.0);
         d.el_mut(clamped_lead).direct_text_rect = Some(Rect::from_xywh(40.0, 100.0, 240.0, 130.0));
-        d.set_styles(clamped_lead, &[("display", "-webkit-box"), ("webkitLineClamp", "3")]);
-        assert!(leading(&d, clamped_lead).is_empty(), "lead text clamped to three lines");
+        d.set_styles(
+            clamped_lead,
+            &[("display", "-webkit-box"), ("webkitLineClamp", "3")],
+        );
+        assert!(
+            leading(&d, clamped_lead).is_empty(),
+            "lead text clamped to three lines"
+        );
         // Four lines drawn at scale(.75) are still four lines (review).
         let scaled_lead = wrapped(&mut d, body, "p", "22px", 26.0);
         d.set_rect(scaled_lead, 40.0, 100.0, 180.0, 78.0);
@@ -5603,7 +6255,11 @@ mod tests {
             "lead text clamped to five lines"
         );
         let small = wrapped(&mut d, body, "p", "19px", 22.0);
-        assert_eq!(leading(&d, small), vec!["line-height 1.16x (need >=1.3)"], "19px is body copy");
+        assert_eq!(
+            leading(&d, small),
+            vec!["line-height 1.16x (need >=1.3)"],
+            "19px is body copy"
+        );
 
         // Capitals have no descenders to crowd the next line (r13-t3), as
         // tiny-text already reads them; the same words in lower case keep it.
@@ -5619,10 +6275,18 @@ mod tests {
         d.set_rect(caps_para, 40.0, 100.0, 240.0, 96.0);
         d.el_mut(caps_para).direct_text_rect = Some(Rect::from_xywh(40.0, 100.0, 240.0, 96.0));
         d.set_style(caps_para, "textTransform", "uppercase");
-        assert_eq!(leading(&d, caps_para), vec!["line-height 1.00x (need >=1.3)"], "six lines of capitals");
+        assert_eq!(
+            leading(&d, caps_para),
+            vec!["line-height 1.00x (need >=1.3)"],
+            "six lines of capitals"
+        );
         let caps_overlap = wrapped_text(&mut d, body, "p", LABEL, "18px", 16.2);
         d.set_style(caps_overlap, "textTransform", "uppercase");
-        assert_eq!(leading(&d, caps_overlap), vec!["line-height 0.90x (need >=1.3)"], "capitals set under solid");
+        assert_eq!(
+            leading(&d, caps_overlap),
+            vec!["line-height 0.90x (need >=1.3)"],
+            "capitals set under solid"
+        );
 
         // One line box: there is no gap between lines to crowd.
         let one_line = wrapped(&mut d, body, "p", "16px", 20.0);
@@ -5694,7 +6358,10 @@ mod tests {
         d.set_rect(p, 40.0, 100.0, 1200.0, 48.0);
 
         // Two lines that fill their 1,200px box.
-        d.set_text_lines(p, &[(40.0, 102.0, 1180.0, 20.0), (40.0, 126.0, 1180.0, 20.0)]);
+        d.set_text_lines(
+            p,
+            &[(40.0, 102.0, 1180.0, 20.0), (40.0, 126.0, 1180.0, 20.0)],
+        );
         assert_eq!(
             snippets(&d, p, "line-length"),
             vec!["~100 chars on 2 of 2 rendered lines (aim for <80)"]
@@ -5707,20 +6374,35 @@ mod tests {
         let centred = text_el(&mut d, body, "p", &"word ".repeat(24), "16px");
         d.set_style(centred, "lineHeight", "24px");
         d.set_rect(centred, 40.0, 200.0, 1200.0, 48.0);
-        d.set_text_lines(centred, &[(340.0, 202.0, 600.0, 20.0), (340.0, 226.0, 600.0, 20.0)]);
-        assert!(snippets(&d, centred, "line-length").is_empty(), "centred block");
+        d.set_text_lines(
+            centred,
+            &[(340.0, 202.0, 600.0, 20.0), (340.0, 226.0, 600.0, 20.0)],
+        );
+        assert!(
+            snippets(&d, centred, "line-length").is_empty(),
+            "centred block"
+        );
         // A union with no lines behind it is not read.
         d.el_mut(p).text_line_rects = None;
         d.set_text_rect(p, 40.0, 102.0, 1180.0, 44.0);
-        assert!(snippets(&d, p, "line-length").is_empty(), "no lines recorded");
+        assert!(
+            snippets(&d, p, "line-length").is_empty(),
+            "no lines recorded"
+        );
 
         // simplybudget.framer.ai: 94 characters on two lines ended by a
         // `<br>`. Each line is as long as the author left it.
         let broken = text_el(&mut d, body, "p", &"word ".repeat(19), "16px");
         d.set_style(broken, "lineHeight", "28.8px");
         d.set_rect(broken, 260.0, 900.0, 760.0, 57.6);
-        d.set_text_lines(broken, &[(260.0, 904.0, 660.0, 20.0), (260.0, 933.0, 80.0, 20.0)]);
-        assert!(snippets(&d, broken, "line-length").is_empty(), "one long line and a tail");
+        d.set_text_lines(
+            broken,
+            &[(260.0, 904.0, 660.0, 20.0), (260.0, 933.0, 80.0, 20.0)],
+        );
+        assert!(
+            snippets(&d, broken, "line-length").is_empty(),
+            "one long line and a tail"
+        );
     }
 
     /// observations-20 row 29: a full-width CJK glyph is an em wide. The
@@ -5738,15 +6420,26 @@ mod tests {
         d.set_rect(p, 110.0, 100.0, 1060.0, 72.0);
         d.set_text_lines(
             p,
-            &[(110.0, 104.0, 1048.0, 16.0), (110.0, 128.0, 1048.0, 16.0), (110.0, 152.0, 1048.0, 16.0)],
+            &[
+                (110.0, 104.0, 1048.0, 16.0),
+                (110.0, 128.0, 1048.0, 16.0),
+                (110.0, 152.0, 1048.0, 16.0),
+            ],
         );
-        assert!(snippets(&d, p, "line-length").is_empty(), "a third of the glyphs a line");
+        assert!(
+            snippets(&d, p, "line-length").is_empty(),
+            "a third of the glyphs a line"
+        );
         // A wider CJK column still reports, at its own count.
         let wide = text_el(&mut d, body, "p", &copy.repeat(2), "16px");
         d.set_rect(wide, 0.0, 300.0, 1600.0, 72.0);
         d.set_text_lines(
             wide,
-            &[(0.0, 304.0, 1590.0, 16.0), (0.0, 328.0, 1590.0, 16.0), (0.0, 352.0, 1590.0, 16.0)],
+            &[
+                (0.0, 304.0, 1590.0, 16.0),
+                (0.0, 328.0, 1590.0, 16.0),
+                (0.0, 352.0, 1590.0, 16.0),
+            ],
         );
         let hits = snippets(&d, wide, "line-length");
         assert_eq!(hits.len(), 1, "{hits:?}");
@@ -5773,7 +6466,14 @@ mod tests {
         d.add_text(i, &long);
         d.set_text_rect(i, 0.0, 102.0, 1270.0, 68.0);
         // The paragraph's lines are the lines of the text under it.
-        d.set_text_lines(intro, &[(0.0, 102.0, 1270.0, 20.0), (0.0, 126.0, 1270.0, 20.0), (0.0, 150.0, 300.0, 20.0)]);
+        d.set_text_lines(
+            intro,
+            &[
+                (0.0, 102.0, 1270.0, 20.0),
+                (0.0, 126.0, 1270.0, 20.0),
+                (0.0, 150.0, 300.0, 20.0),
+            ],
+        );
         d.el_mut(intro).direct_text_rect = None;
         let len = utf16_len(js::trim(&d.text_content(intro)));
         assert_eq!(
@@ -5785,13 +6485,17 @@ mod tests {
         );
         assert_eq!(
             snippets(&d, intro, "body-text-viewport-edge"),
-            vec![format!("<p> with {len}-char body bleeds to viewport edge (left 0px / right 0px)")]
+            vec![format!(
+                "<p> with {len}-char body bleeds to viewport edge (left 0px / right 0px)"
+            )]
         );
         // The inline children report neither rule themselves.
         for child in [b, i] {
             let hits = check_element_quality_dom(&d, child, &BrowserConfig::default());
             assert!(
-                !hits.iter().any(|h| h.id == "line-length" || h.id == "body-text-viewport-edge"),
+                !hits
+                    .iter()
+                    .any(|h| h.id == "line-length" || h.id == "body-text-viewport-edge"),
                 "{hits:?}"
             );
         }
@@ -5803,7 +6507,14 @@ mod tests {
         assert!(snippets(&d, intro, "body-text-viewport-edge").is_empty());
         // A paragraph holding a block component is not inline prose.
         d.set_text_rect(i, 0.0, 102.0, 1270.0, 68.0);
-        d.set_text_lines(intro, &[(0.0, 102.0, 1270.0, 20.0), (0.0, 126.0, 1270.0, 20.0), (0.0, 150.0, 300.0, 20.0)]);
+        d.set_text_lines(
+            intro,
+            &[
+                (0.0, 102.0, 1270.0, 20.0),
+                (0.0, 126.0, 1270.0, 20.0),
+                (0.0, 150.0, 300.0, 20.0),
+            ],
+        );
         d.el_mut(intro).direct_text_rect = None;
         let card = d.add(Some(intro), "div");
         d.set_style(card, "display", "block");
@@ -5825,21 +6536,31 @@ mod tests {
         d.set_rect(p, 0.0, 100.0, 1280.0, 24.0);
         // Centred glyphs, 300px off both edges.
         d.set_text_rect(p, 300.0, 102.0, 680.0, 20.0);
-        assert!(snippets(&d, p, "body-text-viewport-edge").is_empty(), "centred");
+        assert!(
+            snippets(&d, p, "body-text-viewport-edge").is_empty(),
+            "centred"
+        );
         // Padded: the glyphs start 32px in.
         d.set_text_rect(p, 32.0, 102.0, 680.0, 20.0);
-        assert!(snippets(&d, p, "body-text-viewport-edge").is_empty(), "padded");
+        assert!(
+            snippets(&d, p, "body-text-viewport-edge").is_empty(),
+            "padded"
+        );
         // Glyphs at the edge report, with the text's own distances.
         d.set_text_rect(p, 0.0, 102.0, 680.0, 20.0);
         assert_eq!(
             snippets(&d, p, "body-text-viewport-edge"),
-            vec![format!("<p> with {len}-char body bleeds to viewport edge (left 0px)")]
+            vec![format!(
+                "<p> with {len}-char body bleeds to viewport edge (left 0px)"
+            )]
         );
         // With no text rect the box stands in, as before.
         d.el_mut(p).direct_text_rect = None;
         assert_eq!(
             snippets(&d, p, "body-text-viewport-edge"),
-            vec![format!("<p> with {len}-char body bleeds to viewport edge (left 0px / right 0px)")]
+            vec![format!(
+                "<p> with {len}-char body bleeds to viewport edge (left 0px / right 0px)"
+            )]
         );
 
         // Text a box that only hides overflow cuts at 1,270px: an
@@ -5857,15 +6578,24 @@ mod tests {
         d.set_rect(slide, 900.0, 320.0, 700.0, 48.0);
         d.set_text_rect(slide, 900.0, 322.0, 690.0, 44.0);
         let past = |d: &FakeDom| -> Vec<String> {
-            check_page_overflow_dom(d).into_iter().map(|f| f.detail).collect()
+            check_page_overflow_dom(d)
+                .into_iter()
+                .map(|f| f.detail)
+                .collect()
         };
-        assert!(snippets(&d, slide, "body-text-viewport-edge").is_empty(), "cut by overflow: hidden");
+        assert!(
+            snippets(&d, slide, "body-text-viewport-edge").is_empty(),
+            "cut by overflow: hidden"
+        );
         let cut = vec![
             "text runs past the right edge of the 1280px viewport and is cut off: p reaches 320px past it, with text in 1 block"
                 .to_string(),
         ];
         assert_eq!(past(&d), cut, "cut by overflow: hidden");
-        d.set_styles(track, &[("overflowX", "hidden"), ("overflow", "hidden auto")]);
+        d.set_styles(
+            track,
+            &[("overflowX", "hidden"), ("overflow", "hidden auto")],
+        );
         assert_eq!(past(&d), cut, "cut by overflow-x-hidden");
         // A track that scrolls on x, with the slide to scroll to, brings the
         // text into view: its clip is the track's, not the page's.
@@ -5886,26 +6616,48 @@ mod tests {
 
         // Wrapped lines that fill a padded paragraph sit on its content box.
         let padded = text_el(&mut d, body, "p", copy, "16px");
-        d.set_styles(padded, &[("lineHeight", "24px"), ("paddingLeft", "24px"), ("paddingRight", "24px")]);
+        d.set_styles(
+            padded,
+            &[
+                ("lineHeight", "24px"),
+                ("paddingLeft", "24px"),
+                ("paddingRight", "24px"),
+            ],
+        );
         d.set_rect(padded, 0.0, 700.0, 1280.0, 48.0);
         d.set_text_rect(padded, 24.0, 702.0, 1220.0, 44.0);
-        assert!(snippets(&d, padded, "body-text-viewport-edge").is_empty(), "24px padding");
+        assert!(
+            snippets(&d, padded, "body-text-viewport-edge").is_empty(),
+            "24px padding"
+        );
         d.set_styles(padded, &[("paddingLeft", "8px"), ("paddingRight", "8px")]);
         d.set_text_rect(padded, 8.0, 702.0, 1230.0, 44.0);
         assert_eq!(
             snippets(&d, padded, "body-text-viewport-edge"),
-            vec![format!("<p> with {len}-char body bleeds to viewport edge (left 8px / right 8px)")]
+            vec![format!(
+                "<p> with {len}-char body bleeds to viewport edge (left 8px / right 8px)"
+            )]
         );
 
         // A list item's `inside` marker paints at the content edge ahead of
         // its text, so the start side reaches that edge.
         let li = text_el(&mut d, body, "li", copy, "16px");
-        d.set_styles(li, &[("lineHeight", "24px"), ("display", "list-item"), ("paddingLeft", "0px"), ("borderLeftWidth", "0px")]);
+        d.set_styles(
+            li,
+            &[
+                ("lineHeight", "24px"),
+                ("display", "list-item"),
+                ("paddingLeft", "0px"),
+                ("borderLeftWidth", "0px"),
+            ],
+        );
         d.set_rect(li, 0.0, 600.0, 1280.0, 24.0);
         d.set_text_rect(li, 18.0, 602.0, 700.0, 20.0);
         assert_eq!(
             snippets(&d, li, "body-text-viewport-edge"),
-            vec![format!("<li> with {len}-char body bleeds to viewport edge (left 0px)")]
+            vec![format!(
+                "<li> with {len}-char body bleeds to viewport edge (left 0px)"
+            )]
         );
         // Given a gutter of its own, the item keeps off the edge.
         d.set_style(li, "paddingLeft", "24px");
@@ -5920,7 +6672,8 @@ mod tests {
     /// measure.
     #[test]
     fn viewport_edge_skips_text_in_a_fixed_bar() {
-        let copy = "We use cookies to measure how the site is used and to improve it for every visitor.";
+        let copy =
+            "We use cookies to measure how the site is used and to improve it for every visitor.";
         let len = utf16_len(copy);
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
@@ -5933,24 +6686,39 @@ mod tests {
         d.set_style(p, "lineHeight", "16px");
         d.set_rect(p, 15.0, 672.0, 716.0, 34.0);
         d.set_text_rect(p, 15.0, 673.0, 700.0, 32.0);
-        assert!(snippets(&d, p, "body-text-viewport-edge").is_empty(), "consent bar");
+        assert!(
+            snippets(&d, p, "body-text-viewport-edge").is_empty(),
+            "consent bar"
+        );
         // Words that touch the screen's edge report inside a bar too.
         d.set_rect(p, 0.0, 672.0, 716.0, 34.0);
         d.set_text_rect(p, 2.0, 673.0, 700.0, 32.0);
         assert_eq!(
             snippets(&d, p, "body-text-viewport-edge"),
-            vec![format!("<p> with {len}-char body bleeds to viewport edge (left 0px)")],
+            vec![format!(
+                "<p> with {len}-char body bleeds to viewport edge (left 0px)"
+            )],
             "touching"
         );
         d.set_rect(p, 15.0, 672.0, 716.0, 34.0);
         d.set_text_rect(p, 15.0, 673.0, 700.0, 32.0);
         // The same copy in a window-tall fixed layer reports.
         d.set_rect(bar, 0.0, 0.0, 1280.0, 800.0);
-        let want = vec![format!("<p> with {len}-char body bleeds to viewport edge (left 15px)")];
-        assert_eq!(snippets(&d, p, "body-text-viewport-edge"), want, "page layer");
+        let want = vec![format!(
+            "<p> with {len}-char body bleeds to viewport edge (left 15px)"
+        )];
+        assert_eq!(
+            snippets(&d, p, "body-text-viewport-edge"),
+            want,
+            "page layer"
+        );
         // So does a bar with no measured box, and a static wrapper.
         d.set_rect(bar, 0.0, 0.0, 0.0, 0.0);
-        assert_eq!(snippets(&d, p, "body-text-viewport-edge"), want, "unmeasured");
+        assert_eq!(
+            snippets(&d, p, "body-text-viewport-edge"),
+            want,
+            "unmeasured"
+        );
         d.set_rect(bar, 0.0, 604.0, 1280.0, 196.0);
         d.set_style(bar, "position", "static");
         assert_eq!(snippets(&d, p, "body-text-viewport-edge"), want, "static");
@@ -5963,7 +6731,8 @@ mod tests {
     /// phone's edge still reports.
     #[test]
     fn viewport_edge_floor_is_12px_on_phones() {
-        let copy = "Our engineers build the systems that keep aircraft flying safely on every continent.";
+        let copy =
+            "Our engineers build the systems that keep aircraft flying safely on every continent.";
         let len = utf16_len(copy);
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
@@ -5972,7 +6741,13 @@ mod tests {
         let at = |d: &mut FakeDom, vw: f64, gutter: f64| -> Vec<String> {
             d.inner_width = vw;
             let pad = format!("{gutter}px");
-            d.set_styles(p, &[("paddingLeft", pad.as_str()), ("paddingRight", pad.as_str())]);
+            d.set_styles(
+                p,
+                &[
+                    ("paddingLeft", pad.as_str()),
+                    ("paddingRight", pad.as_str()),
+                ],
+            );
             d.set_rect(p, 0.0, 100.0, vw, 48.0);
             d.set_text_rect(p, gutter, 102.0, vw - 2.0 * gutter, 44.0);
             snippets(d, p, "body-text-viewport-edge")
@@ -5981,15 +6756,21 @@ mod tests {
         assert!(at(&mut d, 480.0, 12.0).is_empty(), "12px at 480px");
         assert_eq!(
             at(&mut d, 390.0, 8.0),
-            vec![format!("<p> with {len}-char body bleeds to viewport edge (left 8px / right 8px)")]
+            vec![format!(
+                "<p> with {len}-char body bleeds to viewport edge (left 8px / right 8px)"
+            )]
         );
         assert_eq!(
             at(&mut d, 390.0, 11.0),
-            vec![format!("<p> with {len}-char body bleeds to viewport edge (left 11px / right 11px)")]
+            vec![format!(
+                "<p> with {len}-char body bleeds to viewport edge (left 11px / right 11px)"
+            )]
         );
         assert_eq!(
             at(&mut d, 481.0, 12.0),
-            vec![format!("<p> with {len}-char body bleeds to viewport edge (left 12px / right 12px)")],
+            vec![format!(
+                "<p> with {len}-char body bleeds to viewport edge (left 12px / right 12px)"
+            )],
             "16px above 480px"
         );
         assert_eq!(at(&mut d, 1280.0, 12.0).len(), 1);
@@ -6011,18 +6792,33 @@ mod tests {
         let header = d.add(Some(body), "header");
         d.set_rect(header, 0.0, 0.0, 390.0, 1411.0);
         let p = text_el(&mut d, header, "p", copy, "16px");
-        d.set_styles(p, &[("lineHeight", "24px"), ("paddingLeft", "8px"), ("paddingRight", "8px")]);
+        d.set_styles(
+            p,
+            &[
+                ("lineHeight", "24px"),
+                ("paddingLeft", "8px"),
+                ("paddingRight", "8px"),
+            ],
+        );
         d.set_rect(p, 0.0, 1227.0, 390.0, 96.0);
         d.set_text_rect(p, 8.0, 1229.0, 374.0, 92.0);
         assert_eq!(
             snippets(&d, p, "body-text-viewport-edge"),
-            vec![format!("<p> with {len}-char body bleeds to viewport edge (left 8px / right 8px)")]
+            vec![format!(
+                "<p> with {len}-char body bleeds to viewport edge (left 8px / right 8px)"
+            )]
         );
         d.set_rect(header, 0.0, 0.0, 390.0, 844.0);
-        assert!(snippets(&d, p, "body-text-viewport-edge").is_empty(), "a header one screen tall");
+        assert!(
+            snippets(&d, p, "body-text-viewport-edge").is_empty(),
+            "a header one screen tall"
+        );
         d.set_rect(header, 0.0, 0.0, 390.0, 1411.0);
         d.inner_height = f64::NAN;
-        assert!(snippets(&d, p, "body-text-viewport-edge").is_empty(), "no viewport height");
+        assert!(
+            snippets(&d, p, "body-text-viewport-edge").is_empty(),
+            "no viewport height"
+        );
     }
 
     /// elevancehealth.com (324856): a quote caught part way through its
@@ -6030,13 +6826,20 @@ mod tests {
     #[test]
     fn text_in_a_box_mid_slide_is_not_measured_against_the_viewport() {
         use impeccable_foundation::browser::dom::KeyframeFrame;
-        let copy = "Our care teams meet people where they are, and that changes what health looks like.";
+        let copy =
+            "Our care teams meet people where they are, and that changes what health looks like.";
         let frame = |decls: &[(&str, &str)]| KeyframeFrame {
-            decls: decls.iter().map(|(p, v)| (p.to_string(), v.to_string())).collect(),
+            decls: decls
+                .iter()
+                .map(|(p, v)| (p.to_string(), v.to_string()))
+                .collect(),
         };
         // `mover` takes the animation (or transition) and its running
         // properties; `wrapper` says whether a wrapper holds the quote.
-        let run_t = |running: Option<Vec<&str>>, styles: &[(&str, &str)], on_wrapper: bool, wrapper_transform: &str| {
+        let run_t = |running: Option<Vec<&str>>,
+                     styles: &[(&str, &str)],
+                     on_wrapper: bool,
+                     wrapper_transform: &str| {
             let mut d = FakeDom::new();
             let (html, body) = d.with_page();
             d.inner_width = 390.0;
@@ -6046,17 +6849,29 @@ mod tests {
             d.set_rect(body, 0.0, 0.0, 390.0, 2400.0);
             d.keyframes.insert(
                 "quote-appear-right".into(),
-                vec![frame(&[("opacity", "0"), ("right", "-96%")]), frame(&[("opacity", "1"), ("right", "0px")])],
+                vec![
+                    frame(&[("opacity", "0"), ("right", "-96%")]),
+                    frame(&[("opacity", "1"), ("right", "0px")]),
+                ],
             );
-            d.keyframes.insert("drift".into(), vec![frame(&[("right", "0px")]), frame(&[("right", "8px")])]);
+            d.keyframes.insert(
+                "drift".into(),
+                vec![frame(&[("right", "0px")]), frame(&[("right", "8px")])],
+            );
             d.keyframes.insert(
                 "fade-up".into(),
-                vec![frame(&[("opacity", "0"), ("transform", "translateY(20px)")]), frame(&[("opacity", "1"), ("transform", "none")])],
+                vec![
+                    frame(&[("opacity", "0"), ("transform", "translateY(20px)")]),
+                    frame(&[("opacity", "1"), ("transform", "none")]),
+                ],
             );
             d.keyframes.insert(
                 "fade-up-offset".into(),
                 vec![
-                    frame(&[("opacity", "0"), ("transform", "translateX(40px) translateY(20px)")]),
+                    frame(&[
+                        ("opacity", "0"),
+                        ("transform", "translateX(40px) translateY(20px)"),
+                    ]),
                     frame(&[("opacity", "1"), ("transform", "translate(40px, 0px)")]),
                 ],
             );
@@ -6076,7 +6891,10 @@ mod tests {
             );
             d.keyframes.insert(
                 "slide-in".into(),
-                vec![frame(&[("transform", "translateX(120px)")]), frame(&[("transform", "translateX(0px)")])],
+                vec![
+                    frame(&[("transform", "translateX(120px)")]),
+                    frame(&[("transform", "translateX(0px)")]),
+                ],
             );
             let wrapper = d.add(Some(body), "main");
             d.set_rect(wrapper, 0.0, 0.0, 390.0, 2400.0);
@@ -6086,7 +6904,8 @@ mod tests {
             d.set_rect(quote, 119.0, 700.0, 350.0, 320.0);
             let mover = if on_wrapper { wrapper } else { quote };
             d.set_styles(mover, styles);
-            d.el_mut(mover).running_animations = running.map(|r| r.into_iter().map(String::from).collect());
+            d.el_mut(mover).running_animations =
+                running.map(|r| r.into_iter().map(String::from).collect());
             let p = text_el(&mut d, quote, "p", copy, "16px");
             d.set_style(p, "lineHeight", "24px");
             d.set_rect(p, 143.0, 724.0, 310.0, 96.0);
@@ -6096,19 +6915,32 @@ mod tests {
         let run = |running: Option<Vec<&str>>, styles: &[(&str, &str)], on_wrapper: bool| {
             run_t(running, styles, on_wrapper, "none")
         };
-        let run_skewed =
-            |running: Option<Vec<&str>>, styles: &[(&str, &str)]| run_t(running, styles, false, "matrix(1, 0, 0.2, 1, 0, 0)");
-        let slide = [("animationName", "quote-appear-right"), ("animationIterationCount", "1")];
+        let run_skewed = |running: Option<Vec<&str>>, styles: &[(&str, &str)]| {
+            run_t(running, styles, false, "matrix(1, 0, 0.2, 1, 0, 0)")
+        };
+        let slide = [
+            ("animationName", "quote-appear-right"),
+            ("animationIterationCount", "1"),
+        ];
         assert_eq!(run(Some(vec!["right", "opacity"]), &slide, false), 0);
         // A transition that names the property traces it too.
-        let eased = [("transitionProperty", "left"), ("transitionDuration", "0.4s")];
+        let eased = [
+            ("transitionProperty", "left"),
+            ("transitionDuration", "0.4s"),
+        ];
         assert_eq!(run(Some(vec!["left"]), &eased, false), 0);
         // At rest, or in a loop, the box stands where it was measured.
         assert_eq!(run(Some(vec!["opacity"]), &slide, false), 1);
-        let looped = [("animationName", "quote-appear-right"), ("animationIterationCount", "infinite")];
+        let looped = [
+            ("animationName", "quote-appear-right"),
+            ("animationIterationCount", "infinite"),
+        ];
         assert_eq!(run(Some(vec!["right"]), &looped, false), 1);
         // Half an iteration still ends.
-        let half = [("animationName", "quote-appear-right"), ("animationIterationCount", "0.5")];
+        let half = [
+            ("animationName", "quote-appear-right"),
+            ("animationIterationCount", "0.5"),
+        ];
         assert_eq!(run(Some(vec!["right"]), &half, false), 0);
         // A one-shot entrance beside an infinite drift on the same property:
         // the capture cannot tell which one moves it, and the drift never
@@ -6122,23 +6954,43 @@ mod tests {
         assert_eq!(run(None, &slide, false), 1);
         // A fade-up on an ancestor moves the text vertically only: the
         // overflow is real whatever frame the entrance was caught at.
-        let fade_up = [("animationName", "fade-up"), ("animationIterationCount", "1"), ("transform", "matrix(1, 0, 0, 1, 0, 12)")];
+        let fade_up = [
+            ("animationName", "fade-up"),
+            ("animationIterationCount", "1"),
+            ("transform", "matrix(1, 0, 0, 1, 0, 12)"),
+        ];
         assert_eq!(run(Some(vec!["transform", "opacity"]), &fade_up, true), 1);
         // A fade-up that keeps the same x offset in every frame moves only
         // on y (review): the sideways offset the capture read is where the
         // box ends, and the overflow is real.
-        let held = [("animationName", "fade-up-offset"), ("animationIterationCount", "1"), ("transform", "matrix(1, 0, 0, 1, 40, 12)")];
+        let held = [
+            ("animationName", "fade-up-offset"),
+            ("animationIterationCount", "1"),
+            ("transform", "matrix(1, 0, 0, 1, 40, 12)"),
+        ];
         assert_eq!(run(Some(vec!["transform", "opacity"]), &held, false), 1);
         // A transform slide that changes x is still a move that ends.
-        let slide_x = [("animationName", "slide-in"), ("animationIterationCount", "1"), ("transform", "matrix(1, 0, 0, 1, 79, 0)")];
+        let slide_x = [
+            ("animationName", "slide-in"),
+            ("animationIterationCount", "1"),
+            ("transform", "matrix(1, 0, 0, 1, 79, 0)"),
+        ];
         assert_eq!(run(Some(vec!["transform"]), &slide_x, false), 0);
         // A matrix that keeps x at 40px but scales moves what the box holds
         // sideways (review): still a move that ends.
-        let grow = [("animationName", "grow-in-place"), ("animationIterationCount", "1"), ("transform", "matrix(1.1, 0, 0, 1.1, 40, 0)")];
+        let grow = [
+            ("animationName", "grow-in-place"),
+            ("animationIterationCount", "1"),
+            ("transform", "matrix(1.1, 0, 0, 1.1, 40, 0)"),
+        ];
         assert_eq!(run(Some(vec!["transform"]), &grow, false), 0);
         // One that scales only y keeps x where it is (review): the overflow
         // stays after the animation.
-        let tall = [("animationName", "grow-tall"), ("animationIterationCount", "1"), ("transform", "matrix(1, 0, 0, 1.1, 40, 0)")];
+        let tall = [
+            ("animationName", "grow-tall"),
+            ("animationIterationCount", "1"),
+            ("transform", "matrix(1, 0, 0, 1.1, 40, 0)"),
+        ];
         assert_eq!(run(Some(vec!["transform"]), &tall, false), 1);
         // Under a wrapper that skews what it holds, a change of y moves the
         // text sideways on screen (review): still a move that ends.
@@ -6150,12 +7002,31 @@ mod tests {
         assert_eq!(run_skewed(Some(vec!["transform"]), &tall_skewed), 0);
         // A wrapper that only scales, even unequally, carries no move on y
         // into x (review): the overflow stays.
-        assert_eq!(run_t(Some(vec!["transform"]), &tall_skewed, false, "matrix(2, 0, 0, 1, 0, 0)"), 1);
+        assert_eq!(
+            run_t(
+                Some(vec!["transform"]),
+                &tall_skewed,
+                false,
+                "matrix(2, 0, 0, 1, 0, 0)"
+            ),
+            1
+        );
         // Under a perspective tilt (`perspective(500px) rotateX(30deg)`), a
         // move on y shifts the text sideways on screen too (review).
         let tilted = "matrix3d(1, 0, 0, 0, 0, 0.866025, 0.5, -0.001, 0, -0.5, 0.866025, -0.00173205, 0, 0, 0, 1)";
-        assert_eq!(run_t(Some(vec!["transform"]), &tall_skewed, false, tilted), 0);
-        assert_eq!(run_t(Some(vec!["transform"]), &tall_skewed, false, "matrix3d(2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)"), 1);
+        assert_eq!(
+            run_t(Some(vec!["transform"]), &tall_skewed, false, tilted),
+            0
+        );
+        assert_eq!(
+            run_t(
+                Some(vec!["transform"]),
+                &tall_skewed,
+                false,
+                "matrix3d(2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)"
+            ),
+            1
+        );
         // A transform moved by script (a Web Animations loop) with no CSS
         // animation or transition to trace it is unknown.
         let untraced = [("transform", "matrix(1, 0, 0, 1, -40, 0)")];
@@ -6197,10 +7068,15 @@ mod tests {
         // The one that ends 10px short of the edge keeps a gutter under 12px.
         assert_eq!(
             snippets(&d, paras[2], "body-text-viewport-edge"),
-            vec![format!("<p> with {len}-char body bleeds to viewport edge (right 10px)")]
+            vec![format!(
+                "<p> with {len}-char body bleeds to viewport edge (right 10px)"
+            )]
         );
         let past = |d: &FakeDom| -> Vec<String> {
-            check_page_overflow_dom(d).into_iter().map(|f| f.detail).collect()
+            check_page_overflow_dom(d)
+                .into_iter()
+                .map(|f| f.detail)
+                .collect()
         };
         // One finding for the page, naming the outermost of the widest boxes.
         assert_eq!(
@@ -6221,15 +7097,30 @@ mod tests {
         d.set_rect(strip, 0.0, 400.0, 1024.0, 40.0);
         let banner = d.add(Some(strip), "div");
         d.set_rect(banner, 0.0, 400.0, 3000.0, 40.0);
-        assert!(past(&d)[0].contains("div.b-wrapper reaches 634px"), "{:?}", past(&d));
+        assert!(
+            past(&d)[0].contains("div.b-wrapper reaches 634px"),
+            "{:?}",
+            past(&d)
+        );
         d.set_style(strip, "overflowX", "visible");
         // No box reaches further than the page scrolls: one that does is held
         // by a clip the walk cannot see.
-        assert!(past(&d)[0].contains("div.b-wrapper reaches 634px"), "{:?}", past(&d));
+        assert!(
+            past(&d)[0].contains("div.b-wrapper reaches 634px"),
+            "{:?}",
+            past(&d)
+        );
         d.el_mut(html).scroll_width = 3000.0;
-        assert!(past(&d)[0].contains("div in div.b-wrapper reaches 2610px"), "{:?}", past(&d));
+        assert!(
+            past(&d)[0].contains("div in div.b-wrapper reaches 2610px"),
+            "{:?}",
+            past(&d)
+        );
         d.set_style(banner, "position", "fixed");
-        assert!(past(&d)[0].contains("div.b-wrapper reaches 634px"), "a fixed box sets no width");
+        assert!(
+            past(&d)[0].contains("div.b-wrapper reaches 634px"),
+            "a fixed box sets no width"
+        );
         d.el_mut(html).scroll_width = 1024.0;
 
         // A viewport that clips (centene.com's body at overflow-x: hidden)
@@ -6243,20 +7134,40 @@ mod tests {
         // A page that cannot scroll names the widest box around the text,
         // not a box elsewhere that a clip the walk cannot see holds.
         d.set_style(banner, "position", "static");
-        assert!(past(&d)[0].contains("div.b-wrapper reaches 634px"), "{:?}", past(&d));
+        assert!(
+            past(&d)[0].contains("div.b-wrapper reaches 634px"),
+            "{:?}",
+            past(&d)
+        );
         d.set_style(banner, "position", "fixed");
         // The root's own overflow wins over body's.
         d.set_style(html, "overflowX", "auto");
-        assert!(past(&d)[0].starts_with("page scrolls sideways"), "{:?}", past(&d));
+        assert!(
+            past(&d)[0].starts_with("page scrolls sideways"),
+            "{:?}",
+            past(&d)
+        );
         d.set_style(html, "overflowX", "hidden");
         assert!(past(&d)[0].starts_with("text runs past"), "{:?}", past(&d));
         d.set_style(html, "overflowX", "visible");
         d.set_style(body, "overflowX", "visible");
 
         // An inline ignore on a paragraph leaves it out of the count.
-        d.set_attr(paras[1], "data-impeccable-ignore", "body-text-viewport-edge");
-        assert!(past(&d)[0].ends_with("text in 1 block runs past it"), "{:?}", past(&d));
-        d.set_attr(paras[0], "data-impeccable-ignore", "body-text-viewport-edge");
+        d.set_attr(
+            paras[1],
+            "data-impeccable-ignore",
+            "body-text-viewport-edge",
+        );
+        assert!(
+            past(&d)[0].ends_with("text in 1 block runs past it"),
+            "{:?}",
+            past(&d)
+        );
+        d.set_attr(
+            paras[0],
+            "data-impeccable-ignore",
+            "body-text-viewport-edge",
+        );
         assert!(past(&d).is_empty(), "every paragraph waived");
     }
 
@@ -6293,7 +7204,10 @@ mod tests {
             paras.push(p);
         }
         let past = |d: &FakeDom| -> Vec<String> {
-            check_page_overflow_dom(d).into_iter().map(|f| f.detail).collect()
+            check_page_overflow_dom(d)
+                .into_iter()
+                .map(|f| f.detail)
+                .collect()
         };
         // The page scrolls, for the banner, but the wrapper cuts every line.
         assert_eq!(
@@ -6304,7 +7218,11 @@ mod tests {
         // A wrapper whose own edge is past the viewport's hides nothing the
         // page could scroll to.
         d.set_rect(wrap, 0.0, 100.0, 800.0, 400.0);
-        assert!(past(&d)[0].starts_with("page scrolls sideways at 390px"), "{:?}", past(&d));
+        assert!(
+            past(&d)[0].starts_with("page scrolls sideways at 390px"),
+            "{:?}",
+            past(&d)
+        );
         d.set_rect(wrap, 0.0, 100.0, 390.0, 400.0);
         // A one-line paragraph that clips its own overflow at the viewport's
         // edge cuts its own text.
@@ -6331,7 +7249,11 @@ mod tests {
         // the text, whatever holds it (microsoft.com's parked card sits in a
         // shadow root).
         d.el_mut(html).scroll_width = 390.0;
-        assert!(past(&d)[0].starts_with("text runs past the right edge"), "{:?}", past(&d));
+        assert!(
+            past(&d)[0].starts_with("text runs past the right edge"),
+            "{:?}",
+            past(&d)
+        );
         // The engine cannot tell: no clip it can see, and no scroll width
         // recorded. It uses the sideways wording and names the box around
         // the text.
@@ -6343,7 +7265,11 @@ mod tests {
         );
         // body at overflow-x: hidden clips the viewport.
         d.set_style(body, "overflowX", "hidden");
-        assert!(past(&d)[0].starts_with("text runs past the right edge"), "{:?}", past(&d));
+        assert!(
+            past(&d)[0].starts_with("text runs past the right edge"),
+            "{:?}",
+            past(&d)
+        );
     }
 
     /// A bare `div` is named by its id, the nearest ancestor below the body
@@ -6377,7 +7303,10 @@ mod tests {
             detail[start..end].to_string()
         };
         // No identifying ancestor: the start of the text.
-        assert_eq!(name(&d), "div (\"Members can view claims, find a doctor…\")");
+        assert_eq!(
+            name(&d),
+            "div (\"Members can view claims, find a doctor…\")"
+        );
         // The nearest ancestor with a class, keeping three of its tokens.
         d.set_attr(section, "class", "hero dark wide-gutter extra");
         assert_eq!(name(&d), "div in section.hero.dark.wide-gutter");
@@ -6410,7 +7339,10 @@ mod tests {
         d.set_rect(p, -249.0, 300.0, 625.0, 24.0);
         d.set_text_rect(p, -249.0, 302.0, 625.0, 20.0);
         let past = |d: &FakeDom| -> Vec<String> {
-            check_page_overflow_dom(d).into_iter().map(|f| f.detail).collect()
+            check_page_overflow_dom(d)
+                .into_iter()
+                .map(|f| f.detail)
+                .collect()
         };
         // The right side keeps 14px, over the phone floor.
         assert!(snippets(&d, p, "body-text-viewport-edge").is_empty());
@@ -6438,7 +7370,14 @@ mod tests {
         const TITLE: &str = "Two southern residents charged over an international trafficking ring";
         fn title(d: &mut FakeDom, parent: ElId, weight: &str, lines: f64) -> ElId {
             let el = text_el(d, parent, "div", TITLE, "14px");
-            d.set_styles(el, &[("lineHeight", "16px"), ("fontWeight", weight), ("display", "block")]);
+            d.set_styles(
+                el,
+                &[
+                    ("lineHeight", "16px"),
+                    ("fontWeight", weight),
+                    ("display", "block"),
+                ],
+            );
             let h = 16.8 + 16.0 * (lines - 1.0);
             d.set_rect(el, 355.0, 300.0, 265.0, 16.0 * lines);
             d.el_mut(el).direct_text_rect = Some(Rect::from_xywh(355.0, 300.0, 265.0, h));
@@ -6448,11 +7387,20 @@ mod tests {
         let (_h, body) = d.with_page();
 
         let bold = title(&mut d, body, "700", 2.0);
-        assert!(snippets(&d, bold, "tight-leading").is_empty(), "bold, two lines");
+        assert!(
+            snippets(&d, bold, "tight-leading").is_empty(),
+            "bold, two lines"
+        );
         let semibold = title(&mut d, body, "600", 2.0);
-        assert!(snippets(&d, semibold, "tight-leading").is_empty(), "600 is bold");
+        assert!(
+            snippets(&d, semibold, "tight-leading").is_empty(),
+            "600 is bold"
+        );
         let medium = title(&mut d, body, "500", 2.0);
-        assert_eq!(snippets(&d, medium, "tight-leading"), vec!["line-height 1.14x (need >=1.3)"]);
+        assert_eq!(
+            snippets(&d, medium, "tight-leading"),
+            vec!["line-height 1.14x (need >=1.3)"]
+        );
         let three = title(&mut d, body, "700", 3.0);
         assert_eq!(
             snippets(&d, three, "tight-leading"),
@@ -6465,42 +7413,87 @@ mod tests {
         // `flow-root` carrying `webkitLineClamp`; a `-webkit-box` whose
         // clamp is left to a script (Taboola's) computes as itself.
         let boxed = title(&mut d, body, "670", 4.0);
-        d.set_styles(boxed, &[("display", "-webkit-box"), ("webkitLineClamp", "none")]);
-        assert!(snippets(&d, boxed, "tight-leading").is_empty(), "-webkit-box clamp");
+        d.set_styles(
+            boxed,
+            &[("display", "-webkit-box"), ("webkitLineClamp", "none")],
+        );
+        assert!(
+            snippets(&d, boxed, "tight-leading").is_empty(),
+            "-webkit-box clamp"
+        );
         let flow = title(&mut d, body, "670", 4.0);
         d.set_styles(
             flow,
-            &[("display", "flow-root"), ("webkitLineClamp", "2"), ("overflow", "hidden"), ("overflowY", "hidden")],
+            &[
+                ("display", "flow-root"),
+                ("webkitLineClamp", "2"),
+                ("overflow", "hidden"),
+                ("overflowY", "hidden"),
+            ],
         );
         d.set_rect(flow, 355.0, 300.0, 265.0, 32.0);
-        assert!(snippets(&d, flow, "tight-leading").is_empty(), "flow-root clamp");
+        assert!(
+            snippets(&d, flow, "tight-leading").is_empty(),
+            "flow-root clamp"
+        );
         // A clamp of three lines that hides nothing still exempts.
         let exact = title(&mut d, body, "700", 3.0);
         d.set_styles(
             exact,
-            &[("display", "flow-root"), ("webkitLineClamp", "3"), ("overflow", "hidden"), ("overflowY", "hidden")],
+            &[
+                ("display", "flow-root"),
+                ("webkitLineClamp", "3"),
+                ("overflow", "hidden"),
+                ("overflowY", "hidden"),
+            ],
         );
-        assert!(snippets(&d, exact, "tight-leading").is_empty(), "clamp of three, nothing hidden");
+        assert!(
+            snippets(&d, exact, "tight-leading").is_empty(),
+            "clamp of three, nothing hidden"
+        );
         // A clipping flow-root box with no clamp only cuts the count: three
         // of six laid-out lines render, and bold text of three lines reports.
         let maxed = title(&mut d, body, "700", 6.0);
         d.set_styles(
             maxed,
-            &[("display", "flow-root"), ("webkitLineClamp", "none"), ("overflow", "hidden"), ("overflowY", "hidden")],
+            &[
+                ("display", "flow-root"),
+                ("webkitLineClamp", "none"),
+                ("overflow", "hidden"),
+                ("overflowY", "hidden"),
+            ],
         );
         d.set_rect(maxed, 355.0, 300.0, 265.0, 48.0);
-        assert_eq!(snippets(&d, maxed, "tight-leading").len(), 1, "max-height clip, no clamp");
+        assert_eq!(
+            snippets(&d, maxed, "tight-leading").len(),
+            1,
+            "max-height clip, no clamp"
+        );
         // The same box cut to two lines is a two-line bold title.
         d.set_rect(maxed, 355.0, 300.0, 265.0, 32.0);
-        assert!(snippets(&d, maxed, "tight-leading").is_empty(), "clipped to two lines");
+        assert!(
+            snippets(&d, maxed, "tight-leading").is_empty(),
+            "clipped to two lines"
+        );
         // A clamp on a plain block clamps nothing, and is no clamp.
         let stray = title(&mut d, body, "670", 4.0);
         d.set_styles(stray, &[("display", "block"), ("webkitLineClamp", "2")]);
-        assert_eq!(snippets(&d, stray, "tight-leading").len(), 1, "clamp on a plain block");
+        assert_eq!(
+            snippets(&d, stray, "tight-leading").len(),
+            1,
+            "clamp on a plain block"
+        );
         // Regular copy in a clamp keeps the floor.
         let regular = title(&mut d, body, "400", 4.0);
-        d.set_styles(regular, &[("display", "flow-root"), ("webkitLineClamp", "2")]);
-        assert_eq!(snippets(&d, regular, "tight-leading").len(), 1, "regular weight in a clamp");
+        d.set_styles(
+            regular,
+            &[("display", "flow-root"), ("webkitLineClamp", "2")],
+        );
+        assert_eq!(
+            snippets(&d, regular, "tight-leading").len(),
+            1,
+            "regular weight in a clamp"
+        );
 
         // ynet.co.il's `div.slotTitle.medium`: the headline's own div lays out
         // three lines, and the clamped wrapper two levels up (through the
@@ -6508,46 +7501,99 @@ mod tests {
         let wrapper = d.add(Some(body), "div");
         d.set_styles(
             wrapper,
-            &[("display", "flow-root"), ("webkitLineClamp", "2"), ("overflow", "hidden"), ("overflowY", "hidden")],
+            &[
+                ("display", "flow-root"),
+                ("webkitLineClamp", "2"),
+                ("overflow", "hidden"),
+                ("overflowY", "hidden"),
+            ],
         );
         d.set_rect(wrapper, 230.0, 4109.0, 190.0, 38.0);
         let link = d.add(Some(wrapper), "a");
         d.set_style(link, "display", "inline");
         let headline = text_el(&mut d, link, "div", TITLE, "15px");
-        d.set_styles(headline, &[("display", "block"), ("lineHeight", "19px"), ("fontWeight", "670")]);
+        d.set_styles(
+            headline,
+            &[
+                ("display", "block"),
+                ("lineHeight", "19px"),
+                ("fontWeight", "670"),
+            ],
+        );
         d.set_rect(headline, 230.0, 4109.0, 190.0, 38.0);
         d.el_mut(headline).direct_text_rect = Some(Rect::from_xywh(252.0, 4111.0, 167.0, 53.0));
-        assert!(snippets(&d, headline, "tight-leading").is_empty(), "two of three lines render");
+        assert!(
+            snippets(&d, headline, "tight-leading").is_empty(),
+            "two of three lines render"
+        );
         d.set_style(headline, "fontWeight", "400");
-        assert_eq!(snippets(&d, headline, "tight-leading").len(), 1, "regular weight keeps the floor");
+        assert_eq!(
+            snippets(&d, headline, "tight-leading").len(),
+            1,
+            "regular weight keeps the floor"
+        );
 
         // An inline bold run wrapping to two lines on its block.
         let block = d.add(Some(body), "div");
-        d.set_styles(block, &[("display", "block"), ("fontSize", "16px"), ("lineHeight", "normal")]);
+        d.set_styles(
+            block,
+            &[
+                ("display", "block"),
+                ("fontSize", "16px"),
+                ("lineHeight", "normal"),
+            ],
+        );
         let run = text_el(&mut d, block, "span", TITLE, "16px");
-        d.set_styles(run, &[("display", "inline"), ("lineHeight", "19px"), ("fontWeight", "670")]);
+        d.set_styles(
+            run,
+            &[
+                ("display", "inline"),
+                ("lineHeight", "19px"),
+                ("fontWeight", "670"),
+            ],
+        );
         d.set_rect(run, 466.0, 8866.0, 374.0, 34.0);
         d.el_mut(run).direct_text_rect = Some(Rect::from_xywh(466.0, 8866.0, 374.0, 34.0));
-        assert!(snippets(&d, run, "tight-leading").is_empty(), "inline bold run, two lines");
+        assert!(
+            snippets(&d, run, "tight-leading").is_empty(),
+            "inline bold run, two lines"
+        );
     }
 
     #[test]
     fn tight_leading_reads_the_block_an_inline_run_sits_on() {
-        const COPY: &str = "Free furniture, free books, free clothes, free computers, and more besides.";
+        const COPY: &str =
+            "Free furniture, free books, free clothes, free computers, and more besides.";
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         let block = d.add(Some(body), "div");
-        d.set_styles(block, &[("display", "inline-block"), ("fontSize", "14px"), ("lineHeight", "14px")]);
+        d.set_styles(
+            block,
+            &[
+                ("display", "inline-block"),
+                ("fontSize", "14px"),
+                ("lineHeight", "14px"),
+            ],
+        );
         let run = text_el(&mut d, block, "span", COPY, "11px");
         d.set_styles(run, &[("display", "inline"), ("lineHeight", "11px")]);
         d.set_rect(run, 46.0, 100.0, 298.0, 40.0);
         d.set_text_rect(run, 46.0, 100.0, 280.0, 40.0);
-        assert_eq!(snippets(&d, run, "tight-leading"), vec!["line-height 1.27x (need >=1.3)"]);
+        assert_eq!(
+            snippets(&d, run, "tight-leading"),
+            vec!["line-height 1.27x (need >=1.3)"]
+        );
         d.set_style(block, "lineHeight", "22.4px");
-        assert!(snippets(&d, run, "tight-leading").is_empty(), "set on the block's 22.4px");
+        assert!(
+            snippets(&d, run, "tight-leading").is_empty(),
+            "set on the block's 22.4px"
+        );
         // A block strut that cannot be resolved leaves the run's own value.
         d.set_style(block, "lineHeight", "normal");
-        assert_eq!(snippets(&d, run, "tight-leading"), vec!["line-height 1.00x (need >=1.3)"]);
+        assert_eq!(
+            snippets(&d, run, "tight-leading"),
+            vec!["line-height 1.00x (need >=1.3)"]
+        );
     }
 
     /// observations-28 row 25: outreign.io's hero meta row is a flex
@@ -6579,17 +7625,27 @@ mod tests {
         d.set_rect(row, 27.0, 673.0, 336.0, 34.0);
         d.set_text_rect(row, 43.3, 673.0, 292.4, 34.0);
         d.el_mut(row).client_width = 336.0;
-        assert!(snippets(&d, row, "tight-leading").is_empty(), "short runs, whole items");
+        assert!(
+            snippets(&d, row, "tight-leading").is_empty(),
+            "short runs, whole items"
+        );
         let flag = vec!["line-height 1.25x (need >=1.3)"];
         // Under `nowrap` the items shrink into one row and each run wraps in
         // its own item; a row whose wrapping was not recorded, and a grid
         // whose cells are narrower than the box, are measured as before.
         for wrap in ["nowrap", ""] {
             d.set_style(row, "flexWrap", wrap);
-            assert_eq!(snippets(&d, row, "tight-leading"), flag, "flex-wrap {wrap:?}");
+            assert_eq!(
+                snippets(&d, row, "tight-leading"),
+                flag,
+                "flex-wrap {wrap:?}"
+            );
         }
         d.set_style(row, "flexWrap", "wrap-reverse");
-        assert!(snippets(&d, row, "tight-leading").is_empty(), "wrap-reverse moves items whole");
+        assert!(
+            snippets(&d, row, "tight-leading").is_empty(),
+            "wrap-reverse moves items whole"
+        );
         d.set_style(row, "display", "grid");
         assert_eq!(snippets(&d, row, "tight-leading"), flag, "grid");
         // A block that sets the same text as one run wraps its lines.
@@ -6607,7 +7663,8 @@ mod tests {
     /// unless it is a reading block nested there.
     #[test]
     fn tight_leading_exempts_heading_copy_in_a_block_wrapper() {
-        const COPY: &str = "Jede Woche neu! Lassen Sie sich von unseren Kollektionen immer wieder neu inspirieren";
+        const COPY: &str =
+            "Jede Woche neu! Lassen Sie sich von unseren Kollektionen immer wieder neu inspirieren";
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         let h5 = d.add(Some(body), "h5");
@@ -6615,19 +7672,29 @@ mod tests {
         d.set_style(wrapper, "lineHeight", "24px");
         d.set_rect(wrapper, 12.0, 100.0, 366.0, 72.0);
         d.set_text_rect(wrapper, 12.0, 100.0, 330.0, 71.0);
-        assert!(snippets(&d, wrapper, "tight-leading").is_empty(), "div in a heading");
+        assert!(
+            snippets(&d, wrapper, "tight-leading").is_empty(),
+            "div in a heading"
+        );
         // A paragraph of body copy in a heading keeps the floor, and so does
         // what sits inside it.
         let para = text_el(&mut d, h5, "p", COPY, "16px");
         d.set_style(para, "lineHeight", "17.6px");
         d.set_rect(para, 12.0, 200.0, 300.0, 70.4);
         d.set_text_rect(para, 12.0, 200.0, 300.0, 70.4);
-        assert_eq!(snippets(&d, para, "tight-leading"), vec!["line-height 1.10x (need >=1.3)"]);
+        assert_eq!(
+            snippets(&d, para, "tight-leading"),
+            vec!["line-height 1.10x (need >=1.3)"]
+        );
         let inner = text_el(&mut d, para, "div", COPY, "16px");
         d.set_style(inner, "lineHeight", "17.6px");
         d.set_rect(inner, 12.0, 300.0, 300.0, 70.4);
         d.set_text_rect(inner, 12.0, 300.0, 300.0, 70.4);
-        assert_eq!(snippets(&d, inner, "tight-leading").len(), 1, "a box inside the paragraph");
+        assert_eq!(
+            snippets(&d, inner, "tight-leading").len(),
+            1,
+            "a box inside the paragraph"
+        );
     }
 
     /// observations-20 row 41: a two-line inline highlight reports the union
@@ -6637,7 +7704,13 @@ mod tests {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         d.set_style(body, "backgroundColor", "rgb(255, 255, 255)");
-        let hl = text_el(&mut d, body, "span", "carrier's own estimating guide", "14px");
+        let hl = text_el(
+            &mut d,
+            body,
+            "span",
+            "carrier's own estimating guide",
+            "14px",
+        );
         d.set_styles(
             hl,
             &[
@@ -6656,7 +7729,10 @@ mod tests {
         );
         d.set_rect(hl, 55.0, 100.0, 234.0, 42.9);
         d.set_text_rect(hl, 55.0, 100.0, 234.0, 42.9);
-        assert!(snippets(&d, hl, "cramped-padding").is_empty(), "two one-line fragments");
+        assert!(
+            snippets(&d, hl, "cramped-padding").is_empty(),
+            "two one-line fragments"
+        );
         // A box one 43px line tall is past the gate.
         d.set_style(hl, "display", "inline-block");
         assert_eq!(
@@ -6691,7 +7767,11 @@ mod tests {
         d.set_rect(up, 40.0, 160.0, 260.0, 18.0);
         d.set_styles(
             up,
-            &[("lineHeight", "18px"), ("letterSpacing", "2px"), ("textTransform", "uppercase")],
+            &[
+                ("lineHeight", "18px"),
+                ("letterSpacing", "2px"),
+                ("textTransform", "uppercase"),
+            ],
         );
         d.els[up as usize].direct_text_rect = Some(Rect::from_xywh(40.0, 160.0, 260.0, 18.0));
         assert!(check_element_quality_dom(&d, up, &BrowserConfig::default()).is_empty());
@@ -6724,14 +7804,21 @@ mod tests {
             "16px",
         );
         d.set_rect(sentence, 40.0, 400.0, 600.0, 52.0);
-        d.set_styles(sentence, &[("lineHeight", "26px"), ("letterSpacing", "2px")]);
+        d.set_styles(
+            sentence,
+            &[("lineHeight", "26px"), ("letterSpacing", "2px")],
+        );
         d.els[sentence as usize].direct_text_rect = Some(Rect::from_xywh(40.0, 400.0, 600.0, 52.0));
-        let ids: Vec<String> =
-            check_element_quality_dom(&d, sentence, &BrowserConfig::default()).into_iter().map(|h| h.id).collect();
+        let ids: Vec<String> = check_element_quality_dom(&d, sentence, &BrowserConfig::default())
+            .into_iter()
+            .map(|h| h.id)
+            .collect();
         assert_eq!(ids, vec!["wide-tracking"]);
         d.set_style(s, "textTransform", "lowercase");
-        let ids: Vec<String> =
-            check_element_quality_dom(&d, s, &BrowserConfig::default()).into_iter().map(|h| h.id).collect();
+        let ids: Vec<String> = check_element_quality_dom(&d, s, &BrowserConfig::default())
+            .into_iter()
+            .map(|h| h.id)
+            .collect();
         assert_eq!(ids, vec!["wide-tracking"]);
         d.set_style(s, "textTransform", "none");
 
@@ -6768,10 +7855,15 @@ mod tests {
         // A longer Japanese translation in a hidden child does not make the
         // English line CJK text (review): the script is read from its own.
         let hidden = d.add(Some(latin), "span");
-        d.add_text(hidden, &"サポートの受付時間は月曜日から金曜日の午前九時から午後六時までです。".repeat(3));
+        d.add_text(
+            hidden,
+            &"サポートの受付時間は月曜日から金曜日の午前九時から午後六時までです。".repeat(3),
+        );
         d.set_style(hidden, "display", "none");
-        let ids: Vec<String> =
-            check_element_quality_dom(&d, latin, &BrowserConfig::default()).into_iter().map(|h| h.id).collect();
+        let ids: Vec<String> = check_element_quality_dom(&d, latin, &BrowserConfig::default())
+            .into_iter()
+            .map(|h| h.id)
+            .collect();
         assert_eq!(ids, vec!["wide-tracking"]);
     }
 
@@ -6785,7 +7877,10 @@ mod tests {
             let (_h, body) = d.with_page();
             let el = text_el(&mut d, body, "span", text, "12px");
             d.set_rect(el, 40.0, 100.0, 300.0, 18.0);
-            d.set_styles(el, &[("lineHeight", "18px"), ("textTransform", "uppercase")]);
+            d.set_styles(
+                el,
+                &[("lineHeight", "18px"), ("textTransform", "uppercase")],
+            );
             check_element_quality_dom(&d, el, &BrowserConfig::default())
         };
         let flagged = |hits: &[RuleHit]| hits.iter().any(|h| h.id == "all-caps-body");
@@ -6803,7 +7898,10 @@ mod tests {
         let hits = caps(&longer);
         assert!(flagged(&hits), "83-char run: {hits:?}");
         assert_eq!(
-            hits.iter().find(|h| h.id == "all-caps-body").unwrap().snippet,
+            hits.iter()
+                .find(|h| h.id == "all-caps-body")
+                .unwrap()
+                .snippet,
             "text-transform: uppercase on 83 chars of body text"
         );
 
@@ -6811,7 +7909,10 @@ mod tests {
         let spaced = format!("\n      {longer}\n    ");
         let hits = caps(&spaced);
         assert_eq!(
-            hits.iter().find(|h| h.id == "all-caps-body").unwrap().snippet,
+            hits.iter()
+                .find(|h| h.id == "all-caps-body")
+                .unwrap()
+                .snippet,
             "text-transform: uppercase on 83 chars of body text"
         );
 
@@ -6821,11 +7922,17 @@ mod tests {
         let (_h, body) = d.with_page();
         let bar = text_el(&mut d, body, "div", "Audit trail complete ", "13px");
         d.set_rect(bar, 40.0, 100.0, 300.0, 20.0);
-        d.set_styles(bar, &[("lineHeight", "20px"), ("textTransform", "uppercase")]);
+        d.set_styles(
+            bar,
+            &[("lineHeight", "20px"), ("textTransform", "uppercase")],
+        );
         let badge_text = "immutable log of every configuration change your team makes";
         let badge = text_el(&mut d, bar, "span", badge_text, "13px");
         d.set_rect(badge, 40.0, 100.0, 300.0, 20.0);
-        d.set_styles(badge, &[("lineHeight", "20px"), ("textTransform", "uppercase")]);
+        d.set_styles(
+            badge,
+            &[("lineHeight", "20px"), ("textTransform", "uppercase")],
+        );
         // The subtree reaches the sentence length; neither run in it does.
         assert_eq!(utf16_len(&d.text_content(bar)), 80);
         assert_eq!(utf16_len(badge_text), 59);
@@ -6846,7 +7953,14 @@ mod tests {
             let (_h, body) = d.with_page();
             let p = text_el(&mut d, body, "p", text, "16px");
             d.set_rect(p, 40.0, 100.0, width, 60.0);
-            d.set_styles(p, &[("lineHeight", "26px"), ("textAlign", "justify"), ("hyphens", hyphens)]);
+            d.set_styles(
+                p,
+                &[
+                    ("lineHeight", "26px"),
+                    ("textAlign", "justify"),
+                    ("hyphens", hyphens),
+                ],
+            );
             let hits = check_element_quality_dom(&d, p, &BrowserConfig::default());
             hits.iter().any(|h| h.id == "justified-text")
         };
@@ -6875,7 +7989,15 @@ mod tests {
             if block_text {
                 d.add_text(p, "Block text long enough to count as its own. ");
             }
-            d.set_styles(p, &[("display", "block"), ("fontSize", "16px"), ("lineHeight", "26px"), ("textAlign", "justify")]);
+            d.set_styles(
+                p,
+                &[
+                    ("display", "block"),
+                    ("fontSize", "16px"),
+                    ("lineHeight", "26px"),
+                    ("textAlign", "justify"),
+                ],
+            );
             d.set_rect(p, 40.0, 100.0, block_width, 26.0 * lines);
             let a = text_el(&mut d, p, "a", &latin, "16px");
             d.set_styles(
@@ -6913,15 +8035,34 @@ mod tests {
         let (_h, body) = d.with_page();
         let p = d.add(Some(body), "p");
         d.add_text(p, "See the note below here: ");
-        d.set_styles(p, &[("display", "block"), ("fontSize", "16px"), ("lineHeight", "24px"), ("textAlign", "justify"), ("hyphens", "manual")]);
+        d.set_styles(
+            p,
+            &[
+                ("display", "block"),
+                ("fontSize", "16px"),
+                ("lineHeight", "24px"),
+                ("textAlign", "justify"),
+                ("hyphens", "manual"),
+            ],
+        );
         d.set_rect(p, 40.0, 100.0, 240.0, 144.0);
         d.set_text_rect(p, 40.0, 102.0, 180.0, 19.0);
         let em = text_el(&mut d, p, "em", &latin, "16px");
-        d.set_styles(em, &[("display", "inline"), ("lineHeight", "24px"), ("textAlign", "justify"), ("hyphens", "manual")]);
+        d.set_styles(
+            em,
+            &[
+                ("display", "inline"),
+                ("lineHeight", "24px"),
+                ("textAlign", "justify"),
+                ("hyphens", "manual"),
+            ],
+        );
         d.set_rect(em, 40.0, 102.0, 240.0, 139.0);
         d.set_text_rect(em, 40.0, 102.0, 240.0, 139.0);
         let flags = |d: &FakeDom, el: ElId| {
-            check_element_quality_dom(d, el, &BrowserConfig::default()).iter().any(|h| h.id == "justified-text")
+            check_element_quality_dom(d, el, &BrowserConfig::default())
+                .iter()
+                .any(|h| h.id == "justified-text")
         };
         assert!(flags(&d, p), "the paragraph's six lines");
         assert!(!flags(&d, em), "reported once, on the paragraph");
@@ -6932,18 +8073,41 @@ mod tests {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         let p = d.add(Some(body), "p");
-        d.set_styles(p, &[("display", "block"), ("fontSize", "16px"), ("lineHeight", "24px"), ("textAlign", "justify"), ("hyphens", "manual")]);
+        d.set_styles(
+            p,
+            &[
+                ("display", "block"),
+                ("fontSize", "16px"),
+                ("lineHeight", "24px"),
+                ("textAlign", "justify"),
+                ("hyphens", "manual"),
+            ],
+        );
         d.set_rect(p, 40.0, 100.0, 240.0, 72.0);
         let mut spans = Vec::new();
-        for (i, word) in ["considerations", "approximately", "unfortunately"].iter().enumerate() {
+        for (i, word) in ["considerations", "approximately", "unfortunately"]
+            .iter()
+            .enumerate()
+        {
             let span = text_el(&mut d, p, "span", word, "16px");
-            d.set_styles(span, &[("display", "inline"), ("lineHeight", "24px"), ("textAlign", "justify"), ("hyphens", "manual")]);
+            d.set_styles(
+                span,
+                &[
+                    ("display", "inline"),
+                    ("lineHeight", "24px"),
+                    ("textAlign", "justify"),
+                    ("hyphens", "manual"),
+                ],
+            );
             let y = 100.0 + 24.0 * i as f64;
             d.set_rect(span, 40.0, y, 120.0, 24.0);
             d.set_text_rect(span, 40.0, y + 2.0, 120.0, 19.0);
             spans.push(span);
         }
-        assert!(flags(&d, spans[0]), "one short word per span still sits in a three-line paragraph");
+        assert!(
+            flags(&d, spans[0]),
+            "one short word per span still sits in a three-line paragraph"
+        );
         // The same words on one line are one line of a justified block.
         for span in &spans {
             d.set_rect(*span, 40.0, 100.0, 120.0, 24.0);
@@ -6967,7 +8131,10 @@ mod tests {
         d.set_rect(s, 40.0, 100.0, 60.0, 12.0);
         let hits = check_element_quality_dom(&d, s, &BrowserConfig::default());
         assert_eq!(hits.len(), 1, "{hits:?}");
-        assert_eq!(hits[0].snippet, "9px functional text \"Meta 12:00\" (below 11px floor)");
+        assert_eq!(
+            hits[0].snippet,
+            "9px functional text \"Meta 12:00\" (below 11px floor)"
+        );
         // smallprint context softens the floor to 10px
         d.add_selector(s, SMALLPRINT);
         d.set_style(s, "fontSize", "10px");
@@ -6997,7 +8164,10 @@ mod tests {
         d.set_style(s, "fontSize", "10.95px");
         assert!(undersized(&d, s).is_empty(), "0.05px under 11px");
         d.set_style(s, "fontSize", "10.9px");
-        assert_eq!(undersized(&d, s), vec!["10.9px functional text \"透天厝\" (below 11px floor)"]);
+        assert_eq!(
+            undersized(&d, s),
+            vec!["10.9px functional text \"透天厝\" (below 11px floor)"]
+        );
         d.set_style(s, "fontSize", "10.944px");
         assert!(undersized(&d, s).is_empty(), "swipeloan.in's slider ticks");
 
@@ -7007,7 +8177,10 @@ mod tests {
         d.add_selector(legal, SMALLPRINT);
         assert!(undersized(&d, legal).is_empty(), "0.05px under 10px");
         d.set_style(legal, "fontSize", "9.9px");
-        assert_eq!(undersized(&d, legal), vec!["9.9px functional text \"Terms apply\" (below 10px floor)"]);
+        assert_eq!(
+            undersized(&d, legal),
+            vec!["9.9px functional text \"Terms apply\" (below 10px floor)"]
+        );
 
         // Text in a link keeps the interactive floor, smallprint class or not
         // (taste call r3-07, kept).
@@ -7042,22 +8215,41 @@ mod tests {
         // A custom control: a short label in a focusable box.
         let chip = d.add(Some(body), "div");
         d.set_attr(chip, "tabindex", "0");
-        let label = text_el(&mut d, chip, "span", "Show the full comparison table", "9px");
+        let label = text_el(
+            &mut d,
+            chip,
+            "span",
+            "Show the full comparison table",
+            "9px",
+        );
         d.set_rect(label, 20.0, 100.0, 140.0, 12.0);
-        assert_eq!(undersized(&d, label).len(), 1, "a control's label, however long");
+        assert_eq!(
+            undersized(&d, label).len(),
+            1,
+            "a control's label, however long"
+        );
         // The same text in a box taken out of the tab order is content: over
         // twenty characters, it is body text and not this rule's.
         d.set_attr(chip, "tabindex", "-1");
         assert!(undersized(&d, label).is_empty(), "tabindex -1");
         // So is a focusable region holding more than a label.
         d.set_attr(chip, "tabindex", "0");
-        let more = text_el(&mut d, chip, "p", "The region also holds a paragraph of copy, a heading and a code sample.", "16px");
+        let more = text_el(
+            &mut d,
+            chip,
+            "p",
+            "The region also holds a paragraph of copy, a heading and a code sample.",
+            "16px",
+        );
         d.set_rect(more, 20.0, 120.0, 400.0, 20.0);
         assert!(undersized(&d, label).is_empty(), "a focusable region");
         // A short label in it still reports, as any short label does.
         let short = text_el(&mut d, chip, "span", "Beta", "9px");
         d.set_rect(short, 20.0, 150.0, 30.0, 12.0);
-        assert_eq!(undersized(&d, short), vec!["9px functional text \"Beta\" (below 11px floor)"]);
+        assert_eq!(
+            undersized(&d, short),
+            vec!["9px functional text \"Beta\" (below 11px floor)"]
+        );
         // A real control inside the region keeps the interactive reading.
         let button = d.add(Some(chip), "button");
         d.add_selector(button, INTERACTIVE);
@@ -7069,18 +8261,36 @@ mod tests {
         // Code: monospace, whitespace kept, and it reads as code.
         let line = text_el(&mut d, body, "p", "\"id\": 7,", "8px");
         d.set_rect(line, 20.0, 300.0, 80.0, 11.0);
-        d.set_styles(line, &[("fontFamily", "\"IBM Plex Mono\", monospace"), ("whiteSpace", "pre-wrap")]);
+        d.set_styles(
+            line,
+            &[
+                ("fontFamily", "\"IBM Plex Mono\", monospace"),
+                ("whiteSpace", "pre-wrap"),
+            ],
+        );
         assert!(undersized(&d, line).is_empty(), "a JSON line");
         // The same face on a pricing label is a label (directus.io 216153).
         let price = text_el(&mut d, body, "p", "$50/seat", "9px");
         d.set_rect(price, 20.0, 320.0, 60.0, 11.0);
-        d.set_styles(price, &[("fontFamily", "\"IBM Plex Mono\", monospace"), ("whiteSpace", "pre-wrap")]);
-        assert_eq!(undersized(&d, price), vec!["9px functional text \"$50/seat\" (below 11px floor)"]);
+        d.set_styles(
+            price,
+            &[
+                ("fontFamily", "\"IBM Plex Mono\", monospace"),
+                ("whiteSpace", "pre-wrap"),
+            ],
+        );
+        assert_eq!(
+            undersized(&d, price),
+            vec!["9px functional text \"$50/seat\" (below 11px floor)"]
+        );
         // Code in a proportional face, or with its whitespace collapsed, is
         // not told from a label.
         d.set_style(line, "whiteSpace", "normal");
         assert_eq!(undersized(&d, line).len(), 1);
-        d.set_styles(line, &[("whiteSpace", "pre"), ("fontFamily", "Inter, sans-serif")]);
+        d.set_styles(
+            line,
+            &[("whiteSpace", "pre"), ("fontFamily", "Inter, sans-serif")],
+        );
         assert_eq!(undersized(&d, line).len(), 1);
     }
 
@@ -7105,12 +8315,17 @@ mod tests {
         // Three ragged lines filling 92% of the box, ending 27px short of
         // the window.
         d.set_text_rect(p, 20.0, 102.0, 343.0, 68.0);
-        assert!(snippets(&d, p, "body-text-viewport-edge").is_empty(), "ragged, 27px in");
+        assert!(
+            snippets(&d, p, "body-text-viewport-edge").is_empty(),
+            "ragged, 27px in"
+        );
         // Justified lines run to the box.
         d.set_style(p, "textAlign", "justify");
         assert_eq!(
             snippets(&d, p, "body-text-viewport-edge"),
-            vec![format!("<p> with {len}-char body bleeds to viewport edge (right 0px)")]
+            vec![format!(
+                "<p> with {len}-char body bleeds to viewport edge (right 0px)"
+            )]
         );
         // Ragged glyphs 13px in keep the phone floor but not a full gutter:
         // the box stands for them, as before.
@@ -7118,7 +8333,9 @@ mod tests {
         d.set_text_rect(p, 20.0, 102.0, 357.0, 68.0);
         assert_eq!(
             snippets(&d, p, "body-text-viewport-edge"),
-            vec![format!("<p> with {len}-char body bleeds to viewport edge (right 0px)")]
+            vec![format!(
+                "<p> with {len}-char body bleeds to viewport edge (right 0px)"
+            )]
         );
 
         // ibm.com: cards slotted into a shadow-tree scroller; the third runs
@@ -7131,7 +8348,14 @@ mod tests {
         d.set_styles(host, &[("display", "grid")]);
         d.set_rect(host, 0.0, 2221.0, 390.0, 451.0);
         let scroller = d.add_shadow_child(host, "div");
-        d.set_styles(scroller, &[("display", "flex"), ("overflowX", "scroll"), ("overflow", "scroll hidden")]);
+        d.set_styles(
+            scroller,
+            &[
+                ("display", "flex"),
+                ("overflowX", "scroll"),
+                ("overflow", "scroll hidden"),
+            ],
+        );
         d.set_rect(scroller, 0.0, 2221.0, 390.0, 451.0);
         d.el_mut(scroller).client_width = 390.0;
         d.el_mut(scroller).scroll_width = 842.0;
@@ -7150,12 +8374,17 @@ mod tests {
         }
         let last = last.unwrap();
         assert!(snippets(&d, last, "body-text-viewport-edge").is_empty());
-        assert!(check_page_overflow_dom(&d).is_empty(), "{:?}", check_page_overflow_dom(&d));
+        assert!(
+            check_page_overflow_dom(&d).is_empty(),
+            "{:?}",
+            check_page_overflow_dom(&d)
+        );
     }
 
     #[test]
     fn viewport_edge_reads_a_truncated_line_at_its_box_and_skips_running_tracks() {
-        let copy = "A long single line that the box truncates with an ellipsis well before the edge";
+        let copy =
+            "A long single line that the box truncates with an ellipsis well before the edge";
         let len = utf16_len(copy);
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
@@ -7165,15 +8394,27 @@ mod tests {
         let line = text_el(&mut d, card, "p", copy, "14px");
         d.set_styles(
             line,
-            &[("overflowX", "hidden"), ("overflow", "hidden"), ("textOverflow", "ellipsis"), ("display", "block"), ("lineHeight", "20px")],
+            &[
+                ("overflowX", "hidden"),
+                ("overflow", "hidden"),
+                ("textOverflow", "ellipsis"),
+                ("display", "block"),
+                ("lineHeight", "20px"),
+            ],
         );
         d.set_rect(line, 50.0, 834.0, 290.0, 20.0);
         d.el_mut(line).client_width = 290.0;
         d.el_mut(line).scroll_width = 437.0;
         // The Range rect runs to x 487, 97px past a 390px viewport.
         d.set_text_rect(line, 50.0, 835.0, 437.0, 17.0);
-        assert!(snippets(&d, line, "body-text-viewport-edge").is_empty(), "the line ends at 340");
-        assert!(check_page_overflow_dom(&d).is_empty(), "and nothing runs past the page");
+        assert!(
+            snippets(&d, line, "body-text-viewport-edge").is_empty(),
+            "the line ends at 340"
+        );
+        assert!(
+            check_page_overflow_dom(&d).is_empty(),
+            "and nothing runs past the page"
+        );
         // A line clamp truncates the same way.
         d.set_styles(line, &[("textOverflow", "clip"), ("webkitLineClamp", "2")]);
         assert!(check_page_overflow_dom(&d).is_empty());
@@ -7189,7 +8430,14 @@ mod tests {
         // (simplybudget.framer.ai's card, kept by the review of
         // observations-20 row 31).
         d.set_styles(line, &[("overflowX", "visible"), ("overflow", "visible")]);
-        d.set_styles(card, &[("overflowX", "hidden"), ("overflow", "hidden"), ("display", "block")]);
+        d.set_styles(
+            card,
+            &[
+                ("overflowX", "hidden"),
+                ("overflow", "hidden"),
+                ("display", "block"),
+            ],
+        );
         d.el_mut(card).client_width = 316.0;
         assert_eq!(check_page_overflow_dom(&d).len(), 1, "cut by the card");
         // A truncated line whose box reaches the viewport edge has no gutter.
@@ -7199,7 +8447,9 @@ mod tests {
         d.el_mut(line).client_width = 336.0;
         assert_eq!(
             snippets(&d, line, "body-text-viewport-edge"),
-            vec![format!("<p> with {len}-char body bleeds to viewport edge (right 4px)")]
+            vec![format!(
+                "<p> with {len}-char body bleeds to viewport edge (right 4px)"
+            )]
         );
 
         // paseo.sh: a card in a track a running animation moves.
@@ -7207,14 +8457,26 @@ mod tests {
         let (_h, body) = d.with_page();
         d.inner_width = 390.0;
         let window = d.add(Some(body), "div");
-        d.set_styles(window, &[("overflowX", "hidden"), ("overflow", "hidden"), ("display", "block")]);
+        d.set_styles(
+            window,
+            &[
+                ("overflowX", "hidden"),
+                ("overflow", "hidden"),
+                ("display", "block"),
+            ],
+        );
         d.set_rect(window, 0.0, 1794.0, 390.0, 324.0);
         d.el_mut(window).client_width = 390.0;
         d.el_mut(window).scroll_width = 3247.0;
         let track = d.add(Some(window), "div");
         d.set_styles(
             track,
-            &[("display", "flex"), ("transform", "matrix(1, 0, 0, 1, -1264.31, 0)"), ("animationName", "social-proof-scroll"), ("animationIterationCount", "infinite")],
+            &[
+                ("display", "flex"),
+                ("transform", "matrix(1, 0, 0, 1, -1264.31, 0)"),
+                ("animationName", "social-proof-scroll"),
+                ("animationIterationCount", "infinite"),
+            ],
         );
         d.set_rect(track, -1264.0, 1964.0, 2688.0, 154.0);
         d.el_mut(track).client_width = 2688.0;
@@ -7227,28 +8489,63 @@ mod tests {
         d.set_style(quote, "lineHeight", "22px");
         d.set_rect(quote, 97.0, 2025.0, 286.0, 68.0);
         d.set_text_rect(quote, 97.0, 2027.0, 281.0, 64.0);
-        assert!(snippets(&d, quote, "body-text-viewport-edge").is_empty(), "a running track");
+        assert!(
+            snippets(&d, quote, "body-text-viewport-edge").is_empty(),
+            "a running track"
+        );
         // The same track held still by a script reports the gutter it shows.
         d.set_style(track, "animationName", "none");
         assert_eq!(
             snippets(&d, quote, "body-text-viewport-edge"),
-            vec![format!("<p> with {len}-char body bleeds to viewport edge (right 7px)")]
+            vec![format!(
+                "<p> with {len}-char body bleeds to viewport edge (right 7px)"
+            )]
         );
         // An animation that runs once is not a marquee.
-        d.set_styles(track, &[("animationName", "slide-in"), ("animationIterationCount", "1")]);
+        d.set_styles(
+            track,
+            &[
+                ("animationName", "slide-in"),
+                ("animationIterationCount", "1"),
+            ],
+        );
         assert_eq!(snippets(&d, quote, "body-text-viewport-edge").len(), 1);
         // Nor is a one-shot slide beside an endless pulse: the pulse moves
         // nothing, and the counts pair with the names by position.
-        let frames = |p: &str| vec![crate::browser::dom::KeyframeFrame { decls: vec![(p.to_string(), "x".to_string())] }];
-        d.keyframes.insert("slide-in".to_string(), frames("transform"));
+        let frames = |p: &str| {
+            vec![crate::browser::dom::KeyframeFrame {
+                decls: vec![(p.to_string(), "x".to_string())],
+            }]
+        };
+        d.keyframes
+            .insert("slide-in".to_string(), frames("transform"));
         d.keyframes.insert("pulse".to_string(), frames("opacity"));
-        d.set_styles(track, &[("animationName", "slide-in, pulse"), ("animationIterationCount", "1, infinite")]);
+        d.set_styles(
+            track,
+            &[
+                ("animationName", "slide-in, pulse"),
+                ("animationIterationCount", "1, infinite"),
+            ],
+        );
         assert_eq!(snippets(&d, quote, "body-text-viewport-edge").len(), 1);
-        d.set_styles(track, &[("animationName", "pulse, slide-in"), ("animationIterationCount", "1, infinite")]);
-        assert!(snippets(&d, quote, "body-text-viewport-edge").is_empty(), "the slide is the endless one");
+        d.set_styles(
+            track,
+            &[
+                ("animationName", "pulse, slide-in"),
+                ("animationIterationCount", "1, infinite"),
+            ],
+        );
+        assert!(
+            snippets(&d, quote, "body-text-viewport-edge").is_empty(),
+            "the slide is the endless one"
+        );
         // A prefixed transform moves the track too.
-        d.keyframes.insert("slide-in".to_string(), frames("-webkit-transform"));
-        assert!(snippets(&d, quote, "body-text-viewport-edge").is_empty(), "a -webkit-transform slide");
+        d.keyframes
+            .insert("slide-in".to_string(), frames("-webkit-transform"));
+        assert!(
+            snippets(&d, quote, "body-text-viewport-edge").is_empty(),
+            "a -webkit-transform slide"
+        );
     }
 
     #[test]
@@ -7262,7 +8559,10 @@ mod tests {
         let f = check_page_quality_dom(&d);
         assert_eq!(f.len(), 1);
         assert_eq!(f[0].type_, "skipped-heading");
-        assert_eq!(f[0].detail, "<h1> \"Title here\" followed by <h3> \"Sub\" (missing h2)");
+        assert_eq!(
+            f[0].detail,
+            "<h1> \"Title here\" followed by <h3> \"Sub\" (missing h2)"
+        );
 
         // munsifdaily.in (10046594): the h5 writes its date with an inline
         // script, whose source is not a word on the page.
@@ -7276,7 +8576,10 @@ mod tests {
         d.add_text(h5, "28 Rabi-uthani 1448 AH");
         let f = check_page_quality_dom(&d);
         assert_eq!(f.len(), 1);
-        assert_eq!(f[0].detail, "<h2> \"E-Paper\" followed by <h5> \"28 Rabi-uthani 1448 AH\" (missing h3)");
+        assert_eq!(
+            f[0].detail,
+            "<h2> \"E-Paper\" followed by <h5> \"28 Rabi-uthani 1448 AH\" (missing h3)"
+        );
 
         // Script source that repeats a shown word removes the script's
         // copy, not the word.
@@ -7290,7 +8593,10 @@ mod tests {
         d.add_text(script, "true");
         let f = check_page_quality_dom(&d);
         assert_eq!(f.len(), 1);
-        assert_eq!(f[0].detail, "<h1> \"Title\" followed by <h3> \"true facts\" (missing h2)");
+        assert_eq!(
+            f[0].detail,
+            "<h1> \"Title\" followed by <h3> \"true facts\" (missing h2)"
+        );
     }
 
     /// r5-p29: a skip into the footer is chrome; a skip in the content, and
@@ -7303,7 +8609,10 @@ mod tests {
             h
         };
         let details = |d: &FakeDom| -> Vec<String> {
-            check_page_quality_dom(d).into_iter().map(|f| f.detail).collect()
+            check_page_quality_dom(d)
+                .into_iter()
+                .map(|f| f.detail)
+                .collect()
         };
 
         // The footer's column titles follow the page's closing h2.
@@ -7345,7 +8654,10 @@ mod tests {
         d.add_selector(footer, FOOTER_SELECTOR);
         heading(&mut d, footer, "h4", "Company");
         heading(&mut d, footer, "h6", "Legal");
-        assert_eq!(details(&d), vec!["<h4> \"Company\" followed by <h6> \"Legal\" (missing h5)"]);
+        assert_eq!(
+            details(&d),
+            vec!["<h4> \"Company\" followed by <h6> \"Legal\" (missing h5)"]
+        );
 
         // A footer heading that opens the page continues no outline.
         let mut d = FakeDom::new();
@@ -7354,14 +8666,20 @@ mod tests {
         d.add_selector(footer, FOOTER_SELECTOR);
         heading(&mut d, footer, "h4", "Company");
         heading(&mut d, footer, "h6", "Legal");
-        assert_eq!(details(&d), vec!["<h4> \"Company\" followed by <h6> \"Legal\" (missing h5)"]);
+        assert_eq!(
+            details(&d),
+            vec!["<h4> \"Company\" followed by <h6> \"Legal\" (missing h5)"]
+        );
 
         // The same headings with no footer around them.
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         heading(&mut d, body, "h2", "Ready to start?");
         heading(&mut d, body, "h4", "Solutions");
-        assert_eq!(details(&d), vec!["<h2> \"Ready to start?\" followed by <h4> \"Solutions\" (missing h3)"]);
+        assert_eq!(
+            details(&d),
+            vec!["<h2> \"Ready to start?\" followed by <h4> \"Solutions\" (missing h3)"]
+        );
     }
 
     #[test]
@@ -7369,9 +8687,23 @@ mod tests {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         let s = d.add(Some(body), "span");
-        d.set_styles(s, &[("position", "absolute"), ("clip", "rect(0px, 0px, 0px, 0px)")]);
+        d.set_styles(
+            s,
+            &[
+                ("position", "absolute"),
+                ("clip", "rect(0px, 0px, 0px, 0px)"),
+            ],
+        );
         assert!(is_visually_hidden(&d, s));
-        d.set_styles(s, &[("clip", "auto"), ("width", "1px"), ("height", "20px"), ("overflow", "hidden")]);
+        d.set_styles(
+            s,
+            &[
+                ("clip", "auto"),
+                ("width", "1px"),
+                ("height", "20px"),
+                ("overflow", "hidden"),
+            ],
+        );
         assert!(is_visually_hidden(&d, s));
         d.set_style(s, "overflow", "visible");
         assert!(!is_visually_hidden(&d, s));
@@ -7392,14 +8724,25 @@ mod tests {
             check_element_quality_dom(d, el, &BrowserConfig::default())
                 .into_iter()
                 .filter(|h| h.id == "tiny-text" || h.id == "undersized-ui-text")
-                .map(|h| format!("{}{}: {}", h.id, if h.is_advisory() { " (advisory)" } else { "" }, h.snippet))
+                .map(|h| {
+                    format!(
+                        "{}{}: {}",
+                        h.id,
+                        if h.is_advisory() { " (advisory)" } else { "" },
+                        h.snippet
+                    )
+                })
                 .collect()
         };
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         let label = text_el(&mut d, body, "span", "View the full analysis", "10px");
         d.set_rect(label, 40.0, 100.0, 140.0, 14.0);
-        assert_eq!(found(&d, label), vec!["tiny-text: 10px body text"], "no class: body text");
+        assert_eq!(
+            found(&d, label),
+            vec!["tiny-text: 10px body text"],
+            "no class: body text"
+        );
         d.set_attr(label, "class", "features-demo__btn features-demo__btn--p");
         assert_eq!(
             found(&d, label),
@@ -7416,16 +8759,36 @@ mod tests {
         // A wrapper that holds buttons and copy names no button.
         let hero = d.add(Some(body), "div");
         d.set_attr(hero, "class", "hero-btns btn-group");
-        let note = text_el(&mut d, hero, "p", "Free for individual developers working on open source projects, with fair use limits.", "10px");
+        let note = text_el(
+            &mut d,
+            hero,
+            "p",
+            "Free for individual developers working on open source projects, with fair use limits.",
+            "10px",
+        );
         d.set_rect(note, 40.0, 300.0, 400.0, 14.0);
-        assert_eq!(found(&d, note), vec!["tiny-text: 10px body text"], "wrapper prose");
+        assert_eq!(
+            found(&d, note),
+            vec!["tiny-text: 10px body text"],
+            "wrapper prose"
+        );
         // Fine print in a button box stays tiny-text's advisory.
         let cta = d.add(Some(body), "div");
         d.set_attr(cta, "class", "cta-btn");
-        let legal = text_el(&mut d, cta, "small", "*Offer valid for new customers only.", "9px");
+        let legal = text_el(
+            &mut d,
+            cta,
+            "small",
+            "*Offer valid for new customers only.",
+            "9px",
+        );
         d.set_rect(legal, 40.0, 400.0, 300.0, 12.0);
         let got = found(&d, legal);
-        assert_eq!(got, vec!["tiny-text (advisory): 9px body text"], "fine print in a button box");
+        assert_eq!(
+            got,
+            vec!["tiny-text (advisory): 9px body text"],
+            "fine print in a button box"
+        );
     }
 
     /// observations-1004 row 22 (v0-saa-s-landing-page 10047450): box art
@@ -7448,21 +8811,52 @@ mod tests {
         d.set_rect(pre, 40.0, 100.0, 240.0, 75.0);
         d.el_mut(pre).direct_text_rect = Some(Rect::from_xywh(40.0, 100.0, 240.0, 75.0));
         assert_eq!(leading(&d, pre), 1, "no face recorded: as before");
-        d.set_styles(pre, &[("fontFamily", "ui-monospace, monospace"), ("whiteSpace", "pre")]);
+        d.set_styles(
+            pre,
+            &[
+                ("fontFamily", "ui-monospace, monospace"),
+                ("whiteSpace", "pre"),
+            ],
+        );
         assert_eq!(leading(&d, pre), 0, "box art in a monospace pre");
         d.set_style(pre, "whiteSpace", "normal");
         assert_eq!(leading(&d, pre), 1, "white space collapsed: set as prose");
-        d.set_styles(pre, &[("fontFamily", "Inter, sans-serif"), ("whiteSpace", "pre-wrap")]);
+        d.set_styles(
+            pre,
+            &[
+                ("fontFamily", "Inter, sans-serif"),
+                ("whiteSpace", "pre-wrap"),
+            ],
+        );
         assert_eq!(leading(&d, pre), 1, "a proportional face");
         // Review of round 11: a chat message in a monospace face at
         // pre-wrap, outside any pre or code, is prose.
-        let msg = text_el(&mut d, body, "div", "Thanks, that worked. Could you also check why the second deploy failed last night?", "12px");
-        d.set_styles(msg, &[("lineHeight", "15px"), ("fontFamily", "ui-monospace, monospace"), ("whiteSpace", "pre-wrap")]);
+        let msg = text_el(
+            &mut d,
+            body,
+            "div",
+            "Thanks, that worked. Could you also check why the second deploy failed last night?",
+            "12px",
+        );
+        d.set_styles(
+            msg,
+            &[
+                ("lineHeight", "15px"),
+                ("fontFamily", "ui-monospace, monospace"),
+                ("whiteSpace", "pre-wrap"),
+            ],
+        );
         d.set_rect(msg, 40.0, 300.0, 240.0, 75.0);
         d.el_mut(msg).direct_text_rect = Some(Rect::from_xywh(40.0, 300.0, 240.0, 75.0));
         assert_eq!(leading(&d, msg), 1, "a monospace chat message");
         // The same run in a pre stays out; at pre-line it is prose again.
-        d.set_styles(pre, &[("fontFamily", "ui-monospace, monospace"), ("whiteSpace", "pre-line")]);
+        d.set_styles(
+            pre,
+            &[
+                ("fontFamily", "ui-monospace, monospace"),
+                ("whiteSpace", "pre-line"),
+            ],
+        );
         d.add_selector(pre, "pre, code, samp");
         assert_eq!(leading(&d, pre), 1, "pre-line");
         d.set_style(pre, "whiteSpace", "pre");
@@ -7496,7 +8890,10 @@ mod rendered_text_tests {
             ],
         );
         d.set_rect(p, 100.0, 270.0, 700.0, 56.0);
-        d.set_text_lines(p, &[(100.0, 272.0, 640.0, 24.0), (100.0, 300.0, 260.0, 24.0)]);
+        d.set_text_lines(
+            p,
+            &[(100.0, 272.0, 640.0, 24.0), (100.0, 300.0, 260.0, 24.0)],
+        );
         p
     }
 
@@ -7519,7 +8916,10 @@ mod rendered_text_tests {
         let p = two_line_p(&mut d, body);
         let style = d.add(Some(p), "style");
         d.set_style(style, "display", "none");
-        d.add_text(style, &"@keyframes blink { 0%, 50% { opacity: 1; } } ".repeat(6));
+        d.add_text(
+            style,
+            &"@keyframes blink { 0%, 50% { opacity: 1; } } ".repeat(6),
+        );
         d.add_text(p, SENTENCE);
         assert_eq!(rendered_text_len(&d, p), SENTENCE.len());
         assert_eq!(line_length(&d, p), None);
@@ -7570,7 +8970,8 @@ mod rendered_text_tests {
         // line breaks around the text are not.
         assert_eq!(
             rendered_text_len(&d, p),
-            "        Copyright 2017, all rights reserved\n                with the Directorate.".len()
+            "        Copyright 2017, all rights reserved\n                with the Directorate."
+                .len()
         );
         // Spaces before and after the words of a one-line `pre` take room.
         let q = two_line_p(&mut d, body);
@@ -7623,7 +9024,10 @@ mod rendered_text_tests {
         let (_h, body) = d.with_page();
         let p = two_line_p(&mut d, body);
         // "राजस्थान के": र ा ज स ् थ ा न, a space, क े.
-        d.add_text(p, "\u{930}\u{93e}\u{91c}\u{938}\u{94d}\u{925}\u{93e}\u{928} \u{915}\u{947}");
+        d.add_text(
+            p,
+            "\u{930}\u{93e}\u{91c}\u{938}\u{94d}\u{925}\u{93e}\u{928} \u{915}\u{947}",
+        );
         assert_eq!(rendered_text_len(&d, p), 7);
         let q = two_line_p(&mut d, body);
         d.add_text(q, "cafe\u{301} co\u{ad}operate\u{200b}s");
@@ -7637,7 +9041,10 @@ mod rendered_text_tests {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         let p = two_line_p(&mut d, body);
-        d.set_text_lines(p, &[(100.0, 272.0, 640.0, 24.0), (100.0, 300.0, 640.0, 24.0)]);
+        d.set_text_lines(
+            p,
+            &[(100.0, 272.0, 640.0, 24.0), (100.0, 300.0, 640.0, 24.0)],
+        );
         d.add_text(p, &"word ".repeat(40));
         assert_eq!(rendered_text_len(&d, p), 199);
         assert_eq!(
@@ -7656,16 +9063,25 @@ mod rendered_text_tests {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
         let p = two_line_p(&mut d, body);
-        d.set_text_lines(p, &[(100.0, 272.0, 640.0, 24.0), (100.0, 300.0, 640.0, 24.0)]);
+        d.set_text_lines(
+            p,
+            &[(100.0, 272.0, 640.0, 24.0), (100.0, 300.0, 640.0, 24.0)],
+        );
         d.add_text(p, "An opening line ");
         let span = d.add(Some(p), "span");
         d.set_style(span, "display", "inline");
         d.set_style(span, "whiteSpace", "pre-wrap");
         d.add_text(span, &text);
-        assert_eq!(rendered_text_len(&d, p), "An opening line ".len() + 22 * 8 - 4);
+        assert_eq!(
+            rendered_text_len(&d, p),
+            "An opening line ".len() + 22 * 8 - 4
+        );
 
         let whole = two_line_p(&mut d, body);
-        d.set_text_lines(whole, &[(100.0, 272.0, 640.0, 24.0), (100.0, 300.0, 640.0, 24.0)]);
+        d.set_text_lines(
+            whole,
+            &[(100.0, 272.0, 640.0, 24.0), (100.0, 300.0, 640.0, 24.0)],
+        );
         d.set_style(whole, "whiteSpace", "pre-wrap");
         d.add_text(whole, &format!("An opening line {text}"));
         assert_eq!(rendered_text_len(&d, whole), rendered_text_len(&d, p));
@@ -7752,7 +9168,11 @@ mod rendered_text_tests {
             d.set_style(inline, "contentVisibility", "hidden");
             d.add_text(inline, "shown ");
             d.add_text(r, "after");
-            assert_eq!(rendered_text_len(&d, r), "Before shown after".len(), "{display}");
+            assert_eq!(
+                rendered_text_len(&d, r),
+                "Before shown after".len(),
+                "{display}"
+            );
         }
     }
 
@@ -7811,7 +9231,11 @@ mod rendered_text_tests {
     fn a_space_beside_an_empty_atomic_inline_at_the_edge_counts() {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();
-        for (tag, display) in [("img", "inline"), ("input", "inline-block"), ("span", "inline-block")] {
+        for (tag, display) in [
+            ("img", "inline"),
+            ("input", "inline-block"),
+            ("span", "inline-block"),
+        ] {
             let r = two_line_p(&mut d, body);
             let boxed = d.add(Some(r), tag);
             d.set_style(boxed, "display", display);

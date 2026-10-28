@@ -76,7 +76,12 @@ fn findings(engine: &BrowserEngine, port: u16, fixture: &str, rule: &str) -> Vec
         .into_iter()
         .filter(|f| f.antipattern == rule)
         .map(|f| {
-            let selector = f.extras.get("selector").and_then(|s| s.as_str()).unwrap_or("").to_string();
+            let selector = f
+                .extras
+                .get("selector")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string();
             (f.snippet, selector)
         })
         .collect()
@@ -114,20 +119,36 @@ fn text_rules_score_only_copies_a_reader_can_see() {
             "#flag-shell-cut",
             "#flag-shell-desktop",
         ],
-        &["#pass-parked-date", "#pass-edge-sliver", "#pass-cut-copy", "#pass-sliver-copy", "#pass-shell-track-sliver"],
+        &[
+            "#pass-parked-date",
+            "#pass-edge-sliver",
+            "#pass-cut-copy",
+            "#pass-sliver-copy",
+            "#pass-shell-track-sliver",
+        ],
         "low-contrast",
     );
     assert_eq!(contrast.len(), 7, "only the flag cases: {contrast:?}");
 
     let tiny = findings(&engine, port, "on-screen.html", "tiny-text");
-    assert_cases(&tiny, &["#flag-zero-anchor"], &["#pass-zero-box"], "tiny-text");
+    assert_cases(
+        &tiny,
+        &["#flag-zero-anchor"],
+        &["#pass-zero-box"],
+        "tiny-text",
+    );
 
     let rhythm = findings(&engine, port, "on-screen.html", "heading-rhythm");
-    assert_eq!(rhythm.len(), 2, "the two crowded headings on screen: {rhythm:?}");
+    assert_eq!(
+        rhythm.len(),
+        2,
+        "the two crowded headings on screen: {rhythm:?}"
+    );
     assert!(
         rhythm
             .iter()
-            .all(|(snippet, _)| snippet.ends_with("(2 headings on page)") && !snippet.contains("Pass Parked Slide")),
+            .all(|(snippet, _)| snippet.ends_with("(2 headings on page)")
+                && !snippet.contains("Pass Parked Slide")),
         "the parked slide's heading is neither reported nor counted: {rhythm:?}"
     );
 }

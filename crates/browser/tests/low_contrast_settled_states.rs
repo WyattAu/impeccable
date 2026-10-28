@@ -63,24 +63,48 @@ fn contrast_is_read_at_the_state_a_visitor_meets() {
     let Some(engine) = engine() else { return };
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/low-contrast-settled-states.html");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     let low: Vec<(&str, &str, &str)> = findings
         .iter()
         .filter(|f| f.antipattern == "low-contrast")
         .map(|f| {
             (
-                f.extras.get("selector").and_then(|v| v.as_str()).unwrap_or(""),
+                f.extras
+                    .get("selector")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(""),
                 f.severity.as_str(),
                 f.snippet.as_str(),
             )
         })
         .collect();
     eprintln!("{low:#?}");
-    let severity = |id: &str| low.iter().find(|(s, ..)| s.contains(id)).map(|(_, sev, _)| *sev);
-    assert_eq!(severity("flag-cta-waiting-out-its-entrance"), Some("warning"), "{low:#?}");
-    assert_eq!(severity("flag-white-link-on-white-card"), Some("warning"), "{low:#?}");
-    assert!(severity("flag-row-in-a-paused-breath").is_some(), "{low:#?}");
+    let severity = |id: &str| {
+        low.iter()
+            .find(|(s, ..)| s.contains(id))
+            .map(|(_, sev, _)| *sev)
+    };
+    assert_eq!(
+        severity("flag-cta-waiting-out-its-entrance"),
+        Some("warning"),
+        "{low:#?}"
+    );
+    assert_eq!(
+        severity("flag-white-link-on-white-card"),
+        Some("warning"),
+        "{low:#?}"
+    );
+    assert!(
+        severity("flag-row-in-a-paused-breath").is_some(),
+        "{low:#?}"
+    );
     assert_eq!(severity("flag-footer-slogan"), Some("warning"), "{low:#?}");
-    assert_eq!(severity("advisory-footer-wordmark"), Some("advisory"), "{low:#?}");
+    assert_eq!(
+        severity("advisory-footer-wordmark"),
+        Some("advisory"),
+        "{low:#?}"
+    );
     assert!(!low.iter().any(|(s, ..)| s.contains("pass-")), "{low:#?}");
 }

@@ -5,10 +5,7 @@ use serde_json::{json, Value};
 
 /// Rules in registry order, optionally narrowed by `--scope` and
 /// `--no-advisory` the same way a scan would drop them from the report.
-pub fn collect_catalog_rules<'a>(
-    scopes: &'a [String],
-    no_advisory: bool,
-) -> Vec<&'static Antipattern> {
+pub fn collect_catalog_rules(scopes: &[String], no_advisory: bool) -> Vec<&'static Antipattern> {
     all_antipatterns()
         .filter(|rule| {
             if no_advisory && rule.severity == Some("advisory") {
@@ -125,7 +122,7 @@ mod tests {
         assert!(rules.iter().any(|r| r.id == "overused-font"));
         assert!(rules
             .iter()
-            .all(|r| r.scopes.unwrap_or(&[]).iter().any(|s| *s == "type")));
+            .all(|r| r.scopes.unwrap_or(&[]).contains(&"type")));
         assert!(!rules.iter().any(|r| r.id == "side-tab"));
         assert!(!rules.iter().any(|r| r.id == "nested-cards"));
     }

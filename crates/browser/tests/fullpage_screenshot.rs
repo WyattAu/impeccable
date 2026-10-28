@@ -16,9 +16,7 @@ use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 
 use base64::Engine as _;
-use impeccable_browser::{
-    detect_url_evidence, origin, BrowserEngine, Evidence, EvidenceRequest,
-};
+use impeccable_browser::{detect_url_evidence, origin, BrowserEngine, Evidence, EvidenceRequest};
 use impeccable_core::findings::Finding;
 use impeccable_detect::engines::ScanOptions;
 
@@ -132,19 +130,30 @@ fn rect_of(evidence: &Evidence, selector: &str) -> [f64; 4] {
         .element_rects
         .get(selector)
         .and_then(|v| v.as_array())
-        .unwrap_or_else(|| panic!("no rect for {selector}: {:?}", evidence.element_rects.keys()));
+        .unwrap_or_else(|| {
+            panic!(
+                "no rect for {selector}: {:?}",
+                evidence.element_rects.keys()
+            )
+        });
     let v: Vec<f64> = r.iter().filter_map(|n| n.as_f64()).collect();
     [v[0], v[1], v[2], v[3]]
 }
 
-fn flagged<'a>(findings: &'a [Finding], evidence: &'a Evidence) -> Vec<(&'a str, &'a str, &'a str)> {
+fn flagged<'a>(
+    findings: &'a [Finding],
+    evidence: &'a Evidence,
+) -> Vec<(&'a str, &'a str, &'a str)> {
     findings
         .iter()
         .zip(&evidence.origins)
         .map(|(f, o)| {
             (
                 f.antipattern.as_str(),
-                f.extras.get("selector").and_then(|v| v.as_str()).unwrap_or(""),
+                f.extras
+                    .get("selector")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(""),
                 *o,
             )
         })
@@ -155,14 +164,24 @@ fn flagged<'a>(findings: &'a [Finding], evidence: &'a Evidence) -> Vec<(&'a str,
 fn a_tall_page_paints_to_its_foot() {
     let Some(engine) = engine() else { return };
     let port = serve();
-    let Some((findings, evidence)) =
-        scan(&engine, port, "fullpage-screenshot.html", (1280, 800), &EvidenceRequest::default())
-    else {
+    let Some((findings, evidence)) = scan(
+        &engine,
+        port,
+        "fullpage-screenshot.html",
+        (1280, 800),
+        &EvidenceRequest::default(),
+    ) else {
         return;
     };
     let all = flagged(&findings, &evidence);
-    assert!(all.contains(&("low-contrast", "#flag-foot-copy", origin::SCAN)), "{all:?}");
-    assert!(!all.iter().any(|(_, s, _)| *s == "#pass-foot-copy"), "{all:?}");
+    assert!(
+        all.contains(&("low-contrast", "#flag-foot-copy", origin::SCAN)),
+        "{all:?}"
+    );
+    assert!(
+        !all.iter().any(|(_, s, _)| *s == "#pass-foot-copy"),
+        "{all:?}"
+    );
 
     let shot = evidence.screenshot.as_ref().expect("screenshot");
     assert!(shot.document_height > 4000.0, "{}", shot.document_height);
@@ -172,20 +191,34 @@ fn a_tall_page_paints_to_its_foot() {
     let rect = rect_of(&evidence, "#flag-foot-copy");
     assert!(rect[1] > 4000.0, "{rect:?}");
     // The faint copy is light grey on white; its glyphs still spread.
-    assert!(luma_spread(&img, rect) > 20, "the flagged copy is blank in the screenshot");
+    assert!(
+        luma_spread(&img, rect) > 20,
+        "the flagged copy is blank in the screenshot"
+    );
     // The green marker under it, in the should-pass column too.
     let marker = [rect[0], rect[1] + rect[3] + 16.0, 420.0, 40.0];
-    assert!(luma_spread(&img, [20.0, marker[1], 900.0, 40.0]) > 60, "marker row is blank");
-    assert!(evidence.element_shots.is_empty(), "{:?}", evidence.element_shots.len());
+    assert!(
+        luma_spread(&img, [20.0, marker[1], 900.0, 40.0]) > 60,
+        "marker row is blank"
+    );
+    assert!(
+        evidence.element_shots.is_empty(),
+        "{:?}",
+        evidence.element_shots.len()
+    );
 }
 
 #[test]
 fn a_wide_page_is_captured_to_its_right_edge() {
     let Some(engine) = engine() else { return };
     let port = serve();
-    let Some((_, evidence)) =
-        scan(&engine, port, "fullpage-screenshot.html", (390, 844), &EvidenceRequest::default())
-    else {
+    let Some((_, evidence)) = scan(
+        &engine,
+        port,
+        "fullpage-screenshot.html",
+        (390, 844),
+        &EvidenceRequest::default(),
+    ) else {
         return;
     };
     let shot = evidence.screenshot.as_ref().expect("screenshot");
@@ -214,11 +247,18 @@ fn a_body_scroller_page_is_captured_by_scrolling_the_body() {
         return;
     };
     let all = flagged(&findings, &evidence);
-    assert!(all.contains(&("low-contrast", "#flag-scroller-foot-copy", origin::SCAN)), "{all:?}");
+    assert!(
+        all.contains(&("low-contrast", "#flag-scroller-foot-copy", origin::SCAN)),
+        "{all:?}"
+    );
     // Only the visual pass can measure white text on a photo, and the photo
     // sits below the body scroller's fold.
     assert!(
-        all.contains(&("low-contrast", "#flag-scroller-photo-copy", origin::VISUAL_CONTRAST)),
+        all.contains(&(
+            "low-contrast",
+            "#flag-scroller-photo-copy",
+            origin::VISUAL_CONTRAST
+        )),
         "{all:?}"
     );
     // The walk cannot read vector paint, so the verdict is the pixel pass's,
@@ -228,16 +268,24 @@ fn a_body_scroller_page_is_captured_by_scrolling_the_body() {
         .zip(&evidence.origins)
         .find(|(f, o)| {
             **o == origin::VISUAL_CONTRAST
-                && f.extras.get("selector").and_then(|v| v.as_str()) == Some("#flag-scroller-vector-copy")
+                && f.extras.get("selector").and_then(|v| v.as_str())
+                    == Some("#flag-scroller-vector-copy")
         })
         .unwrap_or_else(|| panic!("no pixel finding for the vector copy: {all:?}"));
-    assert!(pixel.0.snippet.starts_with("pixel contrast "), "{}", pixel.0.snippet);
+    assert!(
+        pixel.0.snippet.starts_with("pixel contrast "),
+        "{}",
+        pixel.0.snippet
+    );
     for unwanted in [
         "#pass-scroller-photo-copy",
         "#pass-scroller-vector-copy",
         "#pass-scroller-foot-copy",
     ] {
-        assert!(!all.iter().any(|(_, s, _)| *s == unwanted), "{unwanted} flagged: {all:?}");
+        assert!(
+            !all.iter().any(|(_, s, _)| *s == unwanted),
+            "{unwanted} flagged: {all:?}"
+        );
     }
 
     let shot = evidence.screenshot.as_ref().expect("screenshot");
@@ -252,7 +300,10 @@ fn a_body_scroller_page_is_captured_by_scrolling_the_body() {
     ] {
         let rect = rect_of(&evidence, selector);
         assert!(rect[1] > 2000.0, "{selector}: {rect:?}");
-        assert!(luma_spread(&img, rect) > 10, "{selector} is blank in the screenshot");
+        assert!(
+            luma_spread(&img, rect) > 10,
+            "{selector} is blank in the screenshot"
+        );
     }
     let foot = rect_of(&evidence, "#flag-scroller-foot-copy");
     assert!(
@@ -269,16 +320,36 @@ fn a_body_scroller_page_is_captured_by_scrolling_the_body() {
         let y1 = y1.min(img.height());
         (y0..y1.saturating_sub(3))
             .step_by(4)
-            .flat_map(|y| (0..img.width().saturating_sub(3)).step_by(4).map(move |x| (x, y)))
-            .filter(|&(x, y)| (0..4).all(|dy| (0..4).all(|dx| pick(img.get_pixel(x + dx, y + dy).0))))
+            .flat_map(|y| {
+                (0..img.width().saturating_sub(3))
+                    .step_by(4)
+                    .map(move |x| (x, y))
+            })
+            .filter(|&(x, y)| {
+                (0..4).all(|dy| (0..4).all(|dx| pick(img.get_pixel(x + dx, y + dy).0)))
+            })
             .count()
     };
     let badge = |p: [u8; 3]| p[0] > 170 && p[1] < 70 && p[2] > 50 && p[2] < 140;
     let tip = |p: [u8; 3]| p[0] < 70 && p[1] > 110 && p[1] < 170 && p[2] > 170;
-    assert!(blocks(0, 800, &badge) > 200, "the fixed badge is missing from the first viewport");
-    assert_eq!(blocks(800, img.height(), &badge), 0, "the fixed badge repeats below the first viewport");
-    assert!(blocks(0, 800, &tip) > 200, "the anchored tooltip is missing from the first viewport");
-    assert_eq!(blocks(800, img.height(), &tip), 0, "the anchored tooltip repeats below the first viewport");
+    assert!(
+        blocks(0, 800, &badge) > 200,
+        "the fixed badge is missing from the first viewport"
+    );
+    assert_eq!(
+        blocks(800, img.height(), &badge),
+        0,
+        "the fixed badge repeats below the first viewport"
+    );
+    assert!(
+        blocks(0, 800, &tip) > 200,
+        "the anchored tooltip is missing from the first viewport"
+    );
+    assert_eq!(
+        blocks(800, img.height(), &tip),
+        0,
+        "the anchored tooltip repeats below the first viewport"
+    );
 }
 
 #[test]
@@ -295,8 +366,14 @@ fn a_fixed_scroll_frame_page_is_captured_by_scrolling_the_frame() {
         return;
     };
     let all = flagged(&findings, &evidence);
-    assert!(all.contains(&("low-contrast", "#flag-frame-foot-copy", origin::SCAN)), "{all:?}");
-    assert!(!all.iter().any(|(_, s, _)| *s == "#pass-frame-foot-copy"), "{all:?}");
+    assert!(
+        all.contains(&("low-contrast", "#flag-frame-foot-copy", origin::SCAN)),
+        "{all:?}"
+    );
+    assert!(
+        !all.iter().any(|(_, s, _)| *s == "#pass-frame-foot-copy"),
+        "{all:?}"
+    );
 
     let shot = evidence.screenshot.as_ref().expect("screenshot");
     assert_eq!(shot.method, impeccable_browser::fullpage::method::STITCHED);
@@ -304,7 +381,10 @@ fn a_fixed_scroll_frame_page_is_captured_by_scrolling_the_frame() {
     let img = decode(&shot.jpeg_base64);
     let rect = rect_of(&evidence, "#flag-frame-foot-copy");
     assert!(rect[1] > 3000.0, "{rect:?}");
-    assert!(luma_spread(&img, rect) > 20, "the flagged copy is blank in the screenshot");
+    assert!(
+        luma_spread(&img, rect) > 20,
+        "the flagged copy is blank in the screenshot"
+    );
     assert!(
         luma_spread(&img, [20.0, rect[1] + rect[3] + 16.0, 900.0, 40.0]) > 60,
         "marker row is blank"
@@ -344,9 +424,13 @@ fn an_element_past_the_cut_gets_its_own_shot() {
         max_screenshot_height: 1500.0,
         ..EvidenceRequest::default()
     };
-    let Some((_, evidence)) =
-        scan(&engine, port, "fullpage-screenshot.html", (1280, 800), &request)
-    else {
+    let Some((_, evidence)) = scan(
+        &engine,
+        port,
+        "fullpage-screenshot.html",
+        (1280, 800),
+        &request,
+    ) else {
         return;
     };
     let shot = evidence.screenshot.as_ref().expect("screenshot");
@@ -365,8 +449,14 @@ fn an_element_past_the_cut_gets_its_own_shot() {
     assert_eq!(img.height() as f64, element.height);
     let r = element.rect;
     assert!(r[1] >= 0.0 && r[1] + r[3] <= element.height, "{r:?}");
-    assert!((r[2] - rect[2]).abs() < 1.0 && (r[3] - rect[3]).abs() < 1.0, "{r:?} vs {rect:?}");
-    assert!(luma_spread(&img, r) > 20, "the element shot is blank at the element");
+    assert!(
+        (r[2] - rect[2]).abs() < 1.0 && (r[3] - rect[3]).abs() < 1.0,
+        "{r:?} vs {rect:?}"
+    );
+    assert!(
+        luma_spread(&img, r) > 20,
+        "the element shot is blank at the element"
+    );
     // Nothing inside the cut gets a shot of its own.
     assert!(
         evidence.element_shots.iter().all(|s| {
@@ -381,20 +471,35 @@ fn an_element_past_the_cut_gets_its_own_shot() {
 fn a_right_to_left_page_records_where_its_screenshot_starts() {
     let Some(engine) = engine() else { return };
     let port = serve();
-    let Some((findings, evidence)) =
-        scan(&engine, port, "fullpage-screenshot-rtl.html", (390, 844), &EvidenceRequest::default())
-    else {
+    let Some((findings, evidence)) = scan(
+        &engine,
+        port,
+        "fullpage-screenshot-rtl.html",
+        (390, 844),
+        &EvidenceRequest::default(),
+    ) else {
         return;
     };
     let all = flagged(&findings, &evidence);
-    assert!(all.contains(&("low-contrast", "#flag-rtl-copy", origin::SCAN)), "{all:?}");
-    assert!(!all.iter().any(|(_, s, _)| *s == "#pass-rtl-copy"), "{all:?}");
+    assert!(
+        all.contains(&("low-contrast", "#flag-rtl-copy", origin::SCAN)),
+        "{all:?}"
+    );
+    assert!(
+        !all.iter().any(|(_, s, _)| *s == "#pass-rtl-copy"),
+        "{all:?}"
+    );
 
     // The body scrolls from the right, and the 900px grid overflows 510px
     // left of the viewport, at negative document x. The image starts there.
     let shot = evidence.screenshot.as_ref().expect("screenshot");
     assert!((shot.width - 900.0).abs() <= 16.0, "{}", shot.width);
-    assert!((shot.origin_x - (390.0 - shot.width)).abs() <= 16.0, "{} {}", shot.origin_x, shot.width);
+    assert!(
+        (shot.origin_x - (390.0 - shot.width)).abs() <= 16.0,
+        "{} {}",
+        shot.origin_x,
+        shot.width
+    );
     let img = decode(&shot.jpeg_base64);
     assert_eq!(img.width() as f64, shot.width);
     let rect = rect_of(&evidence, "#flag-rtl-copy");
@@ -410,20 +515,39 @@ fn a_right_to_left_page_records_where_its_screenshot_starts() {
     let green = |p: [u8; 3]| p[1] > 90 && p[0] < 70 && p[2] < 110;
     let blue = |p: [u8; 3]| p[2] > 150 && p[0] < 90 && p[1] < 120;
     let at = |x: f64| img.get_pixel(x as u32, marker_y).0;
-    assert!(green(at(image_x + 200.0)), "no green marker at the image position: {:?}", at(image_x + 200.0));
-    assert!(blue(at(rect[0].max(0.0) + 200.0)), "the uncorrected position is not the other column: {:?}", at(rect[0].max(0.0) + 200.0));
+    assert!(
+        green(at(image_x + 200.0)),
+        "no green marker at the image position: {:?}",
+        at(image_x + 200.0)
+    );
+    assert!(
+        blue(at(rect[0].max(0.0) + 200.0)),
+        "the uncorrected position is not the other column: {:?}",
+        at(rect[0].max(0.0) + 200.0)
+    );
 
     // Nothing overflows at desktop width, and a page that scrolls from the
     // left keeps its origin at 0 however wide it is.
-    let Some((_, desktop)) =
-        scan(&engine, port, "fullpage-screenshot-rtl.html", (1280, 800), &EvidenceRequest::default())
-    else {
+    let Some((_, desktop)) = scan(
+        &engine,
+        port,
+        "fullpage-screenshot-rtl.html",
+        (1280, 800),
+        &EvidenceRequest::default(),
+    ) else {
         return;
     };
-    assert_eq!(desktop.screenshot.as_ref().expect("screenshot").origin_x, 0.0);
-    let Some((_, wide)) =
-        scan(&engine, port, "fullpage-screenshot.html", (390, 844), &EvidenceRequest::default())
-    else {
+    assert_eq!(
+        desktop.screenshot.as_ref().expect("screenshot").origin_x,
+        0.0
+    );
+    let Some((_, wide)) = scan(
+        &engine,
+        port,
+        "fullpage-screenshot.html",
+        (390, 844),
+        &EvidenceRequest::default(),
+    ) else {
         return;
     };
     let wide_shot = wide.screenshot.as_ref().expect("screenshot");
@@ -458,15 +582,25 @@ fn a_scroller_measured_mid_scroll_keeps_the_band_above_it() {
     };
     let mut browser = engine.launch().expect("launch");
     let url = format!("http://127.0.0.1:{port}/offset-scroller.html");
-    let (_, evidence) = detect_url_evidence(&mut browser, &url, &options, "load", 100, &EvidenceRequest::default())
-        .expect("evidence scan");
+    let (_, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &options,
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("evidence scan");
     browser.close();
     let shot = evidence.screenshot.as_ref().expect("screenshot");
     assert_eq!(shot.method, impeccable_browser::fullpage::method::STITCHED);
     let img = decode(&shot.jpeg_base64);
     // The band is the image's first hundred rows, as the rects measured it.
     let p = img.get_pixel(40, 50).0;
-    assert!(p[1] > 90 && p[0] < 60, "band rows are not where they were measured: {p:?}");
+    assert!(
+        p[1] > 90 && p[0] < 60,
+        "band rows are not where they were measured: {p:?}"
+    );
 }
 
 /// A 100vh app shell that scrolls its own frame inside the body's default
@@ -494,8 +628,15 @@ fn a_shell_inside_a_body_margin_is_captured_by_scrolling_the_shell() {
     };
     let mut browser = engine.launch().expect("launch");
     let url = format!("http://127.0.0.1:{port}/margin-shell.html");
-    let (_, evidence) = detect_url_evidence(&mut browser, &url, &options, "load", 100, &EvidenceRequest::default())
-        .expect("evidence scan");
+    let (_, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &options,
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("evidence scan");
     browser.close();
     let shot = evidence.screenshot.as_ref().expect("screenshot");
     assert_eq!(shot.method, impeccable_browser::fullpage::method::STITCHED);
@@ -503,7 +644,10 @@ fn a_shell_inside_a_body_margin_is_captured_by_scrolling_the_shell() {
     let img = decode(&shot.jpeg_base64);
     // The marker under the shell's 3000px of content, 8px down for the margin.
     let p = img.get_pixel(40, 8 + 3000 + 30).0;
-    assert!(p[1] > 90 && p[0] < 60 && p[2] < 110, "the marker below the fold is missing: {p:?}");
+    assert!(
+        p[1] > 90 && p[0] < 60 && p[2] < 110,
+        "the marker below the fold is missing: {p:?}"
+    );
 }
 
 /// A 100vh app shell that scrolls its own frame, with a footer below it, so
@@ -533,8 +677,15 @@ fn a_footer_under_a_scrolled_shell_reaches_the_screenshot() {
     };
     let mut browser = engine.launch().expect("launch");
     let url = format!("http://127.0.0.1:{port}/");
-    let (_, evidence) = detect_url_evidence(&mut browser, &url, &options, "load", 100, &EvidenceRequest::default())
-        .expect("evidence scan");
+    let (_, evidence) = detect_url_evidence(
+        &mut browser,
+        &url,
+        &options,
+        "load",
+        100,
+        &EvidenceRequest::default(),
+    )
+    .expect("evidence scan");
     browser.close();
     let shot = evidence.screenshot.as_ref().expect("screenshot");
     assert_eq!(shot.method, impeccable_browser::fullpage::method::STITCHED);
@@ -542,9 +693,15 @@ fn a_footer_under_a_scrolled_shell_reaches_the_screenshot() {
     let img = decode(&shot.jpeg_base64);
     // The shell's content is white to its foot; the footer follows it.
     let p = img.get_pixel(40, 2900).0;
-    assert!(p[0] > 200 && p[1] > 200, "the shell's content is not white: {p:?}");
+    assert!(
+        p[0] > 200 && p[1] > 200,
+        "the shell's content is not white: {p:?}"
+    );
     let p = img.get_pixel(40, 3075).0;
-    assert!(p[1] > 90 && p[0] < 60 && p[2] < 110, "the footer below the shell is missing: {p:?}");
+    assert!(
+        p[1] > 90 && p[0] < 60 && p[2] < 110,
+        "the footer below the shell is missing: {p:?}"
+    );
 }
 
 fn serve_page(body: &'static str) -> u16 {
@@ -640,12 +797,20 @@ const FIXED_BACKDROP_PAGE: &str = r#"<!DOCTYPE html>
 <div class="spacer" style="height: 1200px"></div>
 </body></html>"#;
 
-fn element_shot<'a>(evidence: &'a Evidence, selector: &str) -> &'a impeccable_browser::fullpage::ElementShot {
+fn element_shot<'a>(
+    evidence: &'a Evidence,
+    selector: &str,
+) -> &'a impeccable_browser::fullpage::ElementShot {
     evidence
         .element_shots
         .iter()
         .find(|s| s.selector == selector)
-        .unwrap_or_else(|| panic!("no shot for {selector}: {:?}", evidence.element_rects.keys()))
+        .unwrap_or_else(|| {
+            panic!(
+                "no shot for {selector}: {:?}",
+                evidence.element_rects.keys()
+            )
+        })
 }
 
 #[test]
@@ -663,7 +828,10 @@ fn an_element_shot_hides_the_fixed_sheet_over_the_element() {
     let red = share(&img, shot.rect, |p| p[0] > 170 && p[1] < 70 && p[2] < 70);
     assert!(red < 0.2, "the sheet covers the element in its shot: {red}");
     let white = share(&img, shot.rect, |p| p[0] > 230 && p[1] > 230 && p[2] > 230);
-    assert!(white > 0.5, "the element's own white box is missing: {white}");
+    assert!(
+        white > 0.5,
+        "the element's own white box is missing: {white}"
+    );
     assert_eq!(shot.hidden_covers, vec!["aside.sheet".to_string()]);
 }
 
@@ -676,11 +844,17 @@ fn an_element_shot_keeps_a_fixed_backdrop_under_the_element() {
     };
     let (findings, evidence) = scan_page(&engine, FIXED_BACKDROP_PAGE, (390, 844), &request);
     let all = flagged(&findings, &evidence);
-    assert!(all.iter().any(|(_, s, _)| *s == "#over-backdrop"), "{all:?}");
+    assert!(
+        all.iter().any(|(_, s, _)| *s == "#over-backdrop"),
+        "{all:?}"
+    );
     let shot = element_shot(&evidence, "#over-backdrop");
     let img = decode(&shot.jpeg_base64);
     let blue = share(&img, shot.rect, |p| p[2] > 150 && p[0] < 80 && p[1] < 120);
-    assert!(blue > 0.5, "the backdrop under the element was hidden: {blue}");
+    assert!(
+        blue > 0.5,
+        "the backdrop under the element was hidden: {blue}"
+    );
 }
 
 /// A page that relays itself for the capture and comes back (round 13 row
@@ -755,32 +929,55 @@ const SLIDING_PAGE: &str = r#"<!DOCTYPE html>
 #[test]
 fn a_page_that_relays_itself_for_the_capture_is_stitched() {
     let Some(engine) = engine() else { return };
-    let (_, evidence) = scan_page(&engine, RELAYOUT_PAGE, (1280, 800), &EvidenceRequest::default());
+    let (_, evidence) = scan_page(
+        &engine,
+        RELAYOUT_PAGE,
+        (1280, 800),
+        &EvidenceRequest::default(),
+    );
     let shot = evidence.screenshot.as_ref().expect("screenshot");
     assert_eq!(shot.method, impeccable_browser::fullpage::method::STITCHED);
     assert_eq!(shot.height, shot.document_height);
     let img = decode(&shot.jpeg_base64);
     let green = |p: [u8; 3]| p[1] > 100 && p[0] < 40 && p[2] < 90;
     // The column is back at x 400 in every tile.
-    assert!(share(&img, [420.0, 130.0, 260.0, 220.0], green) > 0.9, "the block is not at rest");
-    assert!(share(&img, [20.0, 130.0, 360.0, 220.0], green) < 0.05, "the block is folded left");
+    assert!(
+        share(&img, [420.0, 130.0, 260.0, 220.0], green) > 0.9,
+        "the block is not at rest"
+    );
+    assert!(
+        share(&img, [20.0, 130.0, 360.0, 220.0], green) < 0.05,
+        "the block is folded left"
+    );
     let red = |p: [u8; 3]| p[0] > 170 && p[1] < 70 && p[2] < 70;
     let blue = |p: [u8; 3]| p[2] > 150 && p[0] < 60 && p[1] < 90;
-    assert!(share(&img, [0.0, 65.0, 1280.0, 40.0], red) > 0.9, "the bar is missing where it sits");
+    assert!(
+        share(&img, [0.0, 65.0, 1280.0, 40.0], red) > 0.9,
+        "the bar is missing where it sits"
+    );
     let later_top = 60.0 + 50.0 + 300.0 + 2.0 * 220.0 + 1500.0;
-    assert!(share(&img, [0.0, later_top + 5.0, 1280.0, 40.0], blue) > 0.9, "the later bar is missing where it sits");
+    assert!(
+        share(&img, [0.0, later_top + 5.0, 1280.0, 40.0], blue) > 0.9,
+        "the later bar is missing where it sits"
+    );
     // A bar whose section starts 20px into a tile sticks at 64px there: that
     // tile is the only one that paints it, so it stays (it shows 44px low).
     let purple = |p: [u8; 3]| p[0] > 90 && p[0] < 170 && p[1] < 50 && p[2] > 150;
     let third_tile = 4.0 * 800.0;
     assert_eq!(later_top + 50.0 + 820.0, third_tile + 20.0);
-    assert!(share(&img, [0.0, third_tile + 69.0, 1280.0, 40.0], purple) > 0.9, "the bar stuck on its own tile is missing");
+    assert!(
+        share(&img, [0.0, third_tile + 69.0, 1280.0, 40.0], purple) > 0.9,
+        "the bar stuck on its own tile is missing"
+    );
     // A bar that sits at its offset only because its section starts on a
     // tile's top edge is in place there, not stuck, and stays.
     let orange = |p: [u8; 3]| p[0] > 220 && p[1] > 100 && p[1] < 180 && p[2] < 60;
     let fourth_top = later_top + 4000.0 + 50.0;
     assert_eq!(fourth_top, 8.0 * 800.0);
-    assert!(share(&img, [0.0, fourth_top + 5.0, 1280.0, 40.0], orange) > 0.9, "the bar on a tile edge is missing");
+    assert!(
+        share(&img, [0.0, fourth_top + 5.0, 1280.0, 40.0], orange) > 0.9,
+        "the bar on a tile edge is missing"
+    );
     let tiles = (shot.height / 800.0).ceil() as usize;
     for tile in 1..tiles {
         let top = tile as f64 * 800.0;
@@ -788,10 +985,19 @@ fn a_page_that_relays_itself_for_the_capture_is_stitched() {
             continue;
         }
         let row = [0.0, top + 5.0, 1280.0, 40.0];
-        assert!(share(&img, row, red) < 0.1, "the stuck bar repeats on tile {tile}");
-        assert!(share(&img, row, blue) < 0.1, "the later bar repeats on tile {tile}");
+        assert!(
+            share(&img, row, red) < 0.1,
+            "the stuck bar repeats on tile {tile}"
+        );
+        assert!(
+            share(&img, row, blue) < 0.1,
+            "the later bar repeats on tile {tile}"
+        );
         if top > third_tile {
-            assert!(share(&img, [0.0, top + 69.0, 1280.0, 40.0], purple) < 0.1, "the third bar repeats on tile {tile}");
+            assert!(
+                share(&img, [0.0, top + 69.0, 1280.0, 40.0], purple) < 0.1,
+                "the third bar repeats on tile {tile}"
+            );
         }
     }
 }
@@ -799,20 +1005,40 @@ fn a_page_that_relays_itself_for_the_capture_is_stitched() {
 #[test]
 fn a_page_that_never_stops_moving_keeps_its_beyond_viewport_capture() {
     let Some(engine) = engine() else { return };
-    let (_, evidence) = scan_page(&engine, TICKER_PAGE, (1280, 800), &EvidenceRequest::default());
+    let (_, evidence) = scan_page(
+        &engine,
+        TICKER_PAGE,
+        (1280, 800),
+        &EvidenceRequest::default(),
+    );
     let shot = evidence.screenshot.as_ref().expect("screenshot");
-    assert_eq!(shot.method, impeccable_browser::fullpage::method::BEYOND_VIEWPORT);
+    assert_eq!(
+        shot.method,
+        impeccable_browser::fullpage::method::BEYOND_VIEWPORT
+    );
 }
 
 #[test]
 fn a_page_that_only_slides_keeps_its_beyond_viewport_capture() {
     let Some(engine) = engine() else { return };
-    let (_, evidence) = scan_page(&engine, SLIDING_PAGE, (1280, 800), &EvidenceRequest::default());
+    let (_, evidence) = scan_page(
+        &engine,
+        SLIDING_PAGE,
+        (1280, 800),
+        &EvidenceRequest::default(),
+    );
     let shot = evidence.screenshot.as_ref().expect("screenshot");
-    assert_eq!(shot.method, impeccable_browser::fullpage::method::BEYOND_VIEWPORT);
+    assert_eq!(
+        shot.method,
+        impeccable_browser::fullpage::method::BEYOND_VIEWPORT
+    );
 }
 
-fn shot_of(engine: &BrowserEngine, page: &'static str, selector: &str) -> (image::RgbImage, impeccable_browser::fullpage::ElementShot) {
+fn shot_of(
+    engine: &BrowserEngine,
+    page: &'static str,
+    selector: &str,
+) -> (image::RgbImage, impeccable_browser::fullpage::ElementShot) {
     let request = EvidenceRequest {
         max_screenshot_height: 1500.0,
         ..EvidenceRequest::default()
@@ -954,7 +1180,10 @@ fn a_shared_tile_serves_only_elements_no_shown_layer_covers() {
     }
     assert!(a.hidden_covers.is_empty(), "{:?}", a.hidden_covers);
     assert_eq!(b.hidden_covers, vec!["div.bar".to_string()]);
-    assert_ne!(a.jpeg_base64, b.jpeg_base64, "the second element reused the first one's tile");
+    assert_ne!(
+        a.jpeg_base64, b.jpeg_base64,
+        "the second element reused the first one's tile"
+    );
 }
 
 /// An open modal dialog over the element: a visitor sees it, so the shot
@@ -999,7 +1228,11 @@ fn an_element_shot_keeps_a_modal_wrapped_in_a_fixed_backdrop() {
         ..EvidenceRequest::default()
     };
     let (_, evidence) = scan_page(&engine, WRAPPED_MODAL_PAGE, (390, 844), &request);
-    let Some(shot) = evidence.element_shots.iter().find(|s| s.selector == "#under-wrapped-modal") else {
+    let Some(shot) = evidence
+        .element_shots
+        .iter()
+        .find(|s| s.selector == "#under-wrapped-modal")
+    else {
         return;
     };
     assert!(shot.hidden_covers.is_empty(), "{:?}", shot.hidden_covers);
@@ -1042,7 +1275,11 @@ fn an_element_shot_keeps_an_open_modal() {
         ..EvidenceRequest::default()
     };
     let (_, evidence) = scan_page(&engine, MODAL_PAGE, (390, 844), &request);
-    let Some(shot) = evidence.element_shots.iter().find(|s| s.selector == "#under-modal") else {
+    let Some(shot) = evidence
+        .element_shots
+        .iter()
+        .find(|s| s.selector == "#under-modal")
+    else {
         // The scan may report nothing under a modal; then there is no shot.
         return;
     };

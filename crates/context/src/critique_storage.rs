@@ -4,19 +4,28 @@ use crate::context::resolve_project_root;
 use crate::jsp;
 use crate::target_args::TargetOptions;
 use crate::target_slug::{legacy_slug_from_target, slug_from_target};
-use crate::util::{exists, iso_now, js_trim, json_pretty, node_read_error, read_dir_names, safe_read, Env};
+use crate::util::{
+    exists, iso_now, js_trim, json_pretty, node_read_error, read_dir_names, safe_read, Env,
+};
 use impeccable_common::Io;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
 pub fn get_critique_dir(cwd: &str, env: &Env) -> String {
-    jsp::join(&[&resolve_project_root(cwd, &TargetOptions::default(), env), ".impeccable", "critique"])
+    jsp::join(&[
+        &resolve_project_root(cwd, &TargetOptions::default(), env),
+        ".impeccable",
+        "critique",
+    ])
 }
 
 /// JS: nowFilenameStamp(date)
 pub fn now_filename_stamp() -> String {
     let iso = iso_now(); // 2026-05-12T18:30:00.123Z
-    let replaced: String = iso.chars().map(|c| if c == ':' || c == '.' { '-' } else { c }).collect();
+    let replaced: String = iso
+        .chars()
+        .map(|c| if c == ':' || c == '.' { '-' } else { c })
+        .collect();
     // remove /-\d+Z$/
     let bytes = replaced.as_bytes();
     let mut i = bytes.len() - 1; // 'Z'
@@ -45,7 +54,15 @@ fn serialize_frontmatter(obj: &Map<String, Value>) -> String {
             Value::Null => unreachable!(),
         };
         let needs_quotes = is_string && (s.contains(':') || s.contains('#'));
-        lines.push(format!("{}: {}", k, if needs_quotes { serde_json::to_string(&s).unwrap() } else { s }));
+        lines.push(format!(
+            "{}: {}",
+            k,
+            if needs_quotes {
+                serde_json::to_string(&s).unwrap()
+            } else {
+                s
+            }
+        ));
     }
     lines.push("---".to_string());
     lines.join("\n")
@@ -99,7 +116,11 @@ pub fn parse_frontmatter(text: &str) -> Map<String, Value> {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'\n' && rest[i + 1..].starts_with("---") {
-            let end = if i > 0 && bytes[i - 1] == b'\r' { i - 1 } else { i };
+            let end = if i > 0 && bytes[i - 1] == b'\r' {
+                i - 1
+            } else {
+                i
+            };
             inner = Some(&rest[..end]);
             break;
         }
@@ -108,10 +129,16 @@ pub fn parse_frontmatter(text: &str) -> Map<String, Value> {
     let Some(inner) = inner else { return out };
     for line in inner.split('\n') {
         let line = line.strip_suffix('\r').unwrap_or(line);
-        let Some(colon) = line.find(':') else { continue };
+        let Some(colon) = line.find(':') else {
+            continue;
+        };
         let key = js_trim(&line[..colon]);
         let value = js_trim(&line[colon + 1..]);
-        let v: Value = if value.len() >= 2 && value.starts_with('"') && value.ends_with('"') && !value[1..].contains('\n') {
+        let v: Value = if value.len() >= 2
+            && value.starts_with('"')
+            && value.ends_with('"')
+            && !value[1..].contains('\n')
+        {
             match serde_json::from_str::<Value>(value) {
                 Ok(parsed) => parsed,
                 Err(_) => Value::String(value.to_string()),
@@ -176,7 +203,10 @@ fn is_snapshot_name(f: &str) -> bool {
     }
     idx += 2;
     let rest = &f[idx..];
-    rest.ends_with(".md") && rest.len() > 3 && !rest[..rest.len() - 3].is_empty() && !rest.contains('\n')
+    rest.ends_with(".md")
+        && rest.len() > 3
+        && !rest[..rest.len() - 3].is_empty()
+        && !rest.contains('\n')
 }
 
 pub fn list_snapshots(suffix: &str, cwd: &str, env: &Env) -> Vec<String> {
@@ -184,8 +214,13 @@ pub fn list_snapshots(suffix: &str, cwd: &str, env: &Env) -> Vec<String> {
     if !exists(&dir) {
         return vec![];
     }
-    let Some(names) = read_dir_names(&dir) else { return vec![] };
-    let mut names: Vec<String> = names.into_iter().filter(|f| is_snapshot_name(f) && f.ends_with(suffix)).collect();
+    let Some(names) = read_dir_names(&dir) else {
+        return vec![];
+    };
+    let mut names: Vec<String> = names
+        .into_iter()
+        .filter(|f| is_snapshot_name(f) && f.ends_with(suffix))
+        .collect();
     names.sort();
     names.into_iter().map(|f| jsp::join(&[&dir, &f])).collect()
 }
@@ -249,7 +284,11 @@ fn hex_lower(bytes: &[u8]) -> String {
 fn read_snapshot_at(path: &str) -> Option<Snapshot> {
     let body = safe_read(path)?;
     let meta = parse_frontmatter(&body);
-    Some(Snapshot { path: path.to_string(), body, meta })
+    Some(Snapshot {
+        path: path.to_string(),
+        body,
+        meta,
+    })
 }
 
 /// JS #660: snapshotTargetIdentity(snapshot).
@@ -273,12 +312,19 @@ fn meta_closed(s: &Snapshot) -> bool {
 
 /// JS #660: readNewestSnapshot(slug).
 fn read_newest_snapshot(slug: &str, cwd: &str, env: &Env) -> Option<Snapshot> {
-    let fp = list_snapshots(&format!("__{}.md", slug), cwd, env).last()?.clone();
+    let fp = list_snapshots(&format!("__{}.md", slug), cwd, env)
+        .last()?
+        .clone();
     read_snapshot_at(&fp)
 }
 
 /// JS #660: readNewestSnapshotForIdentity(slug, targetIdentity).
-fn read_newest_snapshot_for_identity(slug: &str, target_identity: Option<&str>, cwd: &str, env: &Env) -> Option<Snapshot> {
+fn read_newest_snapshot_for_identity(
+    slug: &str,
+    target_identity: Option<&str>,
+    cwd: &str,
+    env: &Env,
+) -> Option<Snapshot> {
     let want = target_identity.map(|s| s.to_string());
     list_snapshots(&format!("__{}.md", slug), cwd, env)
         .iter()
@@ -319,7 +365,10 @@ fn close_snapshot(snapshot_file: &str, cwd: &str, env: &Env) -> Result<Option<St
     // body.replace(/^(---\r?\n[\s\S]*?)(\r?\n---)/, '$1\nclosed: true$2')
     let closed_body = insert_closed_flag(&snapshot.body);
     if closed_body == snapshot.body {
-        return Err(format!("Cannot close snapshot without frontmatter: {}", snapshot.path));
+        return Err(format!(
+            "Cannot close snapshot without frontmatter: {}",
+            snapshot.path
+        ));
     }
     let _ = std::fs::write(&snapshot.path, closed_body);
     Ok(Some(snapshot.path))
@@ -328,14 +377,18 @@ fn close_snapshot(snapshot_file: &str, cwd: &str, env: &Env) -> Result<Option<St
 /// Insert `\nclosed: true` before the closing `---` of the first frontmatter
 /// block. Mirrors the JS regex `/^(---\r?\n[\s\S]*?)(\r?\n---)/`.
 fn insert_closed_flag(body: &str) -> String {
-    static RE: once_cell::sync::Lazy<regex::Regex> =
-        once_cell::sync::Lazy::new(|| regex::Regex::new(r"^(---\r?\n[\s\S]*?)(\r?\n---)").expect("closed-flag RE"));
+    static RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+        regex::Regex::new(r"^(---\r?\n[\s\S]*?)(\r?\n---)").expect("closed-flag RE")
+    });
     RE.replace(body, "${1}\nclosed: true${2}").into_owned()
 }
 
 /// JS #660: isReadySlug(value).
 fn is_ready_slug(value: &str) -> bool {
-    !value.is_empty() && value.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    !value.is_empty()
+        && value
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
 pub fn read_latest_snapshot(slug: &str, cwd: &str, env: &Env) -> Option<Snapshot> {
@@ -349,7 +402,10 @@ pub fn read_latest_snapshot(slug: &str, cwd: &str, env: &Env) -> Option<Snapshot
 
 /// JS #660: readLatestSnapshotAcrossTargets({ cwd }).
 pub fn read_latest_snapshot_across_targets(cwd: &str, env: &Env) -> Option<Snapshot> {
-    let snapshots: Vec<Snapshot> = list_snapshots(".md", cwd, env).iter().filter_map(|f| read_snapshot_at(f)).collect();
+    let snapshots: Vec<Snapshot> = list_snapshots(".md", cwd, env)
+        .iter()
+        .filter_map(|f| read_snapshot_at(f))
+        .collect();
     let mut identified_slugs: std::collections::HashSet<String> = std::collections::HashSet::new();
     for s in &snapshots {
         if snapshot_target_identity(s).is_some() {
@@ -376,7 +432,11 @@ pub fn read_latest_snapshot_across_targets(cwd: &str, env: &Env) -> Option<Snaps
             latest_by_target.push((stream_key, s));
         }
     }
-    let mut open: Vec<Snapshot> = latest_by_target.into_iter().map(|(_, s)| s).filter(|s| !meta_closed(s)).collect();
+    let mut open: Vec<Snapshot> = latest_by_target
+        .into_iter()
+        .map(|(_, s)| s)
+        .filter(|s| !meta_closed(s))
+        .collect();
     // JS: .sort((a, b) => a.path.localeCompare(b.path)).at(-1)
     open.sort_by(|a, b| a.path.cmp(&b.path));
     open.pop()
@@ -418,11 +478,18 @@ fn read_newest_safe_snapshot_for_slugs(
     cwd: &str,
     env: &Env,
 ) -> Option<Snapshot> {
-    let current = slugs.first().and_then(|slug| read_newest_snapshot(slug, cwd, env));
+    let current = slugs
+        .first()
+        .and_then(|slug| read_newest_snapshot(slug, cwd, env));
     let legacy = target_identity.and_then(|identity| {
-        slugs.get(1).and_then(|slug| read_newest_snapshot_for_identity(slug, Some(identity), cwd, env))
+        slugs
+            .get(1)
+            .and_then(|slug| read_newest_snapshot_for_identity(slug, Some(identity), cwd, env))
     });
-    current.into_iter().chain(legacy).max_by(|a, b| a.path.cmp(&b.path))
+    current
+        .into_iter()
+        .chain(legacy)
+        .max_by(|a, b| a.path.cmp(&b.path))
 }
 
 fn read_newest_snapshot_for_identity_slugs(
@@ -431,11 +498,18 @@ fn read_newest_snapshot_for_identity_slugs(
     cwd: &str,
     env: &Env,
 ) -> Option<Snapshot> {
-    let current = slugs.first().and_then(|slug| read_newest_snapshot_for_identity(slug, target_identity, cwd, env));
+    let current = slugs
+        .first()
+        .and_then(|slug| read_newest_snapshot_for_identity(slug, target_identity, cwd, env));
     let legacy = target_identity.and_then(|identity| {
-        slugs.get(1).and_then(|slug| read_newest_snapshot_for_identity(slug, Some(identity), cwd, env))
+        slugs
+            .get(1)
+            .and_then(|slug| read_newest_snapshot_for_identity(slug, Some(identity), cwd, env))
     });
-    current.into_iter().chain(legacy).max_by(|a, b| a.path.cmp(&b.path))
+    current
+        .into_iter()
+        .chain(legacy)
+        .max_by(|a, b| a.path.cmp(&b.path))
 }
 
 pub fn run(args: &[String], io: &mut Io) -> i32 {
@@ -474,7 +548,10 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
                 }
             };
             let mut parsed_meta: Map<String, Value> = Map::new();
-            if let Some(m) = env.get("IMPECCABLE_CRITIQUE_META").filter(|s| !s.is_empty()) {
+            if let Some(m) = env
+                .get("IMPECCABLE_CRITIQUE_META")
+                .filter(|s| !s.is_empty())
+            {
                 if let Ok(Value::Object(o)) = serde_json::from_str::<Value>(m) {
                     parsed_meta = o;
                 }
@@ -508,9 +585,18 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             // second critique in the same UTC second cannot replace history.
             let mut written: Option<String> = None;
             for collision in 0..=9999u32 {
-                let suffix = if collision == 0 { String::new() } else { format!("~{:04}", collision) };
-                let file_path = jsp::join(&[&dir, &format!("{}{}__{}.md", timestamp, suffix, slug)]);
-                match std::fs::OpenOptions::new().write(true).create_new(true).open(&file_path) {
+                let suffix = if collision == 0 {
+                    String::new()
+                } else {
+                    format!("~{:04}", collision)
+                };
+                let file_path =
+                    jsp::join(&[&dir, &format!("{}{}__{}.md", timestamp, suffix, slug)]);
+                match std::fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&file_path)
+                {
                     Ok(mut f) => {
                         use std::io::Write;
                         let _ = f.write_all(contents.as_bytes());
@@ -530,7 +616,13 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
                     0
                 }
                 None => {
-                    io.err(&format!("{}\n", uncaught(&format!("Too many critique snapshots for {} at {}", slug, timestamp))));
+                    io.err(&format!(
+                        "{}\n",
+                        uncaught(&format!(
+                            "Too many critique snapshots for {} at {}",
+                            slug, timestamp
+                        ))
+                    ));
                     1
                 }
             }
@@ -540,7 +632,9 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             let format = rest.get(1).map(String::as_str);
             let slugs = slug_candidates(rest.first().map(String::as_str), &cwd);
             // JS: format && format !== '--json'  (format truthy = non-empty)
-            let bad_format = format.map(|f| !f.is_empty() && f != "--json").unwrap_or(false);
+            let bad_format = format
+                .map(|f| !f.is_empty() && f != "--json")
+                .unwrap_or(false);
             if slugs.is_empty() || bad_format {
                 io.err("usage: latest <slug-or-target> [--json]\n");
                 return 1;
@@ -555,13 +649,19 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             else {
                 return 2;
             };
-            let mut latest =
-                read_newest_snapshot_for_identity_slugs(&slugs, target_identity.as_deref(), &cwd, &env);
+            let mut latest = read_newest_snapshot_for_identity_slugs(
+                &slugs,
+                target_identity.as_deref(),
+                &cwd,
+                &env,
+            );
             if latest.is_none() && !ready_slug {
                 // Identity-less snapshots are safe only under the new/current
                 // collision-resistant slug. A pre-hash slug suffix alone cannot
                 // prove which long target owned the historical snapshot.
-                latest = slugs.first().and_then(|slug| read_newest_snapshot_for_identity(slug, None, &cwd, &env));
+                latest = slugs
+                    .first()
+                    .and_then(|slug| read_newest_snapshot_for_identity(slug, None, &cwd, &env));
             }
             let latest = latest.unwrap_or(newest_for_slug);
             if meta_closed(&latest) {
@@ -569,7 +669,10 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             }
             let recorded_target_identity = snapshot_target_identity(&latest);
             let matching_identity = recorded_target_identity == target_identity;
-            if ready_slug && target_path.as_deref().map(exists).unwrap_or(false) && !matching_identity {
+            if ready_slug
+                && target_path.as_deref().map(exists).unwrap_or(false)
+                && !matching_identity
+            {
                 io.err("ambiguous snapshot slug; use an explicit ./path or remove the local name collision\n");
                 return 2;
             }
@@ -585,7 +688,8 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
                 };
                 // JS strict `!==`: equal only when both are the same string;
                 // undefined/null on either side always differ.
-                let differ = !matches!((&recorded_fp, &target_fingerprint), (Some(a), Some(b)) if a == b);
+                let differ =
+                    !matches!((&recorded_fp, &target_fingerprint), (Some(a), Some(b)) if a == b);
                 if differ {
                     return match close_snapshot(&latest.path, &cwd, &env) {
                         Err(e) => {
@@ -598,7 +702,10 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             }
             if format_is_json {
                 let mut m = Map::new();
-                m.insert("snapshot_file".into(), Value::String(jsp::basename(&latest.path)));
+                m.insert(
+                    "snapshot_file".into(),
+                    Value::String(jsp::basename(&latest.path)),
+                );
                 m.insert("body".into(), Value::String(latest.body.clone()));
                 io.out(&format!("{}\n", json_pretty(&Value::Object(m))));
             } else {
@@ -618,7 +725,9 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             let snapshot_file = snapshot_file.unwrap();
             if jsp::basename(snapshot_file) != snapshot_file
                 || !is_snapshot_name(snapshot_file)
-                || !slugs.iter().any(|slug| snapshot_file.ends_with(&format!("__{}.md", slug)))
+                || !slugs
+                    .iter()
+                    .any(|slug| snapshot_file.ends_with(&format!("__{}.md", slug)))
             {
                 return 2;
             }
@@ -636,7 +745,9 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             // JS #660: a slug + filename does not prove ownership; require the
             // resolved target to match a modern snapshot's recorded identity.
             let recorded_target_identity = snapshot_target_identity(&snapshot);
-            let legacy_match = slugs.get(1).is_some_and(|slug| snapshot_file.ends_with(&format!("__{}.md", slug)));
+            let legacy_match = slugs
+                .get(1)
+                .is_some_and(|slug| snapshot_file.ends_with(&format!("__{}.md", slug)));
             if legacy_match && recorded_target_identity.is_none() {
                 return 2;
             }
@@ -714,10 +825,14 @@ pub fn js_number(s: &str) -> f64 {
         return f64::NEG_INFINITY;
     }
     if let Some(h) = t.strip_prefix("0x").or_else(|| t.strip_prefix("0X")) {
-        return i64::from_str_radix(h, 16).map(|v| v as f64).unwrap_or(f64::NAN);
+        return i64::from_str_radix(h, 16)
+            .map(|v| v as f64)
+            .unwrap_or(f64::NAN);
     }
     // Reject things Rust accepts but JS doesn't (e.g. "nan", "inf")
-    if t.chars().any(|c| c.is_ascii_alphabetic() && c != 'e' && c != 'E') {
+    if t.chars()
+        .any(|c| c.is_ascii_alphabetic() && c != 'e' && c != 'E')
+    {
         return f64::NAN;
     }
     t.parse::<f64>().unwrap_or(f64::NAN)
@@ -763,7 +878,10 @@ mod tests_660 {
         let base = std::env::temp_dir().join(format!(
             "impeccable-critique-{}-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
             // A per-process counter: Windows' clock is coarse enough that two
             // parallel tests can share a nanosecond stamp and then delete each
             // other's directories.
@@ -772,8 +890,13 @@ mod tests_660 {
         std::fs::create_dir_all(&base).unwrap();
         // Like Node's `realpathSync`: no `\\?\` verbatim prefix on Windows,
         // so paths the verb joins with `/` resolve under this root.
-        let real = std::fs::canonicalize(&base).unwrap().to_string_lossy().into_owned();
-        real.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(real)
+        let real = std::fs::canonicalize(&base)
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        real.strip_prefix(r"\\?\")
+            .map(str::to_string)
+            .unwrap_or(real)
     }
 
     fn run_capture(cwd: &str, args: &[&str]) -> (i32, String, String) {
@@ -801,9 +924,18 @@ mod tests_660 {
         // The file identity is the platform's resolved path (Node `path.resolve`
         // semantics through `jsp`), so it carries the host's separators.
         let expected_file = format!("file:{}", jsp::resolve(cwd, &["src/App.tsx"]));
-        assert_eq!(resolve_target_identity("src/App.tsx", cwd), Some(expected_file));
-        assert_eq!(resolve_target_identity("http://example.com/pricing/", cwd), Some("url:http://example.com/pricing".to_string()));
-        assert_eq!(resolve_target_identity("http://example.com", cwd), Some("url:http://example.com/".to_string()));
+        assert_eq!(
+            resolve_target_identity("src/App.tsx", cwd),
+            Some(expected_file)
+        );
+        assert_eq!(
+            resolve_target_identity("http://example.com/pricing/", cwd),
+            Some("url:http://example.com/pricing".to_string())
+        );
+        assert_eq!(
+            resolve_target_identity("http://example.com", cwd),
+            Some("url:http://example.com/".to_string())
+        );
         assert_eq!(resolve_target_identity("", cwd), None);
     }
 
@@ -843,13 +975,17 @@ mod tests_660 {
         // Wrong target identity: refused (exit 2), snapshot untouched.
         let (code, _, _) = run_capture(&cwd, &["close", "Other.tsx", name]);
         assert_eq!(code, 2);
-        assert!(!std::fs::read_to_string(jsp::join(&[&dir, name])).unwrap().contains("closed: true"));
+        assert!(!std::fs::read_to_string(jsp::join(&[&dir, name]))
+            .unwrap()
+            .contains("closed: true"));
 
         // Correct target: closes, prints the path, marks the file.
         let (code, out, _) = run_capture(&cwd, &["close", "App.tsx", name]);
         assert_eq!(code, 0);
         assert!(out.trim_end().ends_with(name));
-        assert!(std::fs::read_to_string(jsp::join(&[&dir, name])).unwrap().contains("closed: true"));
+        assert!(std::fs::read_to_string(jsp::join(&[&dir, name]))
+            .unwrap()
+            .contains("closed: true"));
 
         // Second close is a silent no-op (already closed) -> exit 2.
         let (code, _, _) = run_capture(&cwd, &["close", "App.tsx", name]);
@@ -883,7 +1019,8 @@ mod tests_660 {
         let cwd = tmp();
         let dir = jsp::join(&[&cwd, ".impeccable", "critique"]);
         std::fs::create_dir_all(&dir).unwrap();
-        let target = "https://example.com/a-very-long-directory-structure-with-many-segments/component-name";
+        let target =
+            "https://example.com/a-very-long-directory-structure-with-many-segments/component-name";
         let legacy_slug = legacy_slug_from_target(Some(target), &cwd).unwrap();
         assert_ne!(legacy_slug, slug_from_target(Some(target), &cwd).unwrap());
         let name = format!("2026-05-12T18-30-00Z__{legacy_slug}.md");
@@ -905,7 +1042,9 @@ mod tests_660 {
 
         let (code, _, _) = run_capture(&cwd, &["close", target, &name]);
         assert_eq!(code, 0);
-        assert!(std::fs::read_to_string(jsp::join(&[&dir, &name])).unwrap().contains("closed: true"));
+        assert!(std::fs::read_to_string(jsp::join(&[&dir, &name]))
+            .unwrap()
+            .contains("closed: true"));
 
         let _ = std::fs::remove_dir_all(&cwd);
     }
@@ -918,22 +1057,37 @@ mod tests_660 {
         let target = "https://example.com/first-prefix-that-is-long-enough/a-very-long-shared-tail/component-name";
         let collision = "https://example.com/second-prefix-that-is-long-enough/a-very-long-shared-tail/component-name";
         let legacy_slug = legacy_slug_from_target(Some(target), &cwd).unwrap();
-        assert_eq!(legacy_slug, legacy_slug_from_target(Some(collision), &cwd).unwrap());
-        assert_ne!(slug_from_target(Some(target), &cwd), slug_from_target(Some(collision), &cwd));
+        assert_eq!(
+            legacy_slug,
+            legacy_slug_from_target(Some(collision), &cwd).unwrap()
+        );
+        assert_ne!(
+            slug_from_target(Some(target), &cwd),
+            slug_from_target(Some(collision), &cwd)
+        );
 
         let unidentified_name = format!("2026-05-12T18-30-00Z__{legacy_slug}.md");
-        let unidentified_body = format!("---\nslug: {legacy_slug}\n---\n# Ambiguous legacy critique\n");
+        let unidentified_body =
+            format!("---\nslug: {legacy_slug}\n---\n# Ambiguous legacy critique\n");
         std::fs::write(jsp::join(&[&dir, &unidentified_name]), unidentified_body).unwrap();
 
         assert_eq!(run_capture(&cwd, &["latest", target]).0, 2);
         assert_eq!(run_capture(&cwd, &["latest", collision]).0, 2);
         assert_eq!(run_capture(&cwd, &["trend", target, "5"]).1.trim(), "[]");
-        assert_eq!(run_capture(&cwd, &["close", target, &unidentified_name]).0, 2);
+        assert_eq!(
+            run_capture(&cwd, &["close", target, &unidentified_name]).0,
+            2
+        );
         let (code, out, _) = run_capture(&cwd, &["latest", &legacy_slug]);
         assert_eq!(code, 0);
         assert!(out.contains("# Ambiguous legacy critique"));
-        assert!(run_capture(&cwd, &["trend", &legacy_slug, "5"]).1.contains(&legacy_slug));
-        assert_eq!(run_capture(&cwd, &["close", &legacy_slug, &unidentified_name]).0, 0);
+        assert!(run_capture(&cwd, &["trend", &legacy_slug, "5"])
+            .1
+            .contains(&legacy_slug));
+        assert_eq!(
+            run_capture(&cwd, &["close", &legacy_slug, &unidentified_name]).0,
+            0
+        );
 
         let identified_name = format!("2026-05-12T18-31-00Z__{legacy_slug}.md");
         let identity = resolve_target_identity(target, &cwd).unwrap();
@@ -946,9 +1100,14 @@ mod tests_660 {
 
         assert_eq!(run_capture(&cwd, &["latest", target]).0, 0);
         assert_eq!(run_capture(&cwd, &["latest", collision]).0, 2);
-        assert!(run_capture(&cwd, &["trend", target, "5"]).1.contains("target_identity"));
+        assert!(run_capture(&cwd, &["trend", target, "5"])
+            .1
+            .contains("target_identity"));
         assert_eq!(run_capture(&cwd, &["trend", collision, "5"]).1.trim(), "[]");
-        assert_eq!(run_capture(&cwd, &["close", collision, &identified_name]).0, 2);
+        assert_eq!(
+            run_capture(&cwd, &["close", collision, &identified_name]).0,
+            2
+        );
         assert_eq!(run_capture(&cwd, &["close", target, &identified_name]).0, 0);
 
         let _ = std::fs::remove_dir_all(&cwd);

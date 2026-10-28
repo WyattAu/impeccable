@@ -94,10 +94,12 @@ fn stop_manifest_entry_with_windows(command: &str, windows: &str) -> Value {
 /// The launcher paths the manifests invoke, per harness. Project-relative
 /// (or `${CLAUDE_PROJECT_DIR}` / repo-root anchored) so a committed manifest
 /// resolves on every teammate's checkout.
-const CLAUDE_HOOK_COMMAND: &str = "\"${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/impeccable\" hook";
+const CLAUDE_HOOK_COMMAND: &str =
+    "\"${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/impeccable\" hook";
 const AGENTS_HOOK_COMMAND: &str = "\".agents/skills/impeccable/scripts/impeccable\" hook";
 const CURSOR_HOOK_COMMAND: &str = "\".cursor/skills/impeccable/scripts/impeccable\" hook";
-const GITHUB_HOOK_COMMAND: &str = "\"$(git rev-parse --show-toplevel)/.github/skills/impeccable/scripts/impeccable\" hook";
+const GITHUB_HOOK_COMMAND: &str =
+    "\"$(git rev-parse --show-toplevel)/.github/skills/impeccable/scripts/impeccable\" hook";
 
 struct ManifestTarget {
     provider: &'static str,
@@ -153,7 +155,10 @@ fn claude_manifest() -> Value {
 
 fn agents_manifest() -> Value {
     let cmd = AGENTS_HOOK_COMMAND;
-    let win = &impeccable_context::hook_markers::windows_launcher_hook_command(".agents/skills/impeccable/scripts/impeccable", "hook");
+    let win = &impeccable_context::hook_markers::windows_launcher_hook_command(
+        ".agents/skills/impeccable/scripts/impeccable",
+        "hook",
+    );
     obj(vec![(
         "hooks",
         obj(vec![
@@ -163,11 +168,19 @@ fn agents_manifest() -> Value {
                     ("matcher", Value::from("Edit|Write|apply_patch")),
                     (
                         "hooks",
-                        Value::Array(vec![command_hook_with_windows(cmd, win, TIMEOUT_SECONDS, STATUS_MESSAGE)]),
+                        Value::Array(vec![command_hook_with_windows(
+                            cmd,
+                            win,
+                            TIMEOUT_SECONDS,
+                            STATUS_MESSAGE,
+                        )]),
                     ),
                 ])]),
             ),
-            ("Stop", Value::Array(vec![stop_manifest_entry_with_windows(cmd, win)])),
+            (
+                "Stop",
+                Value::Array(vec![stop_manifest_entry_with_windows(cmd, win)]),
+            ),
         ]),
     )])
 }
@@ -190,10 +203,7 @@ fn github_manifest() -> Value {
                 Value::Array(vec![obj(vec![
                     ("type", Value::from("command")),
                     ("matcher", Value::from("edit|create|apply_patch")),
-                    (
-                        "bash",
-                        Value::from(GITHUB_HOOK_COMMAND),
-                    ),
+                    ("bash", Value::from(GITHUB_HOOK_COMMAND)),
                     ("timeoutSec", Value::from(TIMEOUT_SECONDS)),
                 ])]),
             )]),
@@ -206,27 +216,45 @@ fn github_manifest() -> Value {
 /// token stays bare; PowerShell reads the env var. Timeouts are milliseconds.
 /// No per-edit detector: BeforeTool carries the session id into
 /// `build-phase` shell calls, AfterAgent runs the build-completion check.
-const GEMINI_HOOK_COMMAND: &str = "$GEMINI_PROJECT_DIR/.gemini/skills/impeccable/scripts/impeccable hook";
-const GEMINI_HOOK_COMMAND_WINDOWS: &str = "& \"$env:GEMINI_PROJECT_DIR/.gemini/skills/impeccable/scripts/impeccable.cmd\" hook";
+const GEMINI_HOOK_COMMAND: &str =
+    "$GEMINI_PROJECT_DIR/.gemini/skills/impeccable/scripts/impeccable hook";
+const GEMINI_HOOK_COMMAND_WINDOWS: &str =
+    "& \"$env:GEMINI_PROJECT_DIR/.gemini/skills/impeccable/scripts/impeccable.cmd\" hook";
 
 fn gemini_manifest() -> Value {
-    let cmd = if cfg!(windows) { GEMINI_HOOK_COMMAND_WINDOWS } else { GEMINI_HOOK_COMMAND };
-    let hook = |name: &str, timeout: i64| obj(vec![
-        ("name", Value::from(name)),
-        ("type", Value::from("command")),
-        ("command", Value::from(cmd)),
-        ("timeout", Value::from(timeout)),
-    ]);
+    let cmd = if cfg!(windows) {
+        GEMINI_HOOK_COMMAND_WINDOWS
+    } else {
+        GEMINI_HOOK_COMMAND
+    };
+    let hook = |name: &str, timeout: i64| {
+        obj(vec![
+            ("name", Value::from(name)),
+            ("type", Value::from("command")),
+            ("command", Value::from(cmd)),
+            ("timeout", Value::from(timeout)),
+        ])
+    };
     obj(vec![(
         "hooks",
         obj(vec![
-            ("BeforeTool", Value::Array(vec![obj(vec![
-                ("matcher", Value::from("^run_shell_command$")),
-                ("hooks", Value::Array(vec![hook("impeccable-session", 5000)])),
-            ])])),
-            ("AfterAgent", Value::Array(vec![obj(vec![
-                ("hooks", Value::Array(vec![hook("impeccable-completion", 30000)])),
-            ])])),
+            (
+                "BeforeTool",
+                Value::Array(vec![obj(vec![
+                    ("matcher", Value::from("^run_shell_command$")),
+                    (
+                        "hooks",
+                        Value::Array(vec![hook("impeccable-session", 5000)]),
+                    ),
+                ])]),
+            ),
+            (
+                "AfterAgent",
+                Value::Array(vec![obj(vec![(
+                    "hooks",
+                    Value::Array(vec![hook("impeccable-completion", 30000)]),
+                )])]),
+            ),
         ]),
     )])
 }
@@ -805,7 +833,11 @@ fn repair_hook_manifests(rt: &Runtime, cwd: &str) -> Result<Repaired, String> {
                 }
                 // The user's whole settings file: never replace it.
                 None if user_settings => {
-                    result.skipped.push(if user_scoped { dest.clone() } else { target.dest_rel.to_string() });
+                    result.skipped.push(if user_scoped {
+                        dest.clone()
+                    } else {
+                        target.dest_rel.to_string()
+                    });
                     continue;
                 }
                 None => {
@@ -831,7 +863,8 @@ fn repair_hook_manifests(rt: &Runtime, cwd: &str) -> Result<Repaired, String> {
         backup_commented(&dest, had_comments)?;
         std::fs::create_dir_all(jsp::dirname(&dest)).map_err(|e| e.to_string())?;
         if user_settings {
-            impeccable_common::fsx::write_atomic(&dest, serialized.as_bytes()).map_err(|e| e.to_string())?;
+            impeccable_common::fsx::write_atomic(&dest, serialized.as_bytes())
+                .map_err(|e| e.to_string())?;
         } else {
             std::fs::write(&dest, serialized).map_err(|e| e.to_string())?;
         }
@@ -962,7 +995,7 @@ fn strip_impeccable_hook_entry(entry: &Value) -> Option<Value> {
     let stripped: Vec<Value> = hooks
         .iter()
         .filter_map(strip_impeccable_hook_entry)
-        .filter(|v| truthy_json(v))
+        .filter(truthy_json)
         .collect();
     if stripped.is_empty() && hooks.iter().any(value_has_impeccable_hook_marker) {
         return None;
@@ -983,7 +1016,7 @@ fn strip_impeccable_hook_entries(entries: Option<&Value>) -> Vec<Value> {
         Some(Value::Array(a)) => a
             .iter()
             .filter_map(strip_impeccable_hook_entry)
-            .filter(|v| truthy_json(v))
+            .filter(truthy_json)
             .collect(),
         _ => vec![],
     }

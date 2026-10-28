@@ -70,19 +70,79 @@ const ROOT_ROLES: &[&str] = &["presentation", "none", "img", "figure", "group"];
 /// a split-text headline (`<h1><span aria-hidden>` per word), a link's or
 /// button's decorative copy.
 const TEXT_HOST_TAGS: &[&str] = &[
-    "h1", "h2", "h3", "h4", "h5", "h6", "p", "a", "button", "label", "summary", "legend",
-    "caption", "figcaption", "blockquote", "q",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "p",
+    "a",
+    "button",
+    "label",
+    "summary",
+    "legend",
+    "caption",
+    "figcaption",
+    "blockquote",
+    "q",
 ];
 /// Class or id parts that name a copy, a slide, or a piece of the page's
 /// own chrome that is hidden while closed. A root wearing one is content the
 /// visitor reaches, not a drawing.
 const ROOT_SKIP_PARTS: &[&str] = &[
-    "clone", "clones", "cloned", "copy", "duplicate", "dup", "carousel", "embla", "flicking",
-    "glide", "keen", "slick", "slide", "slider", "slides", "splide", "swiper", "marquee",
-    "ticker", "menu", "submenu", "dropdown", "popup", "popover", "modal", "drawer", "dialog",
-    "tooltip", "toast", "offcanvas", "overlay", "nav", "navbar", "navigation", "panel", "tab",
-    "tabpanel", "accordion", "collapse", "collapsible", "intro", "splash", "loader", "preloader",
-    "loading", "banner", "cookie", "cookies", "consent", "sidebar", "sidenav", "toc",
+    "clone",
+    "clones",
+    "cloned",
+    "copy",
+    "duplicate",
+    "dup",
+    "carousel",
+    "embla",
+    "flicking",
+    "glide",
+    "keen",
+    "slick",
+    "slide",
+    "slider",
+    "slides",
+    "splide",
+    "swiper",
+    "marquee",
+    "ticker",
+    "menu",
+    "submenu",
+    "dropdown",
+    "popup",
+    "popover",
+    "modal",
+    "drawer",
+    "dialog",
+    "tooltip",
+    "toast",
+    "offcanvas",
+    "overlay",
+    "nav",
+    "navbar",
+    "navigation",
+    "panel",
+    "tab",
+    "tabpanel",
+    "accordion",
+    "collapse",
+    "collapsible",
+    "intro",
+    "splash",
+    "loader",
+    "preloader",
+    "loading",
+    "banner",
+    "cookie",
+    "cookies",
+    "consent",
+    "sidebar",
+    "sidenav",
+    "toc",
 ];
 /// Form fields a visitor fills.
 const FIELD_TAGS: &[&str] = &["input", "select", "textarea"];
@@ -127,7 +187,10 @@ impl<'a> HiddenMockups<'a> {
             if declares_hidden(dom, el) {
                 hidden.push(el);
             }
-            if dom.attr(el, "aria-label").is_some_and(|l| PICTURE_LABEL_RE.is_match(&l)) {
+            if dom
+                .attr(el, "aria-label")
+                .is_some_and(|l| PICTURE_LABEL_RE.is_match(&l))
+            {
                 labelled.push(el);
             }
         }
@@ -190,11 +253,14 @@ impl<'a> HiddenMockups<'a> {
         if !frame_sized(dom, el) || !structural_box(dom, el) || under_text_host(dom, el) {
             return false;
         }
-        let Some(own) = subtree_text(dom, el) else { return false };
+        let Some(own) = subtree_text(dom, el) else {
+            return false;
+        };
         if own.runs < MIN_TEXT_RUNS || own.h1 {
             return false;
         }
-        if own.working || has_content_peer(dom, el, &own.text) || has_readable_alternative(dom, el) {
+        if own.working || has_content_peer(dom, el, &own.text) || has_readable_alternative(dom, el)
+        {
             return false;
         }
         if self.behind_open_modal(el) {
@@ -224,9 +290,10 @@ impl<'a> HiddenMockups<'a> {
                 .collect();
             (!open.is_empty()).then_some(open)
         });
-        modals
-            .as_ref()
-            .is_some_and(|open| open.iter().any(|&m| !dom.contains(m, el) && !dom.contains(el, m)))
+        modals.as_ref().is_some_and(|open| {
+            open.iter()
+                .any(|&m| !dom.contains(m, el) && !dom.contains(el, m))
+        })
     }
 
     fn is_labelled_picture(&self, el: ElId) -> bool {
@@ -236,7 +303,10 @@ impl<'a> HiddenMockups<'a> {
         let dom = self.dom;
         let yes = frame_sized(dom, el)
             && structural_box(dom, el)
-            && !matches!(tag_lower(dom, el).as_str(), "a" | "button" | "input" | "select" | "textarea");
+            && !matches!(
+                tag_lower(dom, el).as_str(),
+                "a" | "button" | "input" | "select" | "textarea"
+            );
         self.labels.borrow_mut().insert(el, yes);
         yes
     }
@@ -287,7 +357,11 @@ fn structural_box(dom: &dyn Dom, el: ElId) -> bool {
     }
     if let Some(role) = dom.attr(el, "role") {
         let role = js::to_lower_case(js::trim(&role));
-        if !role.is_empty() && !role.split_ascii_whitespace().all(|r| ROOT_ROLES.contains(&r)) {
+        if !role.is_empty()
+            && !role
+                .split_ascii_whitespace()
+                .all(|r| ROOT_ROLES.contains(&r))
+        {
             return false;
         }
     }
@@ -302,7 +376,11 @@ fn structural_box(dom: &dyn Dom, el: ElId) -> bool {
     if matches!(dom.style(el, "position").as_str(), "fixed" | "sticky") {
         return false;
     }
-    let names = format!("{} {}", class_attr(dom, el), dom.attr(el, "id").unwrap_or_default());
+    let names = format!(
+        "{} {}",
+        class_attr(dom, el),
+        dom.attr(el, "id").unwrap_or_default()
+    );
     !names.split_whitespace().any(|token| {
         token_parts(token)
             .iter()
@@ -339,7 +417,13 @@ struct SubtreeText {
 /// The root's runs of text, characters and words, or `None` when the
 /// subtree is too large to be a drawing.
 fn subtree_text(dom: &dyn Dom, el: ElId) -> Option<SubtreeText> {
-    let mut out = SubtreeText { runs: 0, chars: 0, text: String::new(), h1: false, working: false };
+    let mut out = SubtreeText {
+        runs: 0,
+        chars: 0,
+        text: String::new(),
+        h1: false,
+        working: false,
+    };
     // Each entry carries whether a link with an `href` holds it, and
     // whether it is rendered: text under `display: none` is no run of the
     // drawing (a hidden responsive copy inside it), though a field, a label
@@ -368,7 +452,10 @@ fn subtree_text(dom: &dyn Dom, el: ElId) -> Option<SubtreeText> {
             labelled_form = true;
         }
         let in_link = in_link
-            || (tag == "a" && dom.attr(n, "href").is_some_and(|h| !js::trim(&h).is_empty()));
+            || (tag == "a"
+                && dom
+                    .attr(n, "href")
+                    .is_some_and(|h| !js::trim(&h).is_empty()));
         let rendered = rendered && dom.style(n, "display") != "none";
         let chars = if rendered && dom.style(n, "visibility") != "hidden" {
             let direct = dom.direct_text_nodes(n).join(" ");
@@ -383,7 +470,12 @@ fn subtree_text(dom: &dyn Dom, el: ElId) -> Option<SubtreeText> {
                 link_runs += 1;
             }
         }
-        stack.extend(dom.children(n).into_iter().rev().map(|c| (c, in_link, rendered)));
+        stack.extend(
+            dom.children(n)
+                .into_iter()
+                .rev()
+                .map(|c| (c, in_link, rendered)),
+        );
     }
     // Working UI the page hid for a while: a form (two fields or more, or
     // a field with a `label`), or a list of links (half the runs or more).
@@ -413,7 +505,10 @@ fn has_content_peer(dom: &dyn Dom, el: ElId, text: &str) -> bool {
     if !text.is_empty() {
         let mut cur = dom.parent(el);
         while let Some(a) = cur {
-            if dom.attr(a, "aria-label").is_some_and(|l| squash(&l).contains(text)) {
+            if dom
+                .attr(a, "aria-label")
+                .is_some_and(|l| squash(&l).contains(text))
+            {
                 return true;
             }
             cur = dom.parent(a);
@@ -445,7 +540,10 @@ fn has_content_peer(dom: &dyn Dom, el: ElId, text: &str) -> bool {
 
 /// The class tokens of an element.
 fn class_tokens(dom: &dyn Dom, el: ElId) -> Vec<String> {
-    class_attr(dom, el).split_whitespace().map(str::to_string).collect()
+    class_attr(dom, el)
+        .split_whitespace()
+        .map(str::to_string)
+        .collect()
 }
 
 /// A form field a visitor can fill: not `type="hidden"`.
@@ -471,7 +569,9 @@ static DESCRIBES_PICTURE_RE: Lazy<Regex> = Lazy::new(|| {
 /// content the page means to be read. A sibling that describes a picture
 /// ([`DESCRIBES_PICTURE_RE`]) is not such an alternative.
 fn has_readable_alternative(dom: &dyn Dom, el: ElId) -> bool {
-    let Some(parent) = dom.parent(el) else { return false };
+    let Some(parent) = dom.parent(el) else {
+        return false;
+    };
     dom.children(parent).into_iter().any(|sib| {
         sib != el
             && !SOURCE_TEXT_TAGS.contains(&tag_lower(dom, sib).as_str())
@@ -491,11 +591,15 @@ fn has_readable_alternative(dom: &dyn Dom, el: ElId) -> bool {
 /// none` (a responsive copy, a closed menu) paints no words, and text under
 /// `visibility: hidden` none of its own.
 fn page_text_chars(dom: &dyn Dom) -> usize {
-    let Some(root) = dom.body().or_else(|| dom.document_element()) else { return 0 };
+    let Some(root) = dom.body().or_else(|| dom.document_element()) else {
+        return 0;
+    };
     let mut count = 0usize;
     let mut stack = vec![root];
     while let Some(n) = stack.pop() {
-        if SOURCE_TEXT_TAGS.contains(&tag_lower(dom, n).as_str()) || dom.style(n, "display") == "none" {
+        if SOURCE_TEXT_TAGS.contains(&tag_lower(dom, n).as_str())
+            || dom.style(n, "display") == "none"
+        {
             continue;
         }
         if dom.style(n, "visibility") == "hidden" {
@@ -639,19 +743,28 @@ mod tests {
         let line = "A paragraph of the application's own copy that a visitor reads every day.";
         let (w, runs) = window(&mut d, body, &[line, line, line, line]);
         d.set_attr(w, "inert", "");
-        assert!(!HiddenMockups::scan(&d).declared(runs[0]), "most of the page");
+        assert!(
+            !HiddenMockups::scan(&d).declared(runs[0]),
+            "most of the page"
+        );
         let copy = d.add(Some(body), "section");
         d.set_style(copy, "display", "none");
         for _ in 0..8 {
             let p = d.add(Some(copy), "p");
             d.add_text(p, line);
         }
-        assert!(!HiddenMockups::scan(&d).declared(runs[0]), "the hidden copy is not counted");
+        assert!(
+            !HiddenMockups::scan(&d).declared(runs[0]),
+            "the hidden copy is not counted"
+        );
         // The twin: the same words shown elsewhere on the page make the box
         // a small part of it.
         d.set_style(copy, "display", "block");
         d.set_rect(copy, 0.0, 900.0, 800.0, 400.0);
-        assert!(HiddenMockups::scan(&d).declared(runs[0]), "shown words count");
+        assert!(
+            HiddenMockups::scan(&d).declared(runs[0]),
+            "shown words count"
+        );
     }
 
     #[test]
@@ -678,11 +791,17 @@ mod tests {
         d.set_rect(modal, 300.0, 200.0, 600.0, 400.0);
         d.set_attr(modal, "role", "dialog");
         d.set_attr(modal, "aria-modal", "true");
-        assert!(!HiddenMockups::scan(&d).declared(runs[0]), "the h1 is inside");
+        assert!(
+            !HiddenMockups::scan(&d).declared(runs[0]),
+            "the h1 is inside"
+        );
         // Without its h1 the app still holds most of the page's words.
         d.el_mut(h1).tag = "div".into();
         d.set_attr(modal, "aria-modal", "false");
-        assert!(!HiddenMockups::scan(&d).declared(runs[0]), "most of the page");
+        assert!(
+            !HiddenMockups::scan(&d).declared(runs[0]),
+            "most of the page"
+        );
     }
 
     #[test]
@@ -749,10 +868,16 @@ mod tests {
         d.el_mut(copy).tag = "div".into();
         d.set_attr(first, "class", "logo-set");
         d.set_attr(copy, "class", "logo-set");
-        assert!(!HiddenMockups::scan(&d).declared(runs[0]), "a shown peer of the same shape");
+        assert!(
+            !HiddenMockups::scan(&d).declared(runs[0]),
+            "a shown peer of the same shape"
+        );
         // Even hidden, a peer carrying the same words is a copy.
         d.set_attr(first, "aria-hidden", "true");
-        assert!(!HiddenMockups::scan(&d).declared(runs[0]), "a hidden copy of the same words");
+        assert!(
+            !HiddenMockups::scan(&d).declared(runs[0]),
+            "a hidden copy of the same words"
+        );
         // Two hidden windows of one shape drawing different things
         // (cursor.com's stacked demo windows) are both drawings.
         let (mut d, body) = page();
@@ -764,7 +889,10 @@ mod tests {
             d.set_attr(w, "class", "group absolute rounded-lg");
             d.set_attr(w, "aria-hidden", "true");
         }
-        assert!(HiddenMockups::scan(&d).declared(runs[0]), "every peer hidden");
+        assert!(
+            HiddenMockups::scan(&d).declared(runs[0]),
+            "every peer hidden"
+        );
     }
 
     #[test]
@@ -785,7 +913,10 @@ mod tests {
         let (w, runs) = window(&mut d, body, LABELS);
         d.set_attr(w, "aria-hidden", "true");
         d.set_attr(w, "data-aria-hidden", "true");
-        assert!(!HiddenMockups::scan(&d).declared(runs[0]), "hidden by a modal library");
+        assert!(
+            !HiddenMockups::scan(&d).declared(runs[0]),
+            "hidden by a modal library"
+        );
         let (mut d, body) = page();
         let (w, runs) = window(&mut d, body, LABELS);
         d.set_attr(w, "aria-hidden", "true");
@@ -796,7 +927,10 @@ mod tests {
         let (w, runs) = window(&mut d, body, LABELS);
         d.set_attr(w, "aria-hidden", "true");
         d.set_attr(w, "class", "cine-intro");
-        assert!(!HiddenMockups::scan(&d).declared(runs[0]), "an intro splash");
+        assert!(
+            !HiddenMockups::scan(&d).declared(runs[0]),
+            "an intro splash"
+        );
     }
 
     #[test]
@@ -806,7 +940,11 @@ mod tests {
         let (mut d, body) = page();
         let host = d.add(Some(body), "div");
         d.set_rect(host, 0.0, 400.0, 1000.0, 300.0);
-        d.set_attr(host, "aria-label", "Plan every launch with your whole team in one place");
+        d.set_attr(
+            host,
+            "aria-label",
+            "Plan every launch with your whole team in one place",
+        );
         let (line, runs) = window(&mut d, host, &["Plan", "every", "launch", "with"]);
         d.set_attr(line, "aria-hidden", "true");
         assert!(!HiddenMockups::scan(&d).declared(runs[0]));
@@ -833,16 +971,28 @@ mod tests {
         d.set_attr(w, "inert", "");
         let field = d.add(Some(w), "input");
         d.set_rect(field, 110.0, 500.0, 200.0, 30.0);
-        assert!(HiddenMockups::scan(&d).declared(runs[0]), "one stray input in a drawing");
+        assert!(
+            HiddenMockups::scan(&d).declared(runs[0]),
+            "one stray input in a drawing"
+        );
         let second = d.add(Some(w), "textarea");
         d.set_rect(second, 110.0, 540.0, 200.0, 30.0);
-        assert!(!HiddenMockups::scan(&d).declared(runs[0]), "two form fields");
+        assert!(
+            !HiddenMockups::scan(&d).declared(runs[0]),
+            "two form fields"
+        );
         d.set_attr(second, "type", "hidden");
         d.el_mut(second).tag = "input".into();
-        assert!(HiddenMockups::scan(&d).declared(runs[0]), "a hidden input is no field");
+        assert!(
+            HiddenMockups::scan(&d).declared(runs[0]),
+            "a hidden input is no field"
+        );
         let label = d.add(Some(w), "label");
         d.set_rect(label, 110.0, 580.0, 200.0, 20.0);
-        assert!(!HiddenMockups::scan(&d).declared(runs[0]), "a field with a label");
+        assert!(
+            !HiddenMockups::scan(&d).declared(runs[0]),
+            "a field with a label"
+        );
         // A docs sidebar a breakpoint script left `aria-hidden`.
         let (mut d, body) = page();
         let (w, runs) = window(&mut d, body, LABELS);
@@ -851,14 +1001,23 @@ mod tests {
         d.set_rect(link, 110.0, 500.0, 100.0, 20.0);
         d.set_attr(link, "href", "#install");
         d.add_text(link, "Install");
-        assert!(HiddenMockups::scan(&d).declared(runs[0]), "one link among the labels");
-        for (i, l) in ["Configure", "Deploy", "Reference", "Changelog"].iter().enumerate() {
+        assert!(
+            HiddenMockups::scan(&d).declared(runs[0]),
+            "one link among the labels"
+        );
+        for (i, l) in ["Configure", "Deploy", "Reference", "Changelog"]
+            .iter()
+            .enumerate()
+        {
             let a = d.add(Some(w), "a");
             d.set_rect(a, 110.0, 520.0 + 20.0 * i as f64, 100.0, 20.0);
             d.set_attr(a, "href", "#docs");
             d.add_text(a, l);
         }
-        assert!(!HiddenMockups::scan(&d).declared(runs[0]), "a list of links");
+        assert!(
+            !HiddenMockups::scan(&d).declared(runs[0]),
+            "a list of links"
+        );
         let (mut d, body) = page();
         let (w, runs) = window(&mut d, body, LABELS);
         d.set_attr(w, "aria-hidden", "true");
@@ -878,7 +1037,10 @@ mod tests {
         assert!(!HiddenMockups::scan(&d).declared(runs[0]));
         // cursor.com: the sibling describes the drawing instead.
         d.el_mut(sr).child_nodes.clear();
-        d.add_text(sr, "This element contains an interactive demo for sighted users showing the IDE.");
+        d.add_text(
+            sr,
+            "This element contains an interactive demo for sighted users showing the IDE.",
+        );
         assert!(HiddenMockups::scan(&d).declared(runs[0]));
     }
 
@@ -898,7 +1060,10 @@ mod tests {
         d.set_rect(h2, 0.0, 400.0, 800.0, 200.0);
         let (w, runs) = window(&mut d, h2, &["Build", "the", "future", "today"]);
         d.set_attr(w, "aria-hidden", "true");
-        assert!(!HiddenMockups::scan(&d).declared(runs[0]), "inside a heading");
+        assert!(
+            !HiddenMockups::scan(&d).declared(runs[0]),
+            "inside a heading"
+        );
         // A visually hidden copy of the same words beside it.
         let (mut d, body) = page();
         let (w, runs) = window(&mut d, body, &["Build", "the", "future", "today"]);
@@ -906,14 +1071,21 @@ mod tests {
         let sr = d.add(Some(body), "span");
         d.set_rect(sr, 0.0, 0.0, 1.0, 1.0);
         d.add_text(sr, "Build the future today");
-        assert!(!HiddenMockups::scan(&d).declared(runs[0]), "a text copy beside it");
+        assert!(
+            !HiddenMockups::scan(&d).declared(runs[0]),
+            "a text copy beside it"
+        );
     }
 
     #[test]
     fn a_labelled_screenshot_is_advisory_only() {
         let (mut d, body) = page();
         let (w, runs) = window(&mut d, body, LABELS);
-        d.set_attr(w, "aria-label", "A screenshot of the Linear app showing an issue");
+        d.set_attr(
+            w,
+            "aria-label",
+            "A screenshot of the Linear app showing an issue",
+        );
         let m = HiddenMockups::scan(&d);
         assert_eq!(m.signal(runs[0]), Some(MockupSignal::Labelled));
         assert!(!m.declared(runs[0]));

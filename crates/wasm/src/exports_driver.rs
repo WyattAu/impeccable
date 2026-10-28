@@ -17,7 +17,8 @@ pub fn serialize_findings(groups_json: &str) -> String {
 /// (0 when nothing should be added).
 #[wasm_bindgen]
 pub fn visual_contrast_result_el(result_json: &str) -> u32 {
-    let result: serde_json::Value = serde_json::from_str(result_json).unwrap_or(serde_json::Value::Null);
+    let result: serde_json::Value =
+        serde_json::from_str(result_json).unwrap_or(serde_json::Value::Null);
     with_dom(|dom| driver::visual_contrast_result_el(dom, &result)).unwrap_or(0)
 }
 
@@ -26,7 +27,8 @@ pub fn visual_contrast_result_el(result_json: &str) -> u32 {
 #[wasm_bindgen]
 pub fn visual_contrast_result_finding(el: u32, existing_json: &str, result_json: &str) -> String {
     let existing: Vec<BrowserFinding> = serde_json::from_str(existing_json).unwrap_or_default();
-    let result: serde_json::Value = serde_json::from_str(result_json).unwrap_or(serde_json::Value::Null);
+    let result: serde_json::Value =
+        serde_json::from_str(result_json).unwrap_or(serde_json::Value::Null);
     match with_dom(|dom| driver::visual_contrast_result_finding(dom, el, &existing, &result)) {
         Some(f) => serde_json::to_string(&f).unwrap_or_else(|_| "null".into()),
         None => "null".into(),
@@ -37,5 +39,6 @@ pub fn visual_contrast_result_finding(el: u32, existing_json: &str, result_json:
 #[wasm_bindgen]
 pub fn measure_hidden_text() -> String {
     let m = with_dom(|dom| impeccable_core::browser::page_checks::measure_hidden_text_dom(dom));
-    serde_json::to_string(&m).unwrap_or_else(|_| "{\"totalChars\":0,\"hiddenChars\":0,\"hiddenSamples\":[]}".into())
+    serde_json::to_string(&m)
+        .unwrap_or_else(|_| "{\"totalChars\":0,\"hiddenChars\":0,\"hiddenSamples\":[]}".into())
 }

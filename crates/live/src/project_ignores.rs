@@ -125,7 +125,10 @@ pub fn collect_project_detector_ignores(
         "ignoreFiles".into(),
         Value::Array(ignore_files.into_iter().map(Value::String).collect()),
     );
-    out.insert("roots".into(), Value::Array(roots.into_iter().map(Value::String).collect()));
+    out.insert(
+        "roots".into(),
+        Value::Array(roots.into_iter().map(Value::String).collect()),
+    );
     out.insert(
         "pageFiles".into(),
         Value::Array(page_files.into_iter().map(Value::String).collect()),
@@ -163,7 +166,11 @@ fn read_live_served_pages(
     // expansion.
     let mut prefix = String::new();
     if let Some(rr) = repo_root.filter(|r| !r.is_empty()) {
-        let rel = jsp::to_posix(&jsp::relative(cwd, &jsp::resolve(cwd, &[rr]), &jsp::resolve(cwd, &[app_root])));
+        let rel = jsp::to_posix(&jsp::relative(
+            cwd,
+            &jsp::resolve(cwd, &[rr]),
+            &jsp::resolve(cwd, &[app_root]),
+        ));
         if !rel.is_empty() && !rel.starts_with("..") && !jsp::is_absolute(&rel) {
             prefix = format!("{}/", rel);
         }
@@ -171,7 +178,7 @@ fn read_live_served_pages(
 
     let mut roots: Vec<String> = Vec::new();
     for glob in &files {
-        let wildcard_at = glob.find(|c| matches!(c, '*' | '?' | '{'));
+        let wildcard_at = glob.find(['*', '?', '{']);
         let head = match wildcard_at {
             Some(i) => &glob[..i],
             None => glob.as_str(),
@@ -283,7 +290,13 @@ mod tests {
                 ]
             })),
         );
-        app.write(".impeccable/live/config.json", &live_config(json!(["prototype/index.html", "prototype/library/buttons.html"])));
+        app.write(
+            ".impeccable/live/config.json",
+            &live_config(json!([
+                "prototype/index.html",
+                "prototype/library/buttons.html"
+            ])),
+        );
         app.write("prototype/index.html", "<html></html>");
         app.write("prototype/library/buttons.html", "<html></html>");
 
@@ -295,8 +308,14 @@ mod tests {
             out["ignoreValues"],
             json!([{ "rule": "gradient-text", "value": "*", "files": ["prototype/library/**"] }])
         );
-        assert_eq!(strs(&out, "roots"), vec!["prototype/", "prototype/library/"]);
-        assert_eq!(strs(&out, "pageFiles"), vec!["prototype/index.html", "prototype/library/buttons.html"]);
+        assert_eq!(
+            strs(&out, "roots"),
+            vec!["prototype/", "prototype/library/"]
+        );
+        assert_eq!(
+            strs(&out, "pageFiles"),
+            vec!["prototype/index.html", "prototype/library/buttons.html"]
+        );
     }
 
     #[test]
@@ -304,7 +323,10 @@ mod tests {
         let repo = Tmp::new();
         let app = format!("{}/site", repo.path());
         std::fs::create_dir_all(repo.0.join(".git")).unwrap();
-        repo.write("site/package.json", "{\"name\":\"site\",\"private\":true}\n");
+        repo.write(
+            "site/package.json",
+            "{\"name\":\"site\",\"private\":true}\n",
+        );
         repo.write(
             ".impeccable/config.json",
             &detector_config(json!({
@@ -312,12 +334,18 @@ mod tests {
                 "ignoreValues": [{ "rule": "overused-font", "value": "space grotesk" }]
             })),
         );
-        repo.write("site/.impeccable/live/config.json", &live_config(json!(["prototype/index.html"])));
+        repo.write(
+            "site/.impeccable/live/config.json",
+            &live_config(json!(["prototype/index.html"])),
+        );
         repo.write("site/prototype/index.html", "<html></html>");
 
         let out = collect(&app, Some(&repo.path()));
         assert_eq!(out["ignoreRules"], json!(["ai-color-palette"]));
-        assert_eq!(out["ignoreValues"], json!([{ "rule": "overused-font", "value": "space grotesk" }]));
+        assert_eq!(
+            out["ignoreValues"],
+            json!([{ "rule": "overused-font", "value": "space grotesk" }])
+        );
         // Identities serialize repo-relative so waivers spelled from either
         // root match through the resolver's suffix expansion.
         assert_eq!(out["roots"], json!(["site/prototype/"]));
@@ -329,7 +357,10 @@ mod tests {
         let repo = Tmp::new();
         let app = format!("{}/site", repo.path());
         std::fs::create_dir_all(repo.0.join(".git")).unwrap();
-        repo.write("site/package.json", "{\"name\":\"site\",\"private\":true}\n");
+        repo.write(
+            "site/package.json",
+            "{\"name\":\"site\",\"private\":true}\n",
+        );
         repo.write(
             ".impeccable/config.json",
             &detector_config(json!({
@@ -344,12 +375,21 @@ mod tests {
                 "ignoreValues": [{ "rule": "overused-font", "value": "space grotesk" }]
             })),
         );
-        repo.write("site/.impeccable/live/config.json", &live_config(json!(["prototype/index.html"])));
+        repo.write(
+            "site/.impeccable/live/config.json",
+            &live_config(json!(["prototype/index.html"])),
+        );
         repo.write("site/prototype/index.html", "<html></html>");
 
         let out = collect(&app, Some(&repo.path()));
-        assert_eq!(strs(&out, "ignoreRules"), vec!["ai-color-palette", "gradient-text"]);
-        assert_eq!(out["ignoreValues"], json!([{ "rule": "overused-font", "value": "space grotesk" }]));
+        assert_eq!(
+            strs(&out, "ignoreRules"),
+            vec!["ai-color-palette", "gradient-text"]
+        );
+        assert_eq!(
+            out["ignoreValues"],
+            json!([{ "rule": "overused-font", "value": "space grotesk" }])
+        );
     }
 
     #[test]
@@ -358,13 +398,19 @@ mod tests {
         app.write("package.json", "{\"name\":\"globs\",\"private\":true}\n");
         app.write(
             ".impeccable/live/config.json",
-            &live_config(json!(["prototype/**/*.html", "prototype/not-created-yet.html"])),
+            &live_config(json!([
+                "prototype/**/*.html",
+                "prototype/not-created-yet.html"
+            ])),
         );
         app.write("prototype/index.html", "<html></html>");
         app.write("prototype/library/buttons.html", "<html></html>");
 
         let out = collect(&app.path(), None);
-        assert_eq!(strs(&out, "pageFiles"), vec!["prototype/index.html", "prototype/library/buttons.html"]);
+        assert_eq!(
+            strs(&out, "pageFiles"),
+            vec!["prototype/index.html", "prototype/library/buttons.html"]
+        );
         assert_eq!(strs(&out, "roots"), vec!["prototype/"]);
     }
 
@@ -387,7 +433,10 @@ mod tests {
             ".impeccable/config.json",
             "{\"detector\":{\"ignoreRules\":\"foo\",\"ignoreValues\":[null,7],\"ignoreFiles\":{}}}",
         );
-        app.write(".impeccable/live/config.json", &live_config(json!(["prototype/index.html"])));
+        app.write(
+            ".impeccable/live/config.json",
+            &live_config(json!(["prototype/index.html"])),
+        );
         app.write("prototype/index.html", "<html></html>");
 
         let out = collect(&app.path(), None);

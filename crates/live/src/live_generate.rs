@@ -174,12 +174,21 @@ fn fail(io: &mut Io, v: Value) -> i32 {
 /// `_instructions`, regenerated locally from the verdict, never taken from
 /// the wire.
 fn instructions_for(result: &Map<String, Value>, self_cmd: &str) -> Option<String> {
-    let s = |k: &str| result.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+    let s = |k: &str| {
+        result
+            .get(k)
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string()
+    };
     let n = |k: &str| result.get(k).and_then(Value::as_i64).unwrap_or(0);
     if result.get("ok").and_then(Value::as_bool) == Some(true) {
         if result.get("dryRun").and_then(Value::as_bool) == Some(true) {
             let el = result.get("element").and_then(Value::as_object);
-            let tag = el.and_then(|e| e.get("tag")).and_then(Value::as_str).unwrap_or("");
+            let tag = el
+                .and_then(|e| e.get("tag"))
+                .and_then(Value::as_str)
+                .unwrap_or("");
             let id = el
                 .and_then(|e| e.get("id"))
                 .and_then(Value::as_str)
@@ -298,7 +307,12 @@ fn server_not_running(self_cmd: &str) -> Value {
 /// The lane's boot flags, run in-process from the caller's original cwd
 /// (`--target` is a path relative to it). Ok: the boot payload. Err: a
 /// verdict to print, exit 1.
-fn run_boot(args: &[String], original_cwd: &std::path::Path, io: &Io, dev_url_hint: Option<&str>) -> Result<Map<String, Value>, Value> {
+fn run_boot(
+    args: &[String],
+    original_cwd: &std::path::Path,
+    io: &Io,
+    dev_url_hint: Option<&str>,
+) -> Result<Map<String, Value>, Value> {
     let mut boot_args: Vec<String> = Vec::new();
     if let Some(i) = args.iter().position(|a| a == "--target") {
         if let Some(t) = args.get(i + 1).filter(|t| !t.starts_with("--")) {
@@ -342,7 +356,11 @@ fn run_boot(args: &[String], original_cwd: &std::path::Path, io: &Io, dev_url_hi
         }));
     };
     if payload.get("ok").and_then(Value::as_bool) != Some(true) {
-        let error = payload.get("error").and_then(Value::as_str).unwrap_or("").to_string();
+        let error = payload
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
         let text = match error.as_str() {
             "config_missing" | "config_invalid" => "The live config is missing or invalid: follow reference/live-setup.md to create .impeccable/live/config.json, then rerun this command.",
             "target_selection_required" => "Several apps live here: ask the user which one, then rerun this command with --target <a file inside that app>.",
@@ -362,9 +380,22 @@ fn run_boot(args: &[String], original_cwd: &std::path::Path, io: &Io, dev_url_hi
 fn boot_summary(boot: &Map<String, Value>) -> Value {
     let mut m = Map::new();
     for key in [
-        "devUrl", "pageFiles", "projectRoot", "targetPath", "liveBarHidden", "contextMissing", "contextNote",
-        "hasProduct", "product", "productPath", "hasDesign", "design", "designPath", "hasSurfaceBrief",
-        "surfaceBrief", "surfaceBriefPath",
+        "devUrl",
+        "pageFiles",
+        "projectRoot",
+        "targetPath",
+        "liveBarHidden",
+        "contextMissing",
+        "contextNote",
+        "hasProduct",
+        "product",
+        "productPath",
+        "hasDesign",
+        "design",
+        "designPath",
+        "hasSurfaceBrief",
+        "surfaceBrief",
+        "surfaceBriefPath",
     ] {
         if let Some(v) = boot.get(key) {
             m.insert(key.into(), v.clone());
@@ -376,10 +407,18 @@ fn boot_summary(boot: &Map<String, Value>) -> Value {
 /// Collect the session's own generate event (`GET /poll?types=generate&id=`)
 /// so the caller's next move is the edit. The event is leased exactly as a
 /// poll would lease it; nothing else in the queue is touched.
-fn fetch_generate_event(port: i64, token: &str, session_id: &str, budget: Duration, self_cmd: &str) -> Option<Value> {
+fn fetch_generate_event(
+    port: i64,
+    token: &str,
+    session_id: &str,
+    budget: Duration,
+    self_cmd: &str,
+) -> Option<Value> {
     let deadline = Instant::now() + budget;
     while Instant::now() < deadline {
-        let remaining = deadline.saturating_duration_since(Instant::now()).as_millis() as u64;
+        let remaining = deadline
+            .saturating_duration_since(Instant::now())
+            .as_millis() as u64;
         let slice = remaining.clamp(1_000, 5_000);
         let url = format!(
             "http://127.0.0.1:{}/poll?token={}&timeout={}&leaseMs={}&types=generate&id={}",
@@ -392,8 +431,12 @@ fn fetch_generate_event(port: i64, token: &str, session_id: &str, budget: Durati
         let agent = ureq::AgentBuilder::new()
             .timeout(Duration::from_millis(slice + 30_000))
             .build();
-        let Ok(res) = agent.get(&url).call() else { return None };
-        let Ok(mut event) = res.into_json::<Value>() else { return None };
+        let Ok(res) = agent.get(&url).call() else {
+            return None;
+        };
+        let Ok(mut event) = res.into_json::<Value>() else {
+            return None;
+        };
         match event.get("type").and_then(Value::as_str) {
             Some("generate") => {
                 if let Some(obj) = event.as_object_mut() {
@@ -432,7 +475,10 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
     // `--boot` runs before the root switch: the boot writes the roots
     // manifest the switch reads, and reads --target relative to this cwd.
     let original_cwd = io.cwd.clone();
-    let dev_url_hint: Option<String> = flag(&flags_probe, "dev-url").map(str::trim).filter(|u| !u.is_empty()).map(str::to_string);
+    let dev_url_hint: Option<String> = flag(&flags_probe, "dev-url")
+        .map(str::trim)
+        .filter(|u| !u.is_empty())
+        .map(str::to_string);
     let mut boot: Option<Map<String, Value>> = None;
     if flags_probe.boot {
         match run_boot(args, &original_cwd, io, dev_url_hint.as_deref()) {
@@ -452,30 +498,42 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
         Err(v) => return fail(io, v),
     };
 
-    let selector = flag(&flags, "selector").map(str::trim).unwrap_or("").to_string();
+    let selector = flag(&flags, "selector")
+        .map(str::trim)
+        .unwrap_or("")
+        .to_string();
     if selector.is_empty() {
-        return fail(io, json!({
-            "ok": false,
-            "error": "selector_required",
-            "_instructions": "Pass --selector with a CSS selector for the element to target. Derive it from the page source: prefer an id, a unique class, or a landmark section, and add --text \"<visible text>\" when the class repeats.",
-        }));
+        return fail(
+            io,
+            json!({
+                "ok": false,
+                "error": "selector_required",
+                "_instructions": "Pass --selector with a CSS selector for the element to target. Derive it from the page source: prefer an id, a unique class, or a landmark section, and add --text \"<visible text>\" when the class repeats.",
+            }),
+        );
     }
     let action = flag(&flags, "action").unwrap_or("impeccable").to_string();
     if !VISUAL_ACTIONS.contains(&action.as_str()) {
-        return fail(io, json!({
-            "ok": false,
-            "error": "invalid_action",
-            "action": action,
-            "validActions": VISUAL_ACTIONS,
-            "_instructions": "Map the request wording onto the closest listed action (bold -> bolder, quiet/calmer -> quieter, simplify -> distill). When no action fits, use --action impeccable and carry the wording via --prompt.",
-        }));
+        return fail(
+            io,
+            json!({
+                "ok": false,
+                "error": "invalid_action",
+                "action": action,
+                "validActions": VISUAL_ACTIONS,
+                "_instructions": "Map the request wording onto the closest listed action (bold -> bolder, quiet/calmer -> quieter, simplify -> distill). When no action fits, use --action impeccable and carry the wording via --prompt.",
+            }),
+        );
     }
     let count = match flag(&flags, "count") {
         None => 3,
         Some(raw) => match int_flag(raw) {
             Some(c) if (1..=8).contains(&c) => c,
             _ => {
-                return fail(io, json!({ "ok": false, "error": "invalid_count", "count": raw, "_instructions": "Pass --count as an integer from 1 to 8." }));
+                return fail(
+                    io,
+                    json!({ "ok": false, "error": "invalid_count", "count": raw, "_instructions": "Pass --count as an integer from 1 to 8." }),
+                );
             }
         },
     };
@@ -484,7 +542,10 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
         Some(raw) => match int_flag(raw) {
             Some(i) if i >= 1 => Some(i),
             _ => {
-                return fail(io, json!({ "ok": false, "error": "invalid_index", "index": raw, "_instructions": "Pass --index as a 1-based integer position among the matches." }));
+                return fail(
+                    io,
+                    json!({ "ok": false, "error": "invalid_index", "index": raw, "_instructions": "Pass --index as a 1-based integer position among the matches." }),
+                );
             }
         },
     };
@@ -493,7 +554,10 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
         Some(raw) => match int_flag(raw) {
             Some(ms) if ms >= 1 => ms as u64,
             _ => {
-                return fail(io, json!({ "ok": false, "error": "invalid_wait", "wait": raw, "_instructions": "Pass --wait-for-browser as a positive integer of milliseconds, e.g. --wait-for-browser 120000." }));
+                return fail(
+                    io,
+                    json!({ "ok": false, "error": "invalid_wait", "wait": raw, "_instructions": "Pass --wait-for-browser as a positive integer of milliseconds, e.g. --wait-for-browser 120000." }),
+                );
             }
         },
     };
@@ -502,7 +566,11 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
         return fail(io, server_not_running(&me));
     };
     let port = info.raw.get("port").and_then(Value::as_i64);
-    let token = info.raw.get("token").and_then(Value::as_str).map(str::to_string);
+    let token = info
+        .raw
+        .get("token")
+        .and_then(Value::as_str)
+        .map(str::to_string);
     let (Some(port), Some(token)) = (port, token) else {
         return fail(io, server_not_running(&me));
     };
@@ -521,14 +589,21 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
     // hint, else the hint itself (a server the harness runs that answers
     // without our tag yet, before its first reload).
     let resolve_dev_url = |boot: &Option<Map<String, Value>>| -> (Option<String>, bool) {
-        if let Some(u) = boot.as_ref().and_then(|b| b.get("devUrl")).and_then(Value::as_str).filter(|u| !u.is_empty()) {
+        if let Some(u) = boot
+            .as_ref()
+            .and_then(|b| b.get("devUrl"))
+            .and_then(Value::as_str)
+            .filter(|u| !u.is_empty())
+        {
             return (Some(u.to_string()), true);
         }
         let mut candidates: Vec<String> = Vec::new();
         if let Some(h) = &dev_url_hint {
             candidates.push(h.trim_end_matches('/').to_string() + "/");
         }
-        candidates.extend(crate::dev_url::candidates(env.get("IMPECCABLE_DEV_URL_CANDIDATES").map(String::as_str)));
+        candidates.extend(crate::dev_url::candidates(
+            env.get("IMPECCABLE_DEV_URL_CANDIDATES").map(String::as_str),
+        ));
         if let Some(u) = crate::dev_url::probe(&candidates, &token) {
             return (Some(u), true);
         }
@@ -540,7 +615,9 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
     // explicitly (IMPECCABLE_BROWSER or the config's `browser`; the generic
     // BROWSER variable is not that choice).
     let harness_has_browser = matches!(harness.as_str(), "cursor" | "claude-code");
-    let open_ignored = flags.open && harness_has_browser && crate::browser_open::explicit_browser(&cwd, &env).is_none();
+    let open_ignored = flags.open
+        && harness_has_browser
+        && crate::browser_open::explicit_browser(&cwd, &env).is_none();
     let open = flags.open && !open_ignored;
     let with_open_note = |mut v: Map<String, Value>| -> Map<String, Value> {
         if open_ignored {
@@ -557,7 +634,12 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
         let Some(status) = crate::server::fetch_status(port, &token) else {
             return fail(io, server_died(&me, None, false));
         };
-        if status.get("connectedClients").and_then(Value::as_i64).unwrap_or(0) == 0 {
+        if status
+            .get("connectedClients")
+            .and_then(Value::as_i64)
+            .unwrap_or(0)
+            == 0
+        {
             let (dev_url, verified) = resolve_dev_url(&boot);
             let mut v = Map::new();
             v.insert("ok".into(), json!(false));
@@ -581,7 +663,11 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
         let Some(status) = crate::server::fetch_status(port, &token) else {
             return fail(io, server_died(&me, None, false));
         };
-        let connected = status.get("connectedClients").and_then(Value::as_i64).unwrap_or(0) > 0;
+        let connected = status
+            .get("connectedClients")
+            .and_then(Value::as_i64)
+            .unwrap_or(0)
+            > 0;
         if !connected {
             let (dev_url, _) = resolve_dev_url(&boot);
             let Some(url) = dev_url else {
@@ -634,12 +720,17 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             let Some(status) = crate::server::fetch_status(port, &token) else {
                 return fail(io, server_died(&me, None, true));
             };
-            if status.get("connectedClients").and_then(Value::as_i64).unwrap_or(0) > 0 {
+            if status
+                .get("connectedClients")
+                .and_then(Value::as_i64)
+                .unwrap_or(0)
+                > 0
+            {
                 break;
             }
             if let Some(url) = &watched_dev_url {
                 ticks += 1;
-                if ticks % 3 == 0 {
+                if ticks.is_multiple_of(3) {
                     if crate::dev_url::answers(url) {
                         dev_misses = 0;
                     } else {
@@ -650,7 +741,10 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
                         v.insert("ok".into(), json!(false));
                         v.insert("error".into(), json!("dev_server_gone"));
                         v.insert("devUrl".into(), json!(url));
-                        v.insert("waitedMs".into(), json!(started.elapsed().as_millis() as u64));
+                        v.insert(
+                            "waitedMs".into(),
+                            json!(started.elapsed().as_millis() as u64),
+                        );
                         v.insert("harness".into(), json!(harness));
                         let mut v = with_open_note(v);
                         let text = instructions_for(&v, &me).unwrap_or_default();
@@ -713,12 +807,22 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             let status = res.status();
             match res.into_json::<Value>() {
                 Ok(v) => (status, v),
-                Err(_) => return fail(io, json!({ "ok": false, "error": "bad_server_response", "status": status })),
+                Err(_) => {
+                    return fail(
+                        io,
+                        json!({ "ok": false, "error": "bad_server_response", "status": status }),
+                    )
+                }
             }
         }
         Err(ureq::Error::Status(status, res)) => match res.into_json::<Value>() {
             Ok(v) => (status, v),
-            Err(_) => return fail(io, json!({ "ok": false, "error": "bad_server_response", "status": status })),
+            Err(_) => {
+                return fail(
+                    io,
+                    json!({ "ok": false, "error": "bad_server_response", "status": status }),
+                )
+            }
         },
         Err(ureq::Error::Transport(t)) => {
             let detail = t.to_string();
@@ -763,9 +867,18 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
         fields.insert("opened".into(), o.clone());
     }
     if ok && !dry_run {
-        let session_id = fields.get("sessionId").and_then(Value::as_str).map(str::to_string);
+        let session_id = fields
+            .get("sessionId")
+            .and_then(Value::as_str)
+            .map(str::to_string);
         if let Some(sid) = session_id.filter(|s| !s.is_empty()) {
-            let event = fetch_generate_event(port, &token, &sid, Duration::from_millis(EVENT_BUDGET_MS), &me);
+            let event = fetch_generate_event(
+                port,
+                &token,
+                &sid,
+                Duration::from_millis(EVENT_BUDGET_MS),
+                &me,
+            );
             fields.insert("event".into(), event.unwrap_or(Value::Null));
         }
     }
@@ -795,20 +908,51 @@ mod tests {
 
     #[test]
     fn no_live_bar_is_a_boolean_flag() {
-        let flags = parse_flags(&["--selector".to_string(), "h1".to_string(), "--no-live-bar".to_string(), "--count".to_string(), "3".to_string()]).unwrap();
+        let flags = parse_flags(&[
+            "--selector".to_string(),
+            "h1".to_string(),
+            "--no-live-bar".to_string(),
+            "--count".to_string(),
+            "3".to_string(),
+        ])
+        .unwrap();
         assert!(flags.no_live_bar);
-        assert_eq!(flags.values.get("selector").and_then(Value::as_str), Some("h1"));
+        assert_eq!(
+            flags.values.get("selector").and_then(Value::as_str),
+            Some("h1")
+        );
         assert_eq!(flags.values.get("count").and_then(Value::as_str), Some("3"));
-        assert!(!parse_flags(&["--selector".to_string(), "h1".to_string()]).unwrap().no_live_bar);
+        assert!(
+            !parse_flags(&["--selector".to_string(), "h1".to_string()])
+                .unwrap()
+                .no_live_bar
+        );
     }
 
     #[test]
     fn dev_url_takes_a_value_and_still_works_bare() {
-        let with = parse_flags(&["--dev-url".to_string(), "http://127.0.0.1:5173/".to_string(), "--selector".to_string(), "h1".to_string()]).unwrap();
-        assert_eq!(with.values.get("dev-url").and_then(Value::as_str), Some("http://127.0.0.1:5173/"));
-        let bare = parse_flags(&["--dev-url".to_string(), "--selector".to_string(), "h1".to_string()]).unwrap();
+        let with = parse_flags(&[
+            "--dev-url".to_string(),
+            "http://127.0.0.1:5173/".to_string(),
+            "--selector".to_string(),
+            "h1".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(
+            with.values.get("dev-url").and_then(Value::as_str),
+            Some("http://127.0.0.1:5173/")
+        );
+        let bare = parse_flags(&[
+            "--dev-url".to_string(),
+            "--selector".to_string(),
+            "h1".to_string(),
+        ])
+        .unwrap();
         assert!(bare.values.get("dev-url").is_none());
-        assert_eq!(bare.values.get("selector").and_then(Value::as_str), Some("h1"));
+        assert_eq!(
+            bare.values.get("selector").and_then(Value::as_str),
+            Some("h1")
+        );
     }
 
     #[test]
@@ -820,7 +964,10 @@ mod tests {
         let text = instructions_for(&m, "impeccable").unwrap();
         assert!(text.contains("stopped answering"), "{text}");
         assert!(text.contains("http://127.0.0.1:5173/"), "{text}");
-        assert!(text.contains("background terminal") && text.contains("--dev-url"), "{text}");
+        assert!(
+            text.contains("background terminal") && text.contains("--dev-url"),
+            "{text}"
+        );
     }
 
     #[test]
@@ -833,17 +980,31 @@ mod tests {
         let cursor = instructions_for(&m, "impeccable").unwrap();
         assert!(cursor.contains("browser_navigate"), "{cursor}");
         assert!(cursor.contains("--wait-for-browser 60000"), "{cursor}");
-        assert!(!cursor.contains("--open"), "a harness with a browser is never told to open a second one: {cursor}");
+        assert!(
+            !cursor.contains("--open"),
+            "a harness with a browser is never told to open a second one: {cursor}"
+        );
         m.insert("harness".into(), json!("claude-code"));
         let claude = instructions_for(&m, "impeccable").unwrap();
-        assert!(claude.contains("Browser pane") && claude.contains("navigate") && claude.contains("preview_start"), "{claude}");
+        assert!(
+            claude.contains("Browser pane")
+                && claude.contains("navigate")
+                && claude.contains("preview_start"),
+            "{claude}"
+        );
         assert!(!claude.contains("--open"), "{claude}");
         m.insert("harness".into(), json!("codex"));
         let codex = instructions_for(&m, "impeccable").unwrap();
-        assert!(codex.contains("--open") && codex.contains("give the user"), "{codex}");
+        assert!(
+            codex.contains("--open") && codex.contains("give the user"),
+            "{codex}"
+        );
         m.insert("harness".into(), json!("source"));
         let other = instructions_for(&m, "impeccable").unwrap();
-        assert!(other.contains("browser tool") && other.contains("--open"), "{other}");
+        assert!(
+            other.contains("browser tool") && other.contains("--open"),
+            "{other}"
+        );
     }
 
     #[test]
@@ -866,10 +1027,16 @@ mod tests {
         m.insert("error".into(), json!("no_dev_server"));
         m.insert("harness".into(), json!("claude-code"));
         let text = instructions_for(&m, "impeccable").unwrap();
-        assert!(text.contains("preview_start") && text.contains("--dev-url"), "{text}");
+        assert!(
+            text.contains("preview_start") && text.contains("--dev-url"),
+            "{text}"
+        );
         m.insert("harness".into(), json!("cursor"));
         let text = instructions_for(&m, "impeccable").unwrap();
-        assert!(text.contains("background terminal") && text.contains("--dev-url"), "{text}");
+        assert!(
+            text.contains("background terminal") && text.contains("--dev-url"),
+            "{text}"
+        );
     }
 
     #[test]
@@ -884,7 +1051,10 @@ mod tests {
     #[test]
     fn busy_instructions_tell_the_agent_whose_session_is_in_the_way() {
         let own = instructions_for(&busy("agent_target_in_flight"), "impeccable").unwrap();
-        assert!(own.contains("already acting on another generate request"), "{own}");
+        assert!(
+            own.contains("already acting on another generate request"),
+            "{own}"
+        );
         let user = instructions_for(&busy("session_active"), "impeccable").unwrap();
         assert!(user.contains("browser state CONFIGURING"), "{user}");
     }

@@ -976,10 +976,7 @@ mod tests {
         replay(
             id,
             &[
-                journal_entry(
-                    1,
-                    json!({ "id": id, "type": "accept", "variantId": 2 }),
-                ),
+                journal_entry(1, json!({ "id": id, "type": "accept", "variantId": 2 })),
                 journal_entry(
                     2,
                     json!({ "id": id, "type": "agent_done", "carbonize": true, "file": "index.html" }),
@@ -992,14 +989,20 @@ mod tests {
     #[test]
     fn complete_drops_carbonize_cleanup_required() {
         let snap = accept_carbonize_done("ab12cd34", "complete");
-        assert_eq!(snap.get("phase").and_then(|p| p.as_str()), Some("completed"));
+        assert_eq!(
+            snap.get("phase").and_then(|p| p.as_str()),
+            Some("completed")
+        );
         assert!(!has_diag(&snap, "carbonize_cleanup_required"));
     }
 
     #[test]
     fn discarded_drops_carbonize_cleanup_required() {
         let snap = accept_carbonize_done("ab12cd34", "discarded");
-        assert_eq!(snap.get("phase").and_then(|p| p.as_str()), Some("discarded"));
+        assert_eq!(
+            snap.get("phase").and_then(|p| p.as_str()),
+            Some("discarded")
+        );
         assert!(!has_diag(&snap, "carbonize_cleanup_required"));
     }
 }

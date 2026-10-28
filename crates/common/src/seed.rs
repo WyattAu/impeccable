@@ -20,7 +20,9 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 fn is_hex(v: &str, len: usize) -> bool {
-    v.len() == len && v.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    v.len() == len
+        && v.bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 /// 128 bits from the OS CSPRNG as 32 lowercase hex. `None` only when the OS
@@ -36,7 +38,10 @@ pub fn random_hex32() -> Option<String> {
 /// generator fails, which it does not on any supported platform.
 pub fn new_key() -> String {
     random_hex32().unwrap_or_else(|| {
-        let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+        let t = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
         hex(&Sha256::digest(format!("{}:{}", t, std::process::id()).as_bytes())[..16])
     })
 }
@@ -44,10 +49,19 @@ pub fn new_key() -> String {
 fn salt_places(home: &str, project: Option<&str>) -> Vec<std::path::PathBuf> {
     let mut places: Vec<std::path::PathBuf> = Vec::new();
     if !home.is_empty() {
-        places.push(std::path::Path::new(home).join(".impeccable").join("seed-salt"));
+        places.push(
+            std::path::Path::new(home)
+                .join(".impeccable")
+                .join("seed-salt"),
+        );
     }
     if let Some(p) = project.filter(|p| !p.is_empty()) {
-        places.push(std::path::Path::new(p).join(".impeccable").join("questions").join("seed-salt"));
+        places.push(
+            std::path::Path::new(p)
+                .join(".impeccable")
+                .join("questions")
+                .join("seed-salt"),
+        );
     }
     places
 }
@@ -71,7 +85,11 @@ fn kept(file: &std::path::Path) -> Kept {
 
 /// Every valid salt this machine already keeps, home first then project
 /// (or only the override). References made under any of them resolve.
-pub fn existing_salts(home: &str, project: Option<&str>, override_salt: Option<&str>) -> Vec<String> {
+pub fn existing_salts(
+    home: &str,
+    project: Option<&str>,
+    override_salt: Option<&str>,
+) -> Vec<String> {
     if let Some(s) = override_salt.filter(|s| !s.is_empty()) {
         return vec![s.to_string()];
     }
@@ -93,7 +111,11 @@ fn create(file: &std::path::Path) -> Option<String> {
     if file.to_string_lossy().contains("questions") {
         crate::git::ensure_dir_ignored(&dir.to_string_lossy(), &["*"]);
     }
-    match std::fs::OpenOptions::new().write(true).create_new(true).open(file) {
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(file)
+    {
         Ok(mut f) => {
             use std::io::Write;
             if f.write_all(format!("{}\n", fresh).as_bytes()).is_err() {
@@ -179,7 +201,10 @@ pub const NO_SALT: &str = "no-salt:local-ledger-name";
 /// `<project>/.impeccable/questions/seeds`: one ledger file per seed key,
 /// named by the key's reference tag and holding the key itself.
 pub fn seeds_dir(project: &str) -> std::path::PathBuf {
-    std::path::Path::new(project).join(".impeccable").join("questions").join("seeds")
+    std::path::Path::new(project)
+        .join(".impeccable")
+        .join("questions")
+        .join("seeds")
 }
 
 /// A key's ledger as the locator found it.
@@ -197,7 +222,10 @@ pub struct Located {
 fn ledger_key(path: &std::path::Path) -> Option<(String, bool)> {
     let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()?;
     let key = v.get("key")?.as_str()?.to_string();
-    Some((key, v.get("unsalted").and_then(|u| u.as_bool()) == Some(true)))
+    Some((
+        key,
+        v.get("unsalted").and_then(|u| u.as_bool()) == Some(true),
+    ))
 }
 
 /// The one rule that ties a key to its salt: a key's salt is chosen once,
@@ -224,7 +252,11 @@ pub fn locate(project: &str, primary: Option<&str>, kept: &[String], key: &str) 
         // of the key, so it never becomes a reference.
         let unsalted = unsalted || stem == tag(NO_SALT, key);
         let reference = (!unsalted && is_hex(&stem, 16)).then(|| format!("seed:{}", stem));
-        Some(Located { path, exists: true, reference })
+        Some(Located {
+            path,
+            exists: true,
+            reference,
+        })
     };
     let mut names: Vec<&str> = primary.into_iter().collect();
     for s in kept {
@@ -239,7 +271,11 @@ pub fn locate(project: &str, primary: Option<&str>, kept: &[String], key: &str) 
         }
     }
     if let Ok(entries) = std::fs::read_dir(&dir) {
-        let mut paths: Vec<std::path::PathBuf> = entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect();
+        let mut paths: Vec<std::path::PathBuf> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|x| x == "json"))
+            .collect();
         paths.sort();
         for p in paths {
             if let Some(l) = found(p) {
@@ -248,8 +284,16 @@ pub fn locate(project: &str, primary: Option<&str>, kept: &[String], key: &str) 
         }
     }
     match primary {
-        Some(s) => Located { path: dir.join(format!("{}.json", tag(s, key))), exists: false, reference: Some(reference(s, key)) },
-        None => Located { path: dir.join(format!("{}.json", tag(NO_SALT, key))), exists: false, reference: None },
+        Some(s) => Located {
+            path: dir.join(format!("{}.json", tag(s, key))),
+            exists: false,
+            reference: Some(reference(s, key)),
+        },
+        None => Located {
+            path: dir.join(format!("{}.json", tag(NO_SALT, key))),
+            exists: false,
+            reference: None,
+        },
     }
 }
 
@@ -261,11 +305,19 @@ pub fn locate_fresh(project: &str, primary: Option<&str>, key: &str) -> Located 
     match primary {
         Some(s) => {
             let path = dir.join(format!("{}.json", tag(s, key)));
-            Located { exists: path.exists(), path, reference: Some(reference(s, key)) }
+            Located {
+                exists: path.exists(),
+                path,
+                reference: Some(reference(s, key)),
+            }
         }
         None => {
             let path = dir.join(format!("{}.json", tag(NO_SALT, key)));
-            Located { exists: path.exists(), path, reference: None }
+            Located {
+                exists: path.exists(),
+                path,
+                reference: None,
+            }
         }
     }
 }
@@ -283,7 +335,12 @@ pub fn resolve(project: &str, reference: &str) -> Option<String> {
 
 /// A key's seed reference for a command that does not write the ledger
 /// (build-phase): the locator's answer, under this machine's salts.
-pub fn reference_for_key(home: &str, project: &str, override_salt: Option<&str>, key: &str) -> Option<String> {
+pub fn reference_for_key(
+    home: &str,
+    project: &str,
+    override_salt: Option<&str>,
+    key: &str,
+) -> Option<String> {
     let primary = salt(home, Some(project), override_salt);
     let kept = existing_salts(home, Some(project), override_salt);
     locate(project, primary.as_deref(), &kept, key).reference
@@ -299,13 +356,18 @@ mod tests {
         assert!(is_hex(&a, 32) && a != new_key(), "{a}");
         let r = reference("s1", "k1");
         assert_eq!(r, reference("s1", "k1"));
-        assert_ne!(r, reference("s2", "k1"), "a dataset holder without the salt cannot compute it");
+        assert_ne!(
+            r,
+            reference("s2", "k1"),
+            "a dataset holder without the salt cannot compute it"
+        );
         assert_eq!(parse_reference(&r).map(str::len), Some(16));
         assert_eq!(parse_reference("seed:ABCDEF0123456789"), None);
     }
 
     fn temp(name: &str) -> std::path::PathBuf {
-        let d = std::env::temp_dir().join(format!("impeccable-salt-{}-{}", name, std::process::id()));
+        let d =
+            std::env::temp_dir().join(format!("impeccable-salt-{}-{}", name, std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -329,9 +391,23 @@ mod tests {
         let project = temp("corrupt-project");
         std::fs::create_dir_all(home.join(".impeccable")).unwrap();
         std::fs::write(home.join(".impeccable/seed-salt"), "not a salt\n").unwrap();
-        assert_eq!(salt(&home.to_string_lossy(), Some(&project.to_string_lossy()), None), None);
-        assert_eq!(std::fs::read_to_string(home.join(".impeccable/seed-salt")).unwrap(), "not a salt\n", "left for the user");
-        assert!(!project.join(".impeccable/questions/seed-salt").exists(), "no silent switch to another salt");
+        assert_eq!(
+            salt(
+                &home.to_string_lossy(),
+                Some(&project.to_string_lossy()),
+                None
+            ),
+            None
+        );
+        assert_eq!(
+            std::fs::read_to_string(home.join(".impeccable/seed-salt")).unwrap(),
+            "not a salt\n",
+            "left for the user"
+        );
+        assert!(
+            !project.join(".impeccable/questions/seed-salt").exists(),
+            "no silent switch to another salt"
+        );
     }
 
     #[cfg(unix)]
@@ -344,13 +420,35 @@ mod tests {
         if std::fs::write(home.join("probe"), "").is_ok() {
             return; // running as root: permissions are not enforced
         }
-        let p = salt(&home.to_string_lossy(), Some(&project.to_string_lossy()), None).unwrap();
-        assert_eq!(std::fs::read_to_string(project.join(".impeccable/questions/seed-salt")).unwrap().trim(), p);
-        assert!(std::fs::read_to_string(project.join(".impeccable/questions/.gitignore")).unwrap().ends_with("*\n"));
+        let p = salt(
+            &home.to_string_lossy(),
+            Some(&project.to_string_lossy()),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(project.join(".impeccable/questions/seed-salt"))
+                .unwrap()
+                .trim(),
+            p
+        );
+        assert!(
+            std::fs::read_to_string(project.join(".impeccable/questions/.gitignore"))
+                .unwrap()
+                .ends_with("*\n")
+        );
         std::fs::set_permissions(&project, std::fs::Permissions::from_mode(0o555)).unwrap();
         let other = temp("readonly-project-2");
         std::fs::set_permissions(&other, std::fs::Permissions::from_mode(0o555)).unwrap();
-        assert_eq!(salt(&home.to_string_lossy(), Some(&other.to_string_lossy()), None), None, "nowhere to keep one");
+        assert_eq!(
+            salt(
+                &home.to_string_lossy(),
+                Some(&other.to_string_lossy()),
+                None
+            ),
+            None,
+            "nowhere to keep one"
+        );
         for d in [&home, &project, &other] {
             let _ = std::fs::set_permissions(d, std::fs::Permissions::from_mode(0o755));
             let _ = std::fs::remove_dir_all(d);
@@ -361,7 +459,10 @@ mod tests {
     fn a_project_salt_keeps_winning_once_the_home_becomes_writable() {
         let home = temp("later-home");
         let project = temp("later-project");
-        let (h, p) = (home.to_string_lossy().into_owned(), project.to_string_lossy().into_owned());
+        let (h, p) = (
+            home.to_string_lossy().into_owned(),
+            project.to_string_lossy().into_owned(),
+        );
         // A sandboxed run with no usable home made the project salt.
         let first = salt("", Some(&p), None).unwrap();
         assert!(project.join(".impeccable/questions/seed-salt").exists());
@@ -375,12 +476,25 @@ mod tests {
     fn a_home_salt_wins_and_a_stray_project_salt_still_counts() {
         let home = temp("both-home");
         let project = temp("both-project");
-        let (h, p) = (home.to_string_lossy().into_owned(), project.to_string_lossy().into_owned());
+        let (h, p) = (
+            home.to_string_lossy().into_owned(),
+            project.to_string_lossy().into_owned(),
+        );
         let project_salt = salt("", Some(&p), None).unwrap();
         std::fs::create_dir_all(home.join(".impeccable")).unwrap();
-        std::fs::write(home.join(".impeccable/seed-salt"), "0123456789abcdef0123456789abcdef\n").unwrap();
-        assert_eq!(salt(&h, Some(&p), None).unwrap(), "0123456789abcdef0123456789abcdef");
-        assert_eq!(existing_salts(&h, Some(&p), None), vec!["0123456789abcdef0123456789abcdef".to_string(), project_salt]);
+        std::fs::write(
+            home.join(".impeccable/seed-salt"),
+            "0123456789abcdef0123456789abcdef\n",
+        )
+        .unwrap();
+        assert_eq!(
+            salt(&h, Some(&p), None).unwrap(),
+            "0123456789abcdef0123456789abcdef"
+        );
+        assert_eq!(
+            existing_salts(&h, Some(&p), None),
+            vec!["0123456789abcdef0123456789abcdef".to_string(), project_salt]
+        );
     }
 
     #[test]
@@ -393,10 +507,17 @@ mod tests {
         let legacy = dir.join(format!("{}.json", tag(NO_SALT, "k1")));
         std::fs::write(&legacy, r#"{"key":"k1"}"#).unwrap();
         let l = locate(&p, Some("salt"), &["salt".to_string()], "k1");
-        assert_eq!((l.exists, l.reference), (true, None), "found, but no committable reference");
+        assert_eq!(
+            (l.exists, l.reference),
+            (true, None),
+            "found, but no committable reference"
+        );
         assert_eq!(resolve(&p, &format!("seed:{}", tag(NO_SALT, "k1"))), None);
         // A fresh key skips the search and takes the primary salt.
         let f = locate_fresh(&p, Some("salt"), "k2");
-        assert_eq!((f.exists, f.reference), (false, Some(reference("salt", "k2"))));
+        assert_eq!(
+            (f.exists, f.reference),
+            (false, Some(reference("salt", "k2")))
+        );
     }
 }

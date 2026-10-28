@@ -73,15 +73,26 @@ fn scan(fixture: &str) -> Option<Vec<(String, String, String, String)>> {
     let engine = BrowserEngine::new(env);
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/{fixture}");
-    let findings = engine.detect_url(&url, &ScanOptions::default()).expect("scan");
+    let findings = engine
+        .detect_url(&url, &ScanOptions::default())
+        .expect("scan");
     Some(
         findings
             .iter()
             .map(|f| {
-                let selector =
-                    f.extras.get("selector").and_then(|s| s.as_str()).unwrap_or("").to_string();
+                let selector = f
+                    .extras
+                    .get("selector")
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 assert_eq!(f.advisory == Some(true), f.severity == "advisory", "{f:?}");
-                (f.antipattern.clone(), f.snippet.clone(), selector, f.severity.clone())
+                (
+                    f.antipattern.clone(),
+                    f.snippet.clone(),
+                    selector,
+                    f.severity.clone(),
+                )
             })
             .collect(),
     )
@@ -111,9 +122,21 @@ fn quoting<'a>(findings: &'a [Row], rule: &str, label: &str) -> Vec<&'a str> {
 
 #[test]
 fn micro_labels_are_advisory() {
-    let Some(f) = scan("undersized-ui-text-micro-labels.html") else { return };
+    let Some(f) = scan("undersized-ui-text-micro-labels.html") else {
+        return;
+    };
     let rule = "undersized-ui-text";
-    for label in ["Popular", "What's inside", "Most popular", "Best value", "Q3", "60 Hz display", "7 am", "Noon", "6 pm"] {
+    for label in [
+        "Popular",
+        "What's inside",
+        "Most popular",
+        "Best value",
+        "Q3",
+        "60 Hz display",
+        "7 am",
+        "Noon",
+        "6 pm",
+    ] {
         assert_eq!(quoting(&f, rule, label), ["advisory"], "{label}: {f:#?}");
     }
     for label in [
@@ -135,86 +158,164 @@ fn micro_labels_are_advisory() {
         assert_eq!(quoting(&f, rule, label), ["warning"], "{label}: {f:#?}");
     }
     for label in ["New", "Days", "01"] {
-        assert_eq!(quoting(&f, rule, label), ["advisory", "warning"], "{label}: {f:#?}");
+        assert_eq!(
+            quoting(&f, rule, label),
+            ["advisory", "warning"],
+            "{label}: {f:#?}"
+        );
     }
 }
 
 #[test]
 fn fine_print_is_advisory_under_three_rules() {
-    let Some(f) = scan("fine-print.html") else { return };
+    let Some(f) = scan("fine-print.html") else {
+        return;
+    };
     // Weaker evidence: advisory under tiny-text and tight-leading.
     for class in ["adv-small", "adv-star", "adv-sup"] {
         assert_eq!(on(&f, "tiny-text", class), ["advisory"], "{class}: {f:#?}");
-        assert_eq!(on(&f, "tight-leading", class), ["advisory"], "{class}: {f:#?}");
+        assert_eq!(
+            on(&f, "tight-leading", class),
+            ["advisory"],
+            "{class}: {f:#?}"
+        );
     }
     assert_eq!(on(&f, "tiny-text", "adv-hint"), ["advisory"], "{f:#?}");
     // A singular `disclosure` widget panel, a footnote-marked accordion and a
     // type-scale `text-footnote` class stay advisory (decision 3 review).
-    for class in ["adv-disclosure-panel", "adv-accordion", "adv-inner-footnote", "adv-type-footnote"] {
+    for class in [
+        "adv-disclosure-panel",
+        "adv-accordion",
+        "adv-inner-footnote",
+        "adv-type-footnote",
+    ] {
         assert_eq!(on(&f, "tiny-text", class), ["advisory"], "{class}: {f:#?}");
     }
-    assert_eq!(on(&f, "line-length", "adv-faq-wide"), ["advisory"], "{f:#?}");
+    assert_eq!(
+        on(&f, "line-length", "adv-faq-wide"),
+        ["advisory"],
+        "{f:#?}"
+    );
     assert_eq!(on(&f, "tiny-text", "adv-terms"), ["advisory"], "{f:#?}");
     // A legal or footnote block (decision 3, round 13): exempt from
     // tiny-text, advisory under tight-leading. The id row is named by its id.
     for class in ["adv-class", "#disclaimer-2", "adv-list", "adv-banner"] {
         assert!(on(&f, "tiny-text", class).is_empty(), "{class}: {f:#?}");
-        assert_eq!(on(&f, "tight-leading", class), ["advisory"], "{class}: {f:#?}");
+        assert_eq!(
+            on(&f, "tight-leading", class),
+            ["advisory"],
+            "{class}: {f:#?}"
+        );
     }
     assert!(on(&f, "tiny-text", "#footnote-4").is_empty(), "{f:#?}");
-    assert_eq!(on(&f, "tight-leading", "#footnote-4"), ["advisory"], "{f:#?}");
+    assert_eq!(
+        on(&f, "tight-leading", "#footnote-4"),
+        ["advisory"],
+        "{f:#?}"
+    );
     // Links inside a footnote or a terms row keep undersized-ui-text.
-    assert_eq!(on(&f, "undersized-ui-text", "fail-footnote-link"), ["warning"], "{f:#?}");
-    assert_eq!(on(&f, "undersized-ui-text", "fail-terms-link"), ["warning"], "{f:#?}");
+    assert_eq!(
+        on(&f, "undersized-ui-text", "fail-footnote-link"),
+        ["warning"],
+        "{f:#?}"
+    );
+    assert_eq!(
+        on(&f, "undersized-ui-text", "fail-terms-link"),
+        ["warning"],
+        "{f:#?}"
+    );
     for class in ["fail-plain", "fail-deep"] {
         assert_eq!(on(&f, "tiny-text", class), ["warning"], "{class}: {f:#?}");
-        assert_eq!(on(&f, "tight-leading", class), ["warning"], "{class}: {f:#?}");
+        assert_eq!(
+            on(&f, "tight-leading", class),
+            ["warning"],
+            "{class}: {f:#?}"
+        );
     }
     assert_eq!(on(&f, "tiny-text", "fail-required"), ["warning"], "{f:#?}");
     // The consent label is not fine print under any rule.
-    assert_eq!(on(&f, "tight-leading", "fail-consent"), ["warning"], "{f:#?}");
-    assert_eq!(on(&f, "undersized-ui-text", "fail-consent"), ["warning"], "{f:#?}");
+    assert_eq!(
+        on(&f, "tight-leading", "fail-consent"),
+        ["warning"],
+        "{f:#?}"
+    );
+    assert_eq!(
+        on(&f, "undersized-ui-text", "fail-consent"),
+        ["warning"],
+        "{f:#?}"
+    );
     // line-length needs layout: the terms row is advisory, the disclaimer
     // row is exempt, and copy fails, a disclaimer at body size included.
     assert_eq!(on(&f, "line-length", "adv-wide"), ["advisory"], "{f:#?}");
     assert!(on(&f, "line-length", "ex-wide").is_empty(), "{f:#?}");
     assert_eq!(on(&f, "line-length", "fail-wide"), ["warning"], "{f:#?}");
-    assert_eq!(on(&f, "line-length", "fail-document"), ["warning"], "{f:#?}");
-    assert_eq!(on(&f, "line-length", "fail-disclaimer-intro"), ["warning"], "{f:#?}");
+    assert_eq!(
+        on(&f, "line-length", "fail-document"),
+        ["warning"],
+        "{f:#?}"
+    );
+    assert_eq!(
+        on(&f, "line-length", "fail-disclaimer-intro"),
+        ["warning"],
+        "{f:#?}"
+    );
 }
 
 #[test]
 fn a_policy_pages_body_stays_advisory() {
-    let Some(f) = scan("fine-print-policy.html") else { return };
+    let Some(f) = scan("fine-print-policy.html") else {
+        return;
+    };
     // The legal wrapper holds the page's text outside a footer: advisory.
     let policy = on(&f, "line-length", "adv-policy");
-    assert!(!policy.is_empty() && policy.iter().all(|s| *s == "advisory"), "{f:#?}");
+    assert!(
+        !policy.is_empty() && policy.iter().all(|s| *s == "advisory"),
+        "{f:#?}"
+    );
     // The legal block in the footer is exempt.
-    assert!(on(&f, "line-length", "ex-footer-legal").is_empty(), "{f:#?}");
+    assert!(
+        on(&f, "line-length", "ex-footer-legal").is_empty(),
+        "{f:#?}"
+    );
 }
 
 #[test]
 fn a_policy_body_with_inner_markers_stays_advisory() {
-    let Some(f) = scan("fine-print-policy-nested.html") else { return };
+    let Some(f) = scan("fine-print-policy-nested.html") else {
+        return;
+    };
     // Each paragraph carries its own legal marker; the wrapper around them
     // is the page's body, and it settles them.
     let policy = on(&f, "line-length", "adv-policy-nested");
-    assert!(!policy.is_empty() && policy.iter().all(|s| *s == "advisory"), "{f:#?}");
+    assert!(
+        !policy.is_empty() && policy.iter().all(|s| *s == "advisory"),
+        "{f:#?}"
+    );
     // Should-flag twin: the same marker inside the footer's legal block is exempt.
-    assert!(on(&f, "line-length", "ex-footer-legal").is_empty(), "{f:#?}");
+    assert!(
+        on(&f, "line-length", "ex-footer-legal").is_empty(),
+        "{f:#?}"
+    );
 }
 
 #[test]
 fn a_hidden_copy_does_not_shrink_a_policy_page() {
-    let Some(f) = scan("fine-print-policy-hidden.html") else { return };
+    let Some(f) = scan("fine-print-policy-hidden.html") else {
+        return;
+    };
     let policy = on(&f, "line-length", "adv-policy-visible");
-    assert!(!policy.is_empty() && policy.iter().all(|s| *s == "advisory"), "{f:#?}");
+    assert!(
+        !policy.is_empty() && policy.iter().all(|s| *s == "advisory"),
+        "{f:#?}"
+    );
     assert!(on(&f, "line-length", "hidden-copy").is_empty(), "{f:#?}");
 }
 
 #[test]
 fn text_in_a_framed_demo_is_advisory() {
-    let Some(f) = scan("mockup-structure.html") else { return };
+    let Some(f) = scan("mockup-structure.html") else {
+        return;
+    };
     let rule = "undersized-ui-text";
     for class in [
         "adv-dots",
@@ -260,16 +361,30 @@ fn text_in_a_framed_demo_is_advisory() {
     }
     // r8-t2: text covered inside a mockup is advisory; covered page text
     // keeps failing.
-    assert_eq!(on(&f, "text-occlusion", "adv-covered"), ["advisory"], "{f:#?}");
-    assert_eq!(on(&f, "text-occlusion", "fail-covered-page"), ["warning"], "{f:#?}");
+    assert_eq!(
+        on(&f, "text-occlusion", "adv-covered"),
+        ["advisory"],
+        "{f:#?}"
+    );
+    assert_eq!(
+        on(&f, "text-occlusion", "fail-covered-page"),
+        ["warning"],
+        "{f:#?}"
+    );
     assert_eq!(on(&f, "tiny-text", "adv-dots-run"), ["advisory"], "{f:#?}");
     assert_eq!(on(&f, "tiny-text", "fail-sentence"), ["warning"], "{f:#?}");
-    assert_eq!(on(&f, "low-contrast", "adv-dots-dim"), ["advisory"], "{f:#?}");
+    assert_eq!(
+        on(&f, "low-contrast", "adv-dots-dim"),
+        ["advisory"],
+        "{f:#?}"
+    );
 }
 
 #[test]
 fn nested_cards_in_a_mockup_are_advisory() {
-    let Some(f) = scan("nested-cards-mockups.html") else { return };
+    let Some(f) = scan("nested-cards-mockups.html") else {
+        return;
+    };
     let rule = "nested-cards";
     for id in [
         "#adv-window-inner",

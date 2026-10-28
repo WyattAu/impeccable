@@ -210,10 +210,7 @@ fn github_workspace_relativizes_nested_cwd() {
         env,
     );
     assert_eq!(code, 2, "{err}");
-    assert!(
-        out.contains("file=packages/web/card.html"),
-        "{out}"
-    );
+    assert!(out.contains("file=packages/web/card.html"), "{out}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -230,10 +227,7 @@ fn github_skips_the_regex_only_note() {
     );
     assert_eq!(code, 0, "{err}");
     assert!(out.is_empty(), "{out}");
-    assert!(
-        !err.contains("regex matching only"),
-        "{err}"
-    );
+    assert!(!err.contains("regex matching only"), "{err}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -241,7 +235,11 @@ fn stage_framework_dir(tag: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("impeccable-gh-fw-{tag}-{}", std::process::id()));
     stage_card(&dir);
     // An unlikely port keeps the probe from finding a real dev server.
-    std::fs::write(dir.join("next.config.js"), "module.exports = { port: 59871 };\n").unwrap();
+    std::fs::write(
+        dir.join("next.config.js"),
+        "module.exports = { port: 59871 };\n",
+    )
+    .unwrap();
     dir
 }
 
@@ -263,7 +261,12 @@ fn github_skips_the_framework_note() {
 #[test]
 fn text_mode_prints_the_framework_note() {
     let dir = stage_framework_dir("text");
-    let (_code, _out, err) = run_with(&dir, &["--no-config", "."], &CannedHtml(vec![]), HashMap::new());
+    let (_code, _out, err) = run_with(
+        &dir,
+        &["--no-config", "."],
+        &CannedHtml(vec![]),
+        HashMap::new(),
+    );
     assert!(err.contains("Next.js"), "{err}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
@@ -272,7 +275,10 @@ fn text_mode_prints_the_framework_note() {
 fn github_conflicts_with_list_rules() {
     let dir = std::env::temp_dir().join(format!("impeccable-gh-list-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    for args in [&["--list-rules", "--github"][..], &["--list-rules", "--github", "--json"][..]] {
+    for args in [
+        &["--list-rules", "--github"][..],
+        &["--list-rules", "--github", "--json"][..],
+    ] {
         let (code, out, err) = run_with(&dir, args, &MissingHtmlEngine, HashMap::new());
         assert_eq!(code, 1, "{args:?}");
         assert!(out.is_empty(), "{out}");
@@ -292,7 +298,10 @@ fn run_tty(dir: &Path, args: &[&str]) -> (i32, String, String) {
     let (mut io, cap) = Io::captured("", dir.to_path_buf(), HashMap::new());
     io.stdin_is_tty = true;
     let html = CannedHtml(vec![]);
-    let engines = Engines { html: &html, url: None };
+    let engines = Engines {
+        html: &html,
+        url: None,
+    };
     let code = run_detect(&argv, &mut io, &engines);
     let out = String::from_utf8(cap.stdout.borrow().clone()).unwrap();
     let err = String::from_utf8(cap.stderr.borrow().clone()).unwrap();

@@ -3,12 +3,11 @@
 
 use impeccable_core::checks::css_scan::{
     has_interpolation, is_unseen_declaration_source, names_same_element, scan_css_text_for_glow,
-    scan_css_text_for_marquee, scan_css_text_for_radial_halo,
-    CssHostIndex,
+    scan_css_text_for_marquee, scan_css_text_for_radial_halo, CssHostIndex,
 };
 use impeccable_core::checks::rules::{
-    find_gray_on_color_bg, find_solid_chromatic_bg, is_near_black_neutral_class, is_radius_property,
-    DeclaredCorners, NOMINAL_CARD_WIDTH_PX,
+    find_gray_on_color_bg, find_solid_chromatic_bg, is_near_black_neutral_class,
+    is_radius_property, DeclaredCorners, NOMINAL_CARD_WIDTH_PX,
 };
 use impeccable_core::color::is_neutral_color;
 use impeccable_core::constants::{EM_DASH_CHARS_PER_DASH, EM_DASH_FLOOR, OVERUSED_FONTS};
@@ -19,7 +18,7 @@ use impeccable_core::js_ext_a::{advance_utf16, slice_utf16_start, utf16_index, u
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-use crate::util::{line_of_offset, re, ANY, B, D, W, WS, WS_CHARS};
+use crate::util::{line_of_offset, re, B, WS};
 
 /// A regex match handed to a matcher's `test` / `fmt`: the whole match and
 /// its capture groups (JS `m[0]`, `m[1]`, ...; `None` where a group did not
@@ -158,7 +157,11 @@ fn markup_tag_span(line: &str, index: usize) -> Option<(usize, usize)> {
         };
         let tag_start = i + rel;
         let after = &line[tag_start + 1..];
-        if !after.chars().next().is_some_and(|c| c.is_ascii_alphabetic()) {
+        if !after
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic())
+        {
             i = tag_start + 1;
             continue;
         }
@@ -755,7 +758,7 @@ fn in_style_attribute(line: &str, index: usize) -> bool {
     }) || STYLE_OBJECT_ATTR_RE.find_iter(line).any(|m| {
         m.start() < index
             && balanced_braces(line, m.end() - 1)
-                .map_or(true, |object| index <= m.end() + object.len())
+                .is_none_or(|object| index <= m.end() + object.len())
     })
 }
 
@@ -1164,7 +1167,10 @@ impl<'a, 's> Scope<'a, 's> {
     /// A scope over markup text alone.
     #[cfg(test)]
     pub fn line(text: &'a str) -> Self {
-        Scope { text, element: None }
+        Scope {
+            text,
+            element: None,
+        }
     }
 
     pub fn in_file(text: &'a str, element: ElementSource<'a, 's>) -> Self {
@@ -1196,7 +1202,9 @@ impl<'a, 's> Scope<'a, 's> {
         let in_block = block_bounds(source.text().as_bytes(), pos).0 > 0;
         let own_scope = in_block && {
             let (chunks, _) = brace_scope_statements(source, e.i, m.index);
-            chunks.iter().any(|(statements, _)| declares_radius(statements))
+            chunks
+                .iter()
+                .any(|(statements, _)| declares_radius(statements))
         };
         Some(own_scope || index.declaration_declares_radius(pos))
     }
@@ -1240,9 +1248,11 @@ fn literal_tag_classes(tag: &str) -> Option<Vec<String>> {
 /// style object on the tag (`sx={{ ... }}`), that object. A corner nothing on
 /// the tag declares could come from a stylesheet.
 fn tag_squares_itself(m: &MatchCtx, source: &SourceText, i: usize, tag: &str, side: usize) -> bool {
-    if literal_tag_classes(tag)
-        .is_some_and(|classes| classes.iter().any(|c| c == "rounded-none" || c == "rounded-0"))
-    {
+    if literal_tag_classes(tag).is_some_and(|classes| {
+        classes
+            .iter()
+            .any(|c| c == "rounded-none" || c == "rounded-0")
+    }) {
         return true;
     }
     if !tag_own_corners(tag, DeclaredCorners::unknown()).is_rounded_away_from_side(side) {
@@ -1600,10 +1610,7 @@ re!(
     r"w-(?:0\.5|1(?:\.5)?|2(?:\.5)?|3|\[(?:[2-9]|1[0-2])px\])"
 );
 re!(STRIPE_CHILD_HEIGHT_TOKEN_RE, r"h-(?:px\b|[0-9]|\[)");
-re!(
-    STRIPE_CHILD_ARIA_RE,
-    r"(?i)aria-(?:current|selected)"
-);
+re!(STRIPE_CHILD_ARIA_RE, r"(?i)aria-(?:current|selected)");
 re!(STRIPE_CHILD_ROUNDED_FULL_RE, format!("{B}rounded-full{B}"));
 re!(
     STRIPE_CHILD_CUE_RE,
@@ -1628,9 +1635,9 @@ fn hyphen_safe_suffix(text: &str, end: usize) -> bool {
 }
 
 fn scope_has_fixed_height(scope: &str) -> bool {
-    STRIPE_CHILD_HEIGHT_TOKEN_RE.find_iter(scope).any(|m| {
-        hyphen_safe_prefix(scope, m.start())
-    })
+    STRIPE_CHILD_HEIGHT_TOKEN_RE
+        .find_iter(scope)
+        .any(|m| hyphen_safe_prefix(scope, m.start()))
 }
 re!(BORDER_ACCENT_TW_RE, format!("{B}border-[tb]-({D}+){B}"));
 re!(ANIMATE_SPIN_RE, format!("{B}animate-spin{B}"));
@@ -1759,12 +1766,20 @@ pub(crate) fn image_source_is_missing(tag: &str, ext: &str) -> bool {
     let b = tag.as_bytes();
     let mut p = 4; // <img
     while p < b.len() {
-        while p < b.len() && (b[p].is_ascii_whitespace() || b[p] == b'/') { p += 1; }
-        if p >= b.len() || b[p] == b'>' { break; }
+        while p < b.len() && (b[p].is_ascii_whitespace() || b[p] == b'/') {
+            p += 1;
+        }
+        if p >= b.len() || b[p] == b'>' {
+            break;
+        }
         if b[p] == b'{' {
-            let Some(close) = matching_close(b, p) else { return false; };
+            let Some(close) = matching_close(b, p) else {
+                return false;
+            };
             let expression = tag[p + 1..close].trim();
-            if shorthand && (matches!(expression, "src" | "srcset") || expression.starts_with("...")) {
+            if shorthand
+                && (matches!(expression, "src" | "srcset") || expression.starts_with("..."))
+            {
                 return false;
             }
             // JSX spreads also leave the source unknown.
@@ -1775,9 +1790,13 @@ pub(crate) fn image_source_is_missing(tag: &str, ext: &str) -> bool {
             continue;
         }
         let start = p;
-        while p < b.len() && !b[p].is_ascii_whitespace() && !matches!(b[p], b'=' | b'>' | b'/') { p += 1; }
+        while p < b.len() && !b[p].is_ascii_whitespace() && !matches!(b[p], b'=' | b'>' | b'/') {
+            p += 1;
+        }
         let name = &tag[start..p];
-        while p < b.len() && b[p].is_ascii_whitespace() { p += 1; }
+        while p < b.len() && b[p].is_ascii_whitespace() {
+            p += 1;
+        }
         let source = names_image_source(name);
         let directive = name.contains(':');
         if vue && ((source && directive) || name == "v-bind") {
@@ -1786,25 +1805,35 @@ pub(crate) fn image_source_is_missing(tag: &str, ext: &str) -> bool {
         if p >= b.len() || b[p] != b'=' {
             // Svelte `bind:src` alone is shorthand for `bind:src={src}`;
             // a bare `src` is still empty.
-            if source && directive { return false; }
+            if source && directive {
+                return false;
+            }
             continue;
         }
         p += 1;
-        while p < b.len() && b[p].is_ascii_whitespace() { p += 1; }
+        while p < b.len() && b[p].is_ascii_whitespace() {
+            p += 1;
+        }
         let value_start = p;
         let value = if p < b.len() && matches!(b[p], b'\'' | b'"') {
             let quote = b[p];
             p += 1;
             let start = p;
-            while p < b.len() && b[p] != quote { p += 1; }
+            while p < b.len() && b[p] != quote {
+                p += 1;
+            }
             let value = &tag[start..p];
             p = (p + 1).min(b.len());
             Some(value)
         } else if p < b.len() && b[p] == b'{' {
-            p = matching_close(b, p).map(|close| close + 1).unwrap_or(b.len());
+            p = matching_close(b, p)
+                .map(|close| close + 1)
+                .unwrap_or(b.len());
             None
         } else {
-            while p < b.len() && !b[p].is_ascii_whitespace() && b[p] != b'>' { p += 1; }
+            while p < b.len() && !b[p].is_ascii_whitespace() && b[p] != b'>' {
+                p += 1;
+            }
             Some(&tag[value_start..p])
         };
         // Any source with a value, or bound to an expression, is present.
@@ -1824,7 +1853,7 @@ fn names_image_source(name: &str) -> bool {
     let base = name.split('.').next().unwrap_or(name);
     is_source(base)
         || base
-            .rsplit_once(|c| c == ':' || c == '-')
+            .rsplit_once([':', '-'])
             .is_some_and(|(_, last)| is_source(last))
 }
 
@@ -2558,9 +2587,7 @@ pub static REGEX_MATCHERS: Lazy<Vec<Matcher>> = Lazy::new(|| {
             find_all: |l| all(&BORDER_ACCENT_TW_RE, l),
             test: |m, line| {
                 let scope = containing_markup_tag(line)(m.index);
-                has_rounded(&scope)
-                    && num(m.g(1)) >= 1.0
-                    && !ANIMATE_SPIN_RE.is_match(&scope)
+                has_rounded(&scope) && num(m.g(1)) >= 1.0 && !ANIMATE_SPIN_RE.is_match(&scope)
             },
             fmt: |m, _| m.whole().to_string(),
         },
@@ -2717,7 +2744,6 @@ fn set_add(set: &mut Vec<f64>, v: f64) {
         set.push(v);
     }
 }
-
 
 re!(
     SPACING_PX_RE,
@@ -3077,7 +3103,9 @@ mod tests {
         let g = |line: &str| run("gray-on-color", line);
         // A `/10` opacity tint is not a solid fill.
         assert!(g(r#"<button className="text-slate-300 hover:bg-red-500/10 hover:text-red-400">Log out</button>"#).is_empty());
-        assert!(g(r#"<button className="text-slate-300 bg-red-500/10">Log out</button>"#).is_empty());
+        assert!(
+            g(r#"<button className="text-slate-300 bg-red-500/10">Log out</button>"#).is_empty()
+        );
         // A pale tint is not colour (the computed form's OKLCH test).
         assert!(g(r#"<p className="text-gray-600 bg-amber-100">Note</p>"#).is_empty());
         assert_eq!(
@@ -3087,8 +3115,14 @@ mod tests {
         // Exclusive ternary arms never pair with each other.
         assert!(g(r#"<button className={`px-4 py-2 text-sm rounded-lg transition-colors ${mode === "a" ? "bg-amber-600 text-white" : "bg-white/5 text-slate-400 hover:bg-white/10"}`}>Mode</button>"#).is_empty());
         assert!(g(r#"<button className={mode > 0 ? "bg-amber-600 text-white" : "text-slate-400"}>Mode</button>"#).is_empty());
-        assert!(g(r#"<div className={a ? "bg-red-500" : b ? "text-slate-400" : "bg-blue-600"} />"#).is_empty());
-        assert!(g(r#"<div className={value ?? fallback ? "bg-red-500" : "text-slate-400"} />"#).is_empty());
+        assert!(g(
+            r#"<div className={a ? "bg-red-500" : b ? "text-slate-400" : "bg-blue-600"} />"#
+        )
+        .is_empty());
+        assert!(
+            g(r#"<div className={value ?? fallback ? "bg-red-500" : "text-slate-400"} />"#)
+                .is_empty()
+        );
         // Sibling tags on one line are separate scopes.
         assert!(g(r#"<div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-amber-500" /><span className="text-slate-400">Vital few</span></div>"#).is_empty());
         // Simultaneous arguments, a common prefix, and a shared suffix pair.
@@ -3097,7 +3131,9 @@ mod tests {
             vec!["text-slate-400 on bg-blue-600"]
         );
         assert_eq!(
-            g(r#"<button className={cn("text-slate-400", mode === "a" ? "bg-amber-600" : "bg-white")}>Go</button>"#),
+            g(
+                r#"<button className={cn("text-slate-400", mode === "a" ? "bg-amber-600" : "bg-white")}>Go</button>"#
+            ),
             vec!["text-slate-400 on bg-amber-600"]
         );
         assert_eq!(
@@ -3453,11 +3489,26 @@ mod tests {
 
     #[test]
     fn stripe_child_cues_require_complete_class_tokens() {
-        for cue in ["left-0.5", "right-0.5", "inset-0.5", "inset-y-0.5", "-left-0", "left-0/2", "shrink-0.5"] {
+        for cue in [
+            "left-0.5",
+            "right-0.5",
+            "inset-0.5",
+            "inset-y-0.5",
+            "-left-0",
+            "left-0/2",
+            "shrink-0.5",
+        ] {
             let source = format!(r#"<div className="w-1 {cue} bg-amber-500" />"#);
             assert!(run("side-tab", &source).is_empty(), "{cue}");
         }
-        for cue in ["left-0", "right-0", "inset-0", "inset-y-0", "shrink-0", "rounded-l-lg"] {
+        for cue in [
+            "left-0",
+            "right-0",
+            "inset-0",
+            "inset-y-0",
+            "shrink-0",
+            "rounded-l-lg",
+        ] {
             let source = format!(r#"<div className="w-1 {cue} bg-amber-500" />"#);
             assert_eq!(run("side-tab", &source).len(), 1, "{cue}");
         }
@@ -3489,10 +3540,10 @@ mod tests {
         .is_empty());
         assert!(s(r#"<div className="w-1 bg-amber-500/10" />"#).is_empty());
         assert!(s(r#"<a className="w-1 bg-amber-500" aria-current="page"></a>"#).is_empty());
-        assert!(s(
-            r#"<div className="w-1 shrink-0"><span className="bg-amber-500" /></div>"#
-        )
-        .is_empty());
+        assert!(
+            s(r#"<div className="w-1 shrink-0"><span className="bg-amber-500" /></div>"#)
+                .is_empty()
+        );
         assert!(s(r#"<div className="w-1 bg-amber-500">|</div>"#).is_empty());
         assert!(s(r#"<div className="w-1 bg-amber-500" />"#).is_empty());
         assert_eq!(
@@ -3570,11 +3621,20 @@ mod tests {
             g(r#"<div className="rounded-full border-b-2" />"#),
             vec!["border-b-2"]
         );
-        assert!(g(r#"<div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent" />"#).is_empty());
-        assert!(g(r#"<div className="sm:animate-spin rounded-full h-8 w-8 border-t-2" />"#).is_empty());
-        assert!(g(r#"<div className="motion-safe:animate-spin rounded-full border-b-2" />"#).is_empty());
+        assert!(g(
+            r#"<div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent" />"#
+        )
+        .is_empty());
+        assert!(
+            g(r#"<div className="sm:animate-spin rounded-full h-8 w-8 border-t-2" />"#).is_empty()
+        );
+        assert!(
+            g(r#"<div className="motion-safe:animate-spin rounded-full border-b-2" />"#).is_empty()
+        );
         assert_eq!(
-            g(r#"<div className="animate-spin rounded-full h-12 w-12 border-b-2" /><div className="rounded-lg border-t-4" />"#),
+            g(
+                r#"<div className="animate-spin rounded-full h-12 w-12 border-b-2" /><div className="rounded-lg border-t-4" />"#
+            ),
             vec!["border-t-4"]
         );
         assert!(g(r#"<div className="animate-spin rounded-full h-12 w-12 border-b-2" /><div className="border-t-4" />"#).is_empty());

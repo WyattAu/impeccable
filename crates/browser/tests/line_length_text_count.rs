@@ -19,7 +19,9 @@ use impeccable_detect::engines::{ScanOptions, UrlEngine};
 const FIXTURE: &str = "line-length-text-count.html";
 
 fn fixture_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/antipatterns").join(FIXTURE)
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/antipatterns")
+        .join(FIXTURE)
 }
 
 fn serve() -> u16 {

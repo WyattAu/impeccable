@@ -9,8 +9,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use impeccable_detect::MissingHtmlEngine;
-use impeccable_hook::hook_lib::{get_cache_path, get_pending_path, Runtime};
 use impeccable_hook::hook;
+use impeccable_hook::hook_lib::{get_cache_path, get_pending_path, Runtime};
 use serde_json::json;
 
 static TMP_SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -51,7 +51,10 @@ impl Tmp {
         let base = std::env::temp_dir().join(format!(
             "impeccable-cache-root-{}-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
             // A per-process counter: Windows' clock is coarse enough that two
             // parallel tests can share a nanosecond stamp and then delete each
             // other's directories.
@@ -61,7 +64,10 @@ impl Tmp {
         // Like Node's `realpathSync`: no `\\?\` verbatim prefix on Windows, so the
         // paths the hook joins under this root resolve (the kernel takes a
         // verbatim path literally and rejects a forward slash).
-        let real = std::fs::canonicalize(&base).unwrap().to_string_lossy().into_owned();
+        let real = std::fs::canonicalize(&base)
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
         Tmp(PathBuf::from(real.strip_prefix(r"\\?\").unwrap_or(&real)))
     }
     fn path(&self) -> String {
@@ -81,7 +87,13 @@ impl Drop for Tmp {
 }
 
 fn rt(cwd: &str) -> Runtime<'static> {
-    Runtime::new(cwd.to_string(), HashMap::new(), "/impeccable".to_string(), "/opt/bin/impeccable", &HTML)
+    Runtime::new(
+        cwd.to_string(),
+        HashMap::new(),
+        "/impeccable".to_string(),
+        "/opt/bin/impeccable",
+        &HTML,
+    )
 }
 
 fn edit_event(cwd: &str, file: &str, session: &str) -> String {
@@ -112,10 +124,19 @@ fn state_relocates_and_slug_normalizes() {
     );
     // Trailing separators and relative segments slug to the same dir.
     assert_eq!(get_cache_path("/x/my.app"), get_cache_path("/x/my.app/"));
-    assert_eq!(get_cache_path("/x/my.app"), get_cache_path("/x/other/../my.app"));
+    assert_eq!(
+        get_cache_path("/x/my.app"),
+        get_cache_path("/x/other/../my.app")
+    );
     // The readable part stays human-scannable and the 8-hex digest keeps
     // colliding readable slugs apart (`/x/my.app` vs `/x/my-app`).
-    let dir = std::path::Path::new(&cache).parent().unwrap().file_name().unwrap().to_string_lossy().into_owned();
+    let dir = std::path::Path::new(&cache)
+        .parent()
+        .unwrap()
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
     // The readable part is the RESOLVED project path with `:`, `\`, `/` and `.`
     // mapped to `-`, so on Windows it carries the current drive
     // (`D:\x\my.app` -> `D--x-my-app`). Derive it rather than pinning the
@@ -126,7 +147,13 @@ fn state_relocates_and_slug_normalizes() {
     );
     let readable: String = resolved
         .chars()
-        .map(|c| if matches!(c, ':' | '\\' | '/' | '.') { '-' } else { c })
+        .map(|c| {
+            if matches!(c, ':' | '\\' | '/' | '.') {
+                '-'
+            } else {
+                c
+            }
+        })
         .collect();
     assert!(dir.starts_with(&format!("{readable}-")), "{}", dir);
     let digest = dir.rsplit('-').next().unwrap();
@@ -175,18 +202,28 @@ fn tilde_expands_against_homedir_or_rejects() {
     let home = Tmp::new();
     let explicit = {
         let joined = format!("{}/caches", home.path());
-        let _g = EnvGuard::set(&[("HOME", Some(&home.path())), ("IMPECCABLE_CACHE_ROOT", Some(&joined))]);
+        let _g = EnvGuard::set(&[
+            ("HOME", Some(&home.path())),
+            ("IMPECCABLE_CACHE_ROOT", Some(&joined)),
+        ]);
         get_cache_path("/x/app")
     };
     let tilde = {
-        let _g = EnvGuard::set(&[("HOME", Some(&home.path())), ("IMPECCABLE_CACHE_ROOT", Some("~/caches"))]);
+        let _g = EnvGuard::set(&[
+            ("HOME", Some(&home.path())),
+            ("IMPECCABLE_CACHE_ROOT", Some("~/caches")),
+        ]);
         get_cache_path("/x/app")
     };
     assert_eq!(explicit, tilde);
     // No determinable home dir: expansion is rejected and state falls back
     // to the project-local default (never the process cwd).
     let no_home = {
-        let _g = EnvGuard::set(&[("HOME", None), ("USERPROFILE", None), ("IMPECCABLE_CACHE_ROOT", Some("~/caches"))]);
+        let _g = EnvGuard::set(&[
+            ("HOME", None),
+            ("USERPROFILE", None),
+            ("IMPECCABLE_CACHE_ROOT", Some("~/caches")),
+        ]);
         get_cache_path("/x/app")
     };
     assert_eq!(no_home, "/x/app/.impeccable/hook.cache.json");
@@ -210,16 +247,26 @@ fn run_hook_persists_and_dedupes_through_the_redirect() {
 
     // The remembered finding dedupes the second identical edit into pending.
     let two = hook::run_hook(&r, &edit_event(&cwd, &css, "s1"));
-    assert!(two.stdout.contains("flagged earlier this session"), "{}", two.stdout);
+    assert!(
+        two.stdout.contains("flagged earlier this session"),
+        "{}",
+        two.stdout
+    );
 
     // A clean edit still persists its editCount bump: the redirected cache
     // file is the opt-in marker even though `.impeccable/` never appears.
     let clean = project.write("src/b.css", CLEAN_CSS);
     let before = std::fs::read_to_string(get_cache_path(&cwd)).unwrap();
     let three = hook::run_hook(&r, &edit_event(&cwd, &clean, "s1"));
-    assert_eq!(three.audit.get("kind").and_then(|v| v.as_str()), Some("clean"));
+    assert_eq!(
+        three.audit.get("kind").and_then(|v| v.as_str()),
+        Some("clean")
+    );
     let after = std::fs::read_to_string(get_cache_path(&cwd)).unwrap();
-    assert_ne!(before, after, "clean-edit editCount bump persisted through the redirect");
+    assert_ne!(
+        before, after,
+        "clean-edit editCount bump persisted through the redirect"
+    );
 }
 
 #[test]
@@ -234,7 +281,10 @@ fn no_footprint_noop_gate_holds_under_redirect() {
     // no-op on disk (issues #344, #305), redirect or not.
     let clean = project.write("src/b.css", CLEAN_CSS);
     let res = hook::run_hook(&r, &edit_event(&cwd, &clean, "s1"));
-    assert_eq!(res.audit.get("kind").and_then(|v| v.as_str()), Some("clean"));
+    assert_eq!(
+        res.audit.get("kind").and_then(|v| v.as_str()),
+        Some("clean")
+    );
     assert!(!std::path::Path::new(&get_cache_path(&cwd)).exists());
     assert!(!project.0.join(".impeccable").exists());
 }

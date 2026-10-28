@@ -77,11 +77,18 @@ fn scan(fixture: &str) -> Option<Vec<Finding>> {
     let engine = BrowserEngine::new(env);
     let port = serve();
     let url = format!("http://127.0.0.1:{port}/{fixture}");
-    Some(engine.detect_url(&url, &ScanOptions::default()).expect("scan"))
+    Some(
+        engine
+            .detect_url(&url, &ScanOptions::default())
+            .expect("scan"),
+    )
 }
 
 fn selector(f: &Finding) -> &str {
-    f.extras.get("selector").and_then(|s| s.as_str()).unwrap_or("")
+    f.extras
+        .get("selector")
+        .and_then(|s| s.as_str())
+        .unwrap_or("")
 }
 
 /// The findings of `rule` whose selector names `id`.
@@ -96,16 +103,25 @@ fn on<'a>(findings: &'a [Finding], rule: &str, id: &str) -> Vec<&'a Finding> {
 /// one does not.
 fn columns(findings: &[Finding], rule: &str, flag: &[&str], pass: &[&str]) {
     for id in flag {
-        assert!(!on(findings, rule, id).is_empty(), "{rule}: expected #{id} to flag, got {findings:#?}");
+        assert!(
+            !on(findings, rule, id).is_empty(),
+            "{rule}: expected #{id} to flag, got {findings:#?}"
+        );
     }
     for id in pass {
-        assert!(on(findings, rule, id).is_empty(), "{rule}: #{id} should pass: {:#?}", on(findings, rule, id));
+        assert!(
+            on(findings, rule, id).is_empty(),
+            "{rule}: #{id} should pass: {:#?}",
+            on(findings, rule, id)
+        );
     }
 }
 
 #[test]
 fn lead_text_and_capitals_keep_their_leading() {
-    let Some(f) = scan("tight-leading-lead-and-caps.html") else { return };
+    let Some(f) = scan("tight-leading-lead-and-caps.html") else {
+        return;
+    };
     columns(
         &f,
         "tight-leading",
@@ -123,44 +139,74 @@ fn lead_text_and_capitals_keep_their_leading() {
 
 #[test]
 fn a_shimmer_is_not_gradient_text_and_a_sheen_is_advisory() {
-    let Some(f) = scan("gradient-text-states.html") else { return };
+    let Some(f) = scan("gradient-text-states.html") else {
+        return;
+    };
     columns(
         &f,
         "gradient-text",
-        &["flag-ramp", "flag-rainbow-fallback", "flag-paused-shimmer", "flag-sheen-advisory"],
+        &[
+            "flag-ramp",
+            "flag-rainbow-fallback",
+            "flag-paused-shimmer",
+            "flag-sheen-advisory",
+        ],
         &["pass-shimmer"],
     );
-    assert_eq!(on(&f, "gradient-text", "flag-rainbow-fallback")[0].severity, "warning");
+    assert_eq!(
+        on(&f, "gradient-text", "flag-rainbow-fallback")[0].severity,
+        "warning"
+    );
     assert_eq!(on(&f, "gradient-text", "flag-ramp")[0].severity, "warning");
-    assert_eq!(on(&f, "gradient-text", "flag-sheen-advisory")[0].severity, "advisory");
+    assert_eq!(
+        on(&f, "gradient-text", "flag-sheen-advisory")[0].severity,
+        "advisory"
+    );
 }
 
 #[test]
 fn a_list_item_is_not_charged_with_its_nested_list() {
-    let Some(f) = scan("line-length-nested-list.html") else { return };
-    columns(&f, "line-length", &["flag-long-item"], &["pass-heading-item"]);
+    let Some(f) = scan("line-length-nested-list.html") else {
+        return;
+    };
+    columns(
+        &f,
+        "line-length",
+        &["flag-long-item"],
+        &["pass-heading-item"],
+    );
 }
 
 #[test]
 fn a_tracking_pixel_is_not_a_buried_raster() {
-    let Some(f) = scan("buried-raster-tracking-pixel.html") else { return };
+    let Some(f) = scan("buried-raster-tracking-pixel.html") else {
+        return;
+    };
     columns(&f, "buried-raster", &["flag-faint-photo"], &["pass-beacon"]);
 }
 
 #[test]
 fn lines_a_clamp_hides_leave_the_last_line_unjudged() {
-    let Some(f) = scan("straggler-clamped.html") else { return };
+    let Some(f) = scan("straggler-clamped.html") else {
+        return;
+    };
     columns(
         &f,
         "straggler",
-        &["flag-unclamped", "flag-marker-last", "flag-in-ratio-padding"],
+        &[
+            "flag-unclamped",
+            "flag-marker-last",
+            "flag-in-ratio-padding",
+        ],
         &["pass-clamped"],
     );
 }
 
 #[test]
 fn dividers_and_scroll_edges_are_not_cramped() {
-    let Some(f) = scan("cramped-padding-dividers.html") else { return };
+    let Some(f) = scan("cramped-padding-dividers.html") else {
+        return;
+    };
     columns(
         &f,
         "cramped-padding",
@@ -171,7 +217,9 @@ fn dividers_and_scroll_edges_are_not_cramped() {
 
 #[test]
 fn text_under_a_higher_panel_or_a_mask_fade_is_not_scored() {
-    let Some(f) = scan("low-contrast-covered-and-masked.html") else { return };
+    let Some(f) = scan("low-contrast-covered-and-masked.html") else {
+        return;
+    };
     columns(
         &f,
         "low-contrast",

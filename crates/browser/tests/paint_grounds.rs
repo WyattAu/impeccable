@@ -80,7 +80,11 @@ fn scan(engine: &BrowserEngine, fixture: &str) -> Vec<(String, String, String, S
         .map(|f| {
             (
                 f.antipattern.clone(),
-                f.extras.get("selector").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                f.extras
+                    .get("selector")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
                 f.snippet.clone(),
                 f.severity.clone(),
             )
@@ -111,7 +115,11 @@ fn grounds_painted_by_halves_faces_clips_and_echoes() {
     assert_eq!(face.len(), 1, "{flagged:#?}");
     assert!(face[0].0.contains("on #c8c8c8"), "{face:?}");
     // Pale stops clipped to the text on white fail by the best of them.
-    assert_eq!(low("#flag-pale-stops-clipped-on-white").len(), 1, "{flagged:#?}");
+    assert_eq!(
+        low("#flag-pale-stops-clipped-on-white").len(),
+        1,
+        "{flagged:#?}"
+    );
     // The opaque copy over another run is scored as itself.
     let front = low("#flag-pale-green-opaque-copy");
     assert_eq!(front.len(), 1, "{flagged:#?}");
@@ -125,7 +133,10 @@ fn grounds_painted_by_halves_faces_clips_and_echoes() {
         "#flag-pale-below-skewed-edge",
         "#flag-pale-on-top-white-face",
     ] {
-        assert!(!low(selector).is_empty(), "missing low-contrast on {selector} in {flagged:#?}");
+        assert!(
+            !low(selector).is_empty(),
+            "missing low-contrast on {selector} in {flagged:#?}"
+        );
     }
     for selector in [
         "#pass-pale-on-skewed-band",
@@ -135,7 +146,10 @@ fn grounds_painted_by_halves_faces_clips_and_echoes() {
         "#pass-stat-clipped-on-two-layers",
         "#pass-word-in-clipped-title",
     ] {
-        assert!(low(selector).is_empty(), "low-contrast on {selector} in {flagged:#?}");
+        assert!(
+            low(selector).is_empty(),
+            "low-contrast on {selector} in {flagged:#?}"
+        );
     }
     // The green under a blended copy of itself is handed to the pixels: the
     // element pass's verdict on the green alone never stands as a counted

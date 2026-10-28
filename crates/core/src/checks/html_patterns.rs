@@ -4,13 +4,12 @@
 
 use crate::checks::css_scan::{
     enclosing_css_selector, scan_css_text_for_buried_raster, scan_css_text_for_glow_with,
-    scan_css_text_for_inset_stripe, scan_css_text_for_marquee,
-    scan_css_text_for_organic_clip_path, scan_css_text_for_pseudo_stripe,
-    scan_css_text_for_pulsing_dot, scan_css_text_for_radial_halo_with,
-    PatternFinding,
+    scan_css_text_for_inset_stripe, scan_css_text_for_marquee, scan_css_text_for_organic_clip_path,
+    scan_css_text_for_pseudo_stripe, scan_css_text_for_pulsing_dot,
+    scan_css_text_for_radial_halo_with, PatternFinding,
 };
-use crate::checks::rules::{RuleHit, ANY, B, BEZIER_RE, D, DOT, W};
-use crate::js::{self, ci, math_round, number_to_string, parse_float, parse_int, WS, WS_CHARS};
+use crate::checks::rules::{RuleHit, B, BEZIER_RE, DOT};
+use crate::js::{self, ci, math_round, number_to_string, parse_float, parse_int, WS};
 use crate::js_ext_a::{advance_utf16, is_word_byte, retreat_utf16};
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -21,7 +20,7 @@ pub use impeccable_foundation::rules::html_patterns::*;
 
 macro_rules! re {
     ($name:ident, $pat:expr) => {
-        static $name: Lazy<Regex> = Lazy::new(|| Regex::new(&$pat).expect(stringify!($name)));
+        static $name: Lazy<Regex> = Lazy::new(|| Regex::new(r"<[^>]+>").expect(stringify!($name)));
     };
 }
 
@@ -136,7 +135,10 @@ const SVG_FONT_SIZE_PX: f64 = 16.0;
 /// wordmark: 11 of 208).
 const SVG_PRIMITIVE_SHARE_MIN: f64 = 0.25;
 
-re!(SVG_RECT_TAG_RE, format!(r"<{rect}{B}[^>]*>", rect = ci("rect")));
+re!(
+    SVG_RECT_TAG_RE,
+    format!(r"<{rect}{B}[^>]*>", rect = ci("rect"))
+);
 re!(
     SVG_ROUND_SHAPE_RE,
     format!(
@@ -169,7 +171,11 @@ fn svg_is_a_bar_series(painted: &str, primitives: usize) -> bool {
     let rects: Vec<(f64, f64)> = SVG_RECT_TAG_RE
         .find_iter(painted)
         .map(|tag| {
-            let dim = |re: &Regex| svg_attr_dim(tag.as_str(), re).filter(|v| v.is_finite()).unwrap_or(f64::NAN);
+            let dim = |re: &Regex| {
+                svg_attr_dim(tag.as_str(), re)
+                    .filter(|v| v.is_finite())
+                    .unwrap_or(f64::NAN)
+            };
             (dim(&SVG_WIDTH_RE), dim(&SVG_HEIGHT_RE))
         })
         .filter(|(w, h)| w.is_finite() && h.is_finite())
@@ -181,9 +187,18 @@ fn svg_is_a_bar_series(painted: &str, primitives: usize) -> bool {
         rects
             .iter()
             .map(|a| {
-                let group: Vec<&(f64, f64)> = rects.iter().filter(|b| (side(b) - side(a)).abs() <= 1.0).collect();
-                let varies = group.iter().any(|b| !((other(b) - other(group[0])).abs() <= 1.0));
-                if varies { group.len() } else { 0 }
+                let group: Vec<&(f64, f64)> = rects
+                    .iter()
+                    .filter(|b| (side(b) - side(a)).abs() <= 1.0)
+                    .collect();
+                let varies = group
+                    .iter()
+                    .any(|b| !((other(b) - other(group[0])).abs() <= 1.0));
+                if varies {
+                    group.len()
+                } else {
+                    0
+                }
             })
             .max()
             .unwrap_or(0)
@@ -505,7 +520,10 @@ fn repeating_gradient_repeats(args: &str, radial: bool) -> bool {
     use crate::checks::css_scan::split_top_level;
     let stops = split_top_level(args, |c| c == ',');
     let tokens = |stop: &str| -> Vec<String> {
-        split_top_level(stop, char::is_whitespace).into_iter().map(js::to_lower_case).collect()
+        split_top_level(stop, char::is_whitespace)
+            .into_iter()
+            .map(js::to_lower_case)
+            .collect()
     };
     // The first argument is a direction or a shape unless it opens with a colour.
     let first_index = match tokens(stops.first().copied().unwrap_or("")).first() {
@@ -558,8 +576,13 @@ fn repeating_gradient_repeats(args: &str, radial: bool) -> bool {
     if last.len() == 1 && last[0].contains("var(") {
         return true;
     }
-    let starts_at_zero = first.get(1).map_or(true, |p| gradient_position(p) == Some(0.0));
-    let ends_at_full = last.len() == 1 || last.last().is_some_and(|p| gradient_position(p) == Some(1.0));
+    let starts_at_zero = first
+        .get(1)
+        .is_none_or(|p| gradient_position(p) == Some(0.0));
+    let ends_at_full = last.len() == 1
+        || last
+            .last()
+            .is_some_and(|p| gradient_position(p) == Some(1.0));
     !(starts_at_zero && ends_at_full)
 }
 
@@ -574,7 +597,11 @@ fn gradient_position(token: &str) -> Option<f64> {
     let split = t
         .find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-' || c == '+'))
         .unwrap_or(t.len());
-    let n: f64 = if split == 0 { return None } else { t[..split].parse().ok()? };
+    let n: f64 = if split == 0 {
+        return None;
+    } else {
+        t[..split].parse().ok()?
+    };
     if n == 0.0 {
         return Some(0.0);
     }
@@ -846,10 +873,9 @@ pub fn check_html_patterns_picking(
         if labels.is_empty() {
             labels.push(js::trim(list).to_string());
         }
-        let Some(label) = labels
-            .into_iter()
-            .find(|label| crate::checks::css_scan::css_keyframes_only_pulse(style_text, label) != Some(true))
-        else {
+        let Some(label) = labels.into_iter().find(|label| {
+            crate::checks::css_scan::css_keyframes_only_pulse(style_text, label) != Some(true)
+        }) else {
             continue;
         };
         let finding = pf(
@@ -909,7 +935,13 @@ pub fn check_html_patterns_picking(
     findings.extend(
         glow_hits
             .iter()
-            .map(|h| pf("dark-glow", h.snippet.clone(), enclosing_css_selector(style_text, h.index)))
+            .map(|h| {
+                pf(
+                    "dark-glow",
+                    h.snippet.clone(),
+                    enclosing_css_selector(style_text, h.index),
+                )
+            })
             .take(PICK_MAX_CANDIDATES)
             .find(|f| stands(f)),
     );
@@ -917,7 +949,13 @@ pub fn check_html_patterns_picking(
     findings.extend(
         halo_hits
             .iter()
-            .map(|h| pf("radial-halo", h.snippet.clone(), enclosing_css_selector(style_text, h.index)))
+            .map(|h| {
+                pf(
+                    "radial-halo",
+                    h.snippet.clone(),
+                    enclosing_css_selector(style_text, h.index),
+                )
+            })
             .take(PICK_MAX_CANDIDATES)
             .find(|f| stands(f)),
     );
@@ -944,7 +982,13 @@ pub fn check_html_patterns_picking(
     // --- Generated-UI tells: two-axis grid-line background ---
     findings.extend(
         crate::checks::css_scan::grid_background_hits(style_text)
-            .map(|h| pf("codex-grid-background", h.snippet.clone(), enclosing_css_selector(style_text, h.index)))
+            .map(|h| {
+                pf(
+                    "codex-grid-background",
+                    h.snippet.clone(),
+                    enclosing_css_selector(style_text, h.index),
+                )
+            })
             .take(PICK_MAX_CANDIDATES)
             .find(|f| stands(f)),
     );
@@ -1034,10 +1078,17 @@ mod tests {
     /// monotonous. Twin: a page that really uses one gap keeps the finding.
     #[test]
     fn monotonous_spacing_ignores_zero_resets() {
-        let mono = |html: &str| check_html_patterns(html, None).iter().any(|f| f.id == "monotonous-spacing");
+        let mono = |html: &str| {
+            check_html_patterns(html, None)
+                .iter()
+                .any(|f| f.id == "monotonous-spacing")
+        };
         let resets = "<div class=\"p-0 md:p-0 pr-0\"></div>".repeat(40);
-        let varied = "<div class=\"p-2\"></div><div class=\"p-4\"></div><div class=\"p-6\"></div>".repeat(4);
-        assert!(!mono(&format!("<html><body>{resets}{varied}</body></html>")));
+        let varied =
+            "<div class=\"p-2\"></div><div class=\"p-4\"></div><div class=\"p-6\"></div>".repeat(4);
+        assert!(!mono(&format!(
+            "<html><body>{resets}{varied}</body></html>"
+        )));
         let one = "<div class=\"p-4\"></div>".repeat(20);
         assert!(mono(&format!("<html><body>{one}</body></html>")));
     }
@@ -1057,7 +1108,9 @@ mod tests {
         assert!(!context_gradients_are_one_colour(
             "ba(236, 72, 153, 0.9) 60%, rgba(59, 130, 246, 1) 100%);-webkit-background-clip:text}.chip{background:linear-gradient(#fff,#fff)}"
         ));
-        assert!(!context_gradients_are_one_colour("h2{-webkit-background-clip:text}"));
+        assert!(!context_gradients_are_one_colour(
+            "h2{-webkit-background-clip:text}"
+        ));
     }
 
     /// freddiemac.com: a repeating gradient whose last stop sits at 100%, or
@@ -1065,42 +1118,109 @@ mod tests {
     #[test]
     fn a_repeating_gradient_that_never_repeats_is_not_stripes() {
         assert!(!repeating_gradient_repeats("147deg, rgb(3, 46, 109), rgb(3, 46, 109) 40%, rgb(2, 29, 69) 80%, rgb(2, 29, 69)), none", false));
-        assert!(!repeating_gradient_repeats("90deg, #eee, #ddd 100%)", false));
-        assert!(repeating_gradient_repeats("45deg, #eee, #eee 10px, #fafafa 10px, #fafafa 20px)", false));
+        assert!(!repeating_gradient_repeats(
+            "90deg, #eee, #ddd 100%)",
+            false
+        ));
+        assert!(repeating_gradient_repeats(
+            "45deg, #eee, #eee 10px, #fafafa 10px, #fafafa 20px)",
+            false
+        ));
         assert!(repeating_gradient_repeats("to top, transparent 0, transparent calc(25% - 1px), var(--n) calc(25% - 1px), var(--n) 25%)", false));
-        assert!(repeating_gradient_repeats("45deg, var(--a), var(--stripe))", false));
+        assert!(repeating_gradient_repeats(
+            "45deg, var(--a), var(--stripe))",
+            false
+        ));
         // The period runs from the first stop: one at 80% tiles every 20%.
-        assert!(repeating_gradient_repeats("90deg, #000 80%, #fff 90%, #000 100%)", false));
+        assert!(repeating_gradient_repeats(
+            "90deg, #000 80%, #fff 90%, #000 100%)",
+            false
+        ));
         // A full length written another way still draws once.
-        assert!(!repeating_gradient_repeats("90deg, #000, #fff 100.0%)", false));
-        assert!(!repeating_gradient_repeats("90deg, #000 0%, #fff calc(100%))", false));
-        assert!(!repeating_gradient_repeats("from 0deg, #000, #fff 1turn)", false));
+        assert!(!repeating_gradient_repeats(
+            "90deg, #000, #fff 100.0%)",
+            false
+        ));
+        assert!(!repeating_gradient_repeats(
+            "90deg, #000 0%, #fff calc(100%))",
+            false
+        ));
+        assert!(!repeating_gradient_repeats(
+            "from 0deg, #000, #fff 1turn)",
+            false
+        ));
         assert!(!repeating_gradient_repeats("#000, #fff)", false));
         assert!(repeating_gradient_repeats("#000, #fff 50%)", false));
         // A unitless 0 is a zero, and a keyword colour opens the stop list.
-        assert!(!repeating_gradient_repeats("90deg, #000 0, #fff 100%)", false));
-        assert!(!repeating_gradient_repeats("transparent, #fff 100%)", false));
+        assert!(!repeating_gradient_repeats(
+            "90deg, #000 0, #fff 100%)",
+            false
+        ));
+        assert!(!repeating_gradient_repeats(
+            "transparent, #fff 100%)",
+            false
+        ));
         assert!(!repeating_gradient_repeats("currentColor 0, #fff)", false));
         // A radial ramp to 100% covers the box only at the default size:
         // rings sized to the closest side, or to a stated radius, go on.
-        assert!(!repeating_gradient_repeats("circle, #000 0%, #fff 100%)", true));
+        assert!(!repeating_gradient_repeats(
+            "circle, #000 0%, #fff 100%)",
+            true
+        ));
         assert!(!repeating_gradient_repeats("#000, #fff)", true));
-        assert!(!repeating_gradient_repeats("ellipse farthest-corner at 20% 30%, #000, #fff 100%)", true));
-        assert!(repeating_gradient_repeats("circle closest-side, #000 0%, #fff 100%)", true));
-        assert!(repeating_gradient_repeats("closest-corner at 50% 50%, #000, #fff)", true));
-        assert!(repeating_gradient_repeats("circle 40px at center, #000, #fff 100%)", true));
-        assert!(repeating_gradient_repeats("farthest-side, #000, #fff 100%)", true));
+        assert!(!repeating_gradient_repeats(
+            "ellipse farthest-corner at 20% 30%, #000, #fff 100%)",
+            true
+        ));
+        assert!(repeating_gradient_repeats(
+            "circle closest-side, #000 0%, #fff 100%)",
+            true
+        ));
+        assert!(repeating_gradient_repeats(
+            "closest-corner at 50% 50%, #000, #fff)",
+            true
+        ));
+        assert!(repeating_gradient_repeats(
+            "circle 40px at center, #000, #fff 100%)",
+            true
+        ));
+        assert!(repeating_gradient_repeats(
+            "farthest-side, #000, #fff 100%)",
+            true
+        ));
         // Naming the colour space, before or after the shape, sizes nothing.
-        assert!(!repeating_gradient_repeats("circle in srgb, #000 0%, #fff 100%)", true));
-        assert!(!repeating_gradient_repeats("in oklch longer hue, #000, #fff)", true));
-        assert!(!repeating_gradient_repeats("in hsl circle at 10% 20%, #000, #fff 100%)", true));
-        assert!(!repeating_gradient_repeats("ellipse at top left in oklab, #000, #fff 100%)", true));
-        assert!(repeating_gradient_repeats("circle closest-side in srgb, #000, #fff 100%)", true));
-        assert!(repeating_gradient_repeats("in srgb 40px 20px at center, #000, #fff 100%)", true));
+        assert!(!repeating_gradient_repeats(
+            "circle in srgb, #000 0%, #fff 100%)",
+            true
+        ));
+        assert!(!repeating_gradient_repeats(
+            "in oklch longer hue, #000, #fff)",
+            true
+        ));
+        assert!(!repeating_gradient_repeats(
+            "in hsl circle at 10% 20%, #000, #fff 100%)",
+            true
+        ));
+        assert!(!repeating_gradient_repeats(
+            "ellipse at top left in oklab, #000, #fff 100%)",
+            true
+        ));
+        assert!(repeating_gradient_repeats(
+            "circle closest-side in srgb, #000, #fff 100%)",
+            true
+        ));
+        assert!(repeating_gradient_repeats(
+            "in srgb 40px 20px at center, #000, #fff 100%)",
+            true
+        ));
         let ids = |css: &str| -> Vec<String> {
-            check_html_patterns(&format!("<style>{css}</style>"), None).into_iter().map(|f| f.id).collect()
+            check_html_patterns(&format!("<style>{css}</style>"), None)
+                .into_iter()
+                .map(|f| f.id)
+                .collect()
         };
-        let rings = ".r{background:repeating-radial-gradient(circle closest-side,#000 0%,#fff 100%)}";
+        let rings =
+            ".r{background:repeating-radial-gradient(circle closest-side,#000 0%,#fff 100%)}";
         assert!(ids(rings).contains(&"repeating-stripes-gradient".to_string()));
         let once = ".a{background:repeating-linear-gradient(147deg,#032e6d,#032e6d 40%,#021d45)}";
         let tiles = ".b{background:repeating-linear-gradient(45deg,#eee,#eee 10px,#fafafa 10px,#fafafa 20px)}";
@@ -1177,21 +1297,43 @@ mod tests {
             scan_html_for_shape_assembled_illustration(&format!("{open}{scene}{extra}</svg>"))
         };
         // nic.sa's wordmark: an em size renders at the text's scale.
-        assert!(svg("<svg width=\"4.33em\" height=\"1em\" viewBox=\"0 0 3242 750\">", "").is_empty());
+        assert!(svg(
+            "<svg width=\"4.33em\" height=\"1em\" viewBox=\"0 0 3242 750\">",
+            ""
+        )
+        .is_empty());
         assert_eq!(
-            svg("<svg width=\"20em\" height=\"15rem\" viewBox=\"0 0 64 48\">", "")[0].snippet,
+            svg(
+                "<svg width=\"20em\" height=\"15rem\" viewBox=\"0 0 64 48\">",
+                ""
+            )[0]
+            .snippet,
             "inline <svg> scene: 8 primitive shapes, ~320x240px, 3 fill colors"
         );
         // `stroke-width` in em is not the SVG's width.
-        assert_eq!(svg("<svg stroke-width=\"1em\" viewBox=\"0 0 400 300\">", "").len(), 1);
+        assert_eq!(
+            svg("<svg stroke-width=\"1em\" viewBox=\"0 0 400 300\">", "").len(),
+            1
+        );
         // A drawing of paths with a few primitives among them.
         let paths = "<path d=\"M0 0h1\"/>".repeat(25);
-        assert!(svg("<svg viewBox=\"0 0 400 300\">", &paths).is_empty(), "8 of 33");
+        assert!(
+            svg("<svg viewBox=\"0 0 400 300\">", &paths).is_empty(),
+            "8 of 33"
+        );
         let some_paths = "<path d=\"M0 0h1\"/>".repeat(24);
-        assert_eq!(svg("<svg viewBox=\"0 0 400 300\">", &some_paths).len(), 1, "8 of 32");
+        assert_eq!(
+            svg("<svg viewBox=\"0 0 400 300\">", &some_paths).len(),
+            1,
+            "8 of 32"
+        );
         // Unused assets in `<defs>` change neither count.
         let unused = format!("<defs>{}</defs>", paths.repeat(2));
-        assert_eq!(svg("<svg viewBox=\"0 0 400 300\">", &unused).len(), 1, "defs paths are not drawn");
+        assert_eq!(
+            svg("<svg viewBox=\"0 0 400 300\">", &unused).len(),
+            1,
+            "defs paths are not drawn"
+        );
         // Shapes in `<defs>` are drawn through the `<use>` that names them,
         // once per use, and not otherwise.
         let defs = |shapes: &str, uses: &str| {
@@ -1201,12 +1343,22 @@ mod tests {
             .len()
         };
         let icon = "<rect id=\"a\" fill=\"red\"/><circle id=\"b\" fill=\"blue\"/><ellipse id=\"c\" fill=\"#0f0\"/>";
-        let eight = "<use href=\"#a\"/>".repeat(4) + &"<use xlink:href=\"#b\"/>".repeat(2) + &"<use href=\"#c\"/>".repeat(2);
+        let eight = "<use href=\"#a\"/>".repeat(4)
+            + &"<use xlink:href=\"#b\"/>".repeat(2)
+            + &"<use href=\"#c\"/>".repeat(2);
         assert_eq!(defs(icon, &eight), 1, "eight referenced primitives");
         assert_eq!(defs(icon, "<use href=\"#a\"/>"), 0, "one use of one icon");
-        assert_eq!(defs(icon, "<use href=\"#nope\"/>"), 0, "a use that names no asset");
+        assert_eq!(
+            defs(icon, "<use href=\"#nope\"/>"),
+            0,
+            "a use that names no asset"
+        );
         let unused_eight = "<rect id=\"x1\" fill=\"red\"/><rect id=\"x2\" fill=\"blue\"/><rect id=\"x3\" fill=\"#0f0\"/><circle id=\"x4\"/><circle id=\"x5\"/><circle id=\"x6\"/><ellipse id=\"x7\"/><polygon id=\"x8\"/>";
-        assert_eq!(defs(unused_eight, "<use href=\"#x1\"/>"), 0, "one use among eight unused assets");
+        assert_eq!(
+            defs(unused_eight, "<use href=\"#x1\"/>"),
+            0,
+            "one use among eight unused assets"
+        );
     }
 
     /// stripe.com's uptime chart: 14 of 16 rects 44px wide is a series of
@@ -1222,38 +1374,105 @@ mod tests {
         };
         let fills = "<rect width=\"380\" height=\"208\" fill=\"#fff\"/><rect width=\"380\" height=\"28\" fill=\"#f6f9fc\"/>";
         let bars: String = (0..14)
-            .map(|i| format!("<rect x=\"{}\" y=\"{}\" width=\"44\" height=\"{}\" fill=\"#635bff\"/>", i * 26, 40 + i, 160 - i))
+            .map(|i| {
+                format!(
+                    "<rect x=\"{}\" y=\"{}\" width=\"44\" height=\"{}\" fill=\"#635bff\"/>",
+                    i * 26,
+                    40 + i,
+                    160 - i
+                )
+            })
             .collect();
-        assert_eq!(svg(&format!("{fills}{bars}")), 0, "an equal-width bar series");
+        assert_eq!(
+            svg(&format!("{fills}{bars}")),
+            0,
+            "an equal-width bar series"
+        );
         let tall: String = (0..14)
-            .map(|i| format!("<rect x=\"{}\" y=\"40\" width=\"{}\" height=\"5.99\" fill=\"#635bff\"/>", i * 26, 10 + 3 * i))
+            .map(|i| {
+                format!(
+                    "<rect x=\"{}\" y=\"40\" width=\"{}\" height=\"5.99\" fill=\"#635bff\"/>",
+                    i * 26,
+                    10 + 3 * i
+                )
+            })
             .collect();
-        assert_eq!(svg(&format!("{fills}{tall}")), 0, "an equal-height timeline");
+        assert_eq!(
+            svg(&format!("{fills}{tall}")),
+            0,
+            "an equal-height timeline"
+        );
         let roofs = "<circle cx=\"300\" cy=\"30\" r=\"20\" fill=\"#ffd400\"/><polygon points=\"0,60 40,20 80,60\" fill=\"#a33\"/><polygon points=\"80,60 120,20 160,60\" fill=\"#a33\"/><polygon points=\"160,60 200,20 240,60\" fill=\"#a33\"/><polygon points=\"240,60 280,20 320,60\" fill=\"#a33\"/>";
         let windows: String = (0..10)
-            .map(|i| format!("<rect x=\"{}\" y=\"100\" width=\"12\" height=\"{}\" fill=\"#9cf\"/>", i * 30, 12 + 5 * i))
+            .map(|i| {
+                format!(
+                    "<rect x=\"{}\" y=\"100\" width=\"12\" height=\"{}\" fill=\"#9cf\"/>",
+                    i * 30,
+                    12 + 5 * i
+                )
+            })
             .collect();
-        assert_eq!(svg(&format!("{fills}{windows}{roofs}")), 1, "a skyline with a sun and roofs");
+        assert_eq!(
+            svg(&format!("{fills}{windows}{roofs}")),
+            1,
+            "a skyline with a sun and roofs"
+        );
         let mixed: String = (0..10)
-            .map(|i| format!("<rect x=\"{}\" y=\"40\" width=\"{}\" height=\"{}\" fill=\"#635bff\"/>", i * 30, 10 + 7 * i, 20 + 9 * i))
+            .map(|i| {
+                format!(
+                    "<rect x=\"{}\" y=\"40\" width=\"{}\" height=\"{}\" fill=\"#635bff\"/>",
+                    i * 30,
+                    10 + 7 * i,
+                    20 + 9 * i
+                )
+            })
             .collect();
         assert_eq!(svg(&format!("{fills}{mixed}")), 1, "bars of every size");
         let blocks = "<rect width=\"40\" height=\"40\" fill=\"#0b5\"/>".repeat(14);
-        assert_eq!(svg(&format!("{fills}{blocks}")), 1, "a stack of equal blocks");
+        assert_eq!(
+            svg(&format!("{fills}{blocks}")),
+            1,
+            "a stack of equal blocks"
+        );
         // Past the primitive budget the series is not read, and the SVG
         // reports as before: the grouping compares every rect pair.
         let many: String = (0..401)
-            .map(|i| format!("<rect x=\"{}\" y=\"40\" width=\"1\" height=\"{}\" fill=\"#635bff\"/>", i % 380, 10 + i % 150))
+            .map(|i| {
+                format!(
+                    "<rect x=\"{}\" y=\"40\" width=\"1\" height=\"{}\" fill=\"#635bff\"/>",
+                    i % 380,
+                    10 + i % 150
+                )
+            })
             .collect();
-        assert_eq!(svg(&format!("{fills}{many}")), 1, "a series past the budget");
+        assert_eq!(
+            svg(&format!("{fills}{many}")),
+            1,
+            "a series past the budget"
+        );
         let few: String = (0..300)
-            .map(|i| format!("<rect x=\"{}\" y=\"40\" width=\"1\" height=\"{}\" fill=\"#635bff\"/>", i % 380, 10 + i % 150))
+            .map(|i| {
+                format!(
+                    "<rect x=\"{}\" y=\"40\" width=\"1\" height=\"{}\" fill=\"#635bff\"/>",
+                    i % 380,
+                    10 + i % 150
+                )
+            })
             .collect();
-        assert_eq!(svg(&format!("{fills}{few}")), 0, "a series inside the budget");
+        assert_eq!(
+            svg(&format!("{fills}{few}")),
+            0,
+            "a series inside the budget"
+        );
         // A rect whose height comes from CSS is not counted: equal-width
         // tiles with no height attribute are not a series of bars.
         let css_sized: String = (0..14)
-            .map(|i| format!("<rect x=\"{}\" y=\"40\" width=\"40\" fill=\"#0b5\"/>", i * 26))
+            .map(|i| {
+                format!(
+                    "<rect x=\"{}\" y=\"40\" width=\"40\" fill=\"#0b5\"/>",
+                    i * 26
+                )
+            })
             .collect();
         assert_eq!(svg(&format!("{fills}{css_sized}")), 1, "tiles sized by CSS");
     }
@@ -1302,7 +1521,8 @@ mod tests {
                 .map(|f| f.snippet)
                 .collect()
         };
-        let spinner = ".sk-child:before{animation:sk-circleBounceDelay 1.2s infinite ease-in-out both}\
+        let spinner =
+            ".sk-child:before{animation:sk-circleBounceDelay 1.2s infinite ease-in-out both}\
 @keyframes sk-circleBounceDelay{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}";
         assert!(bounce(spinner).is_empty());
         // The pulse does not hide a bounce declared after it.
@@ -1353,13 +1573,19 @@ mod tests {
                 false
             },
         );
-        assert!(found.iter().all(|f| !matches!(f.id.as_str(), "dark-glow" | "repeating-stripes-gradient" | "bounce-easing")));
+        assert!(found.iter().all(|f| !matches!(
+            f.id.as_str(),
+            "dark-glow" | "repeating-stripes-gradient" | "bounce-easing"
+        )));
         let offers = offers.into_inner();
         for id in ["dark-glow", "repeating-stripes-gradient"] {
             assert_eq!(offers.get(id).copied(), Some(PICK_MAX_CANDIDATES), "{id}");
         }
         // Two forms, the animation name and the curve, each bounded.
-        assert_eq!(offers.get("bounce-easing").copied(), Some(2 * PICK_MAX_CANDIDATES));
+        assert_eq!(
+            offers.get("bounce-easing").copied(),
+            Some(2 * PICK_MAX_CANDIDATES)
+        );
     }
 
     /// observations-1004 row 25 (incredible.one 10048475): a bounce curve
@@ -1378,17 +1604,23 @@ mod tests {
         let defined = ":root{--ease-bounce: cubic-bezier(.34, 1.56, .64, 1); --ease-out: ease-out}";
         assert!(bounce(defined).is_empty(), "defined, never read");
         assert_eq!(
-            bounce(&format!("{defined} .pop{{transition: transform .3s var(--ease-bounce)}}")),
+            bounce(&format!(
+                "{defined} .pop{{transition: transform .3s var(--ease-bounce)}}"
+            )),
             vec!["cubic-bezier(.34, 1.56, .64, 1)".to_string()],
             "read by a rule"
         );
         assert_eq!(
-            bounce(&format!("{defined} .pop{{transition: transform .3s var( --ease-bounce , ease)}}")),
+            bounce(&format!(
+                "{defined} .pop{{transition: transform .3s var( --ease-bounce , ease)}}"
+            )),
             vec!["cubic-bezier(.34, 1.56, .64, 1)".to_string()],
             "read with a fallback"
         );
         assert_eq!(
-            bounce(&format!("{defined} .pop{{transition: transform .3s cubic-bezier(.2, 1.4, .4, 1)}}")),
+            bounce(&format!(
+                "{defined} .pop{{transition: transform .3s cubic-bezier(.2, 1.4, .4, 1)}}"
+            )),
             vec!["cubic-bezier(.2, 1.4, .4, 1)".to_string()],
             "a used curve after an unread one"
         );
@@ -1399,6 +1631,9 @@ mod tests {
         );
         // A property whose name only starts like the defined one does not
         // read it.
-        assert!(bounce(&format!("{defined} .pop{{transition: transform .3s var(--ease-bounce-soft)}}")).is_empty());
+        assert!(bounce(&format!(
+            "{defined} .pop{{transition: transform .3s var(--ease-bounce-soft)}}"
+        ))
+        .is_empty());
     }
 }
